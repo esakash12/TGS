@@ -60,6 +60,16 @@ export async function getCanbosoBalance(): Promise<{ balanceUsd: number; balance
   }
 }
 
+export function invalidateWholesaleCache() {
+  catalogCache = null;
+}
+
+export const PLAN_TIERS_RANK: Record<string, number> = {
+  starter: 1,
+  pro: 2,
+  enterprise: 3,
+};
+
 export async function fetchLiveWholesaleCatalog(forceRefresh = false): Promise<WholesaleProductDTO[]> {
   const now = Date.now();
   if (!forceRefresh && catalogCache && now - catalogCache.timestamp < CACHE_TTL_MS) {
@@ -127,12 +137,57 @@ export async function fetchLiveWholesaleCatalog(forceRefresh = false): Promise<W
     }
   }
 
+  // 3. Augment with God-Mode Platform Wholesale Governance Rules
+  const rules = db.prepare('SELECT * FROM platform_wholesale_rules').all() as any[];
+  const rulesMap = new Map<string, any>();
+  for (const r of rules) {
+    rulesMap.set(r.provider_product_id, r);
+  }
+
+  for (const p of allProducts) {
+    const rule = rulesMap.get(p.id);
+    p.is_active_platform = rule ? rule.is_active : 1;
+    p.min_plan_tier = rule ? rule.min_plan_tier : 'starter';
+    if (rule?.custom_name) {
+      p.name = rule.custom_name;
+    }
+  }
+
   catalogCache = {
     timestamp: now,
     products: allProducts,
   };
 
   return allProducts;
+}
+
+export async function fetchLiveWholesaleCatalogForMerchant(merchantPlanId = 'starter', searchQuery?: string): Promise<WholesaleProductDTO[]> {
+  const fullCatalog = await fetchLiveWholesaleCatalog();
+  const merchantRank = PLAN_TIERS_RANK[merchantPlanId.toLowerCase()] || 1;
+
+  let filtered = fullCatalog.filter((item) => {
+    // 1. If Site Owner deleted or disabled this product globally, it must NEVER show for merchants
+    if (item.is_active_platform === 0) return false;
+    return true;
+  });
+
+  if (searchQuery && searchQuery.trim()) {
+    const q = searchQuery.toLowerCase().trim();
+    filtered = filtered.filter(item =>
+      item.name.toLowerCase().includes(q) ||
+      item.category.toLowerCase().includes(q) ||
+      item.provider.toLowerCase().includes(q)
+    );
+  }
+
+  return filtered;
+}
+
+export function isWholesaleProductGloballyActive(providerProductId: string): boolean {
+  if (!providerProductId) return true;
+  const rule = db.prepare('SELECT is_active FROM platform_wholesale_rules WHERE provider_product_id = ?').get(providerProductId) as any;
+  if (!rule) return true; // Default active if no override
+  return rule.is_active === 1;
 }
 
 export async function purchaseUpstreamProduct(params: {

@@ -14,6 +14,14 @@ import {
   CheckCircle,
   AlertTriangle,
   Key,
+  Search,
+  Trash2,
+  ToggleLeft,
+  ToggleRight,
+  Eye,
+  EyeOff,
+  ShoppingBag,
+  Sliders,
 } from 'lucide-react';
 
 export const GodMode: React.FC = () => {
@@ -22,8 +30,15 @@ export const GodMode: React.FC = () => {
   const [authError, setAuthError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Navigation tab inside GodMode
+  const [godTab, setGodTab] = useState<'merchants' | 'wholesale' | 'config'>('merchants');
+
   const [overview, setOverview] = useState<any>(null);
   const [merchants, setMerchants] = useState<any[]>([]);
+  const [wholesaleCatalog, setWholesaleCatalog] = useState<any[]>([]);
+  const [wholesaleSearch, setWholesaleSearch] = useState('');
+  const [wholesaleLoading, setWholesaleLoading] = useState(false);
+
   const [config, setConfig] = useState<any>({
     digitalcoreKey: '',
     canbosoKey: '',
@@ -58,14 +73,16 @@ export const GodMode: React.FC = () => {
     setLoading(true);
     try {
       const headers = getHeaders();
-      const [overviewRes, merchantsRes, configRes] = await Promise.all([
+      const [overviewRes, merchantsRes, configRes, wholesaleRes] = await Promise.all([
         axios.get('/api/godmode/overview', headers),
         axios.get('/api/godmode/merchants', headers),
         axios.get('/api/godmode/config', headers),
+        axios.get('/api/godmode/wholesale-catalog', headers),
       ]);
       setOverview(overviewRes.data);
       setMerchants(merchantsRes.data);
       setConfig(configRes.data);
+      setWholesaleCatalog(wholesaleRes.data);
     } catch (err: any) {
       console.error('GodMode fetch error:', err);
       if (err.response?.status === 401 || err.response?.status === 403) {
@@ -74,6 +91,18 @@ export const GodMode: React.FC = () => {
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadWholesaleCatalog = async () => {
+    setWholesaleLoading(true);
+    try {
+      const res = await axios.get('/api/godmode/wholesale-catalog?refresh=true', getHeaders());
+      setWholesaleCatalog(res.data);
+    } catch (err) {
+      console.error('Failed to load wholesale catalog in GodMode:', err);
+    } finally {
+      setWholesaleLoading(false);
     }
   };
 
@@ -122,16 +151,16 @@ export const GodMode: React.FC = () => {
       );
       loadGodModeData();
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Killswitch toggle failed');
+      alert(err.response?.data?.error || 'Failed to update merchant status');
     }
   };
 
-  // Adjust Wallet Balance
-  const handleAdjustWallet = async (merchantId: string, merchantName: string) => {
-    const delta = prompt(`Enter amount delta in USD to add or deduct for "${merchantName}" (e.g. 50 or -10):`);
+  // Adjust Merchant Wallet
+  const handleAdjustWallet = async (merchantId: string, storeName: string) => {
+    const delta = prompt(`Adjust USD balance for "${storeName}". Enter delta amount (e.g. +10 or -5):`);
     if (!delta || isNaN(parseFloat(delta))) return;
 
-    const note = prompt('Audit note for this adjustment:', 'Platform admin manual credit');
+    const note = prompt('Audit note for this adjustment:', 'Manual GodMode credit');
 
     try {
       await axios.post(
@@ -139,14 +168,65 @@ export const GodMode: React.FC = () => {
         { amountDeltaUsd: parseFloat(delta), note },
         getHeaders()
       );
-      alert('Wallet balance updated successfully.');
       loadGodModeData();
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Adjustment failed');
+      alert(err.response?.data?.error || 'Wallet adjustment failed');
     }
   };
 
-  // Save Wholesale & Binance Config
+  // Wholesale Product Availability Toggle
+  const handleToggleWholesaleStatus = async (productId: string, currentActive: number) => {
+    const newActive = currentActive === 1 ? 0 : 1;
+    try {
+      await axios.put(
+        `/api/godmode/wholesale-rules/${productId}`,
+        { isActive: newActive },
+        getHeaders()
+      );
+      setWholesaleCatalog((prev) =>
+        prev.map((p) => (p.id === productId ? { ...p, is_active_platform: newActive } : p))
+      );
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to toggle product status');
+    }
+  };
+
+  // Minimum Plan Tier Gating Change
+  const handleChangeMinPlanTier = async (productId: string, newTier: string) => {
+    try {
+      await axios.put(
+        `/api/godmode/wholesale-rules/${productId}`,
+        { minPlanTier: newTier },
+        getHeaders()
+      );
+      setWholesaleCatalog((prev) =>
+        prev.map((p) => (p.id === productId ? { ...p, min_plan_tier: newTier } : p))
+      );
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to change plan tier requirement');
+    }
+  };
+
+  // 1-Click Delete / Remove Product from Platform
+  const handleDeleteWholesaleProduct = async (productId: string, name: string) => {
+    if (
+      !confirm(
+        `Globally delete/disable "${name}"? It will immediately disappear from merchant wholesale catalogs and Telegram bots.`
+      )
+    )
+      return;
+
+    try {
+      await axios.delete(`/api/godmode/wholesale-rules/${productId}`, getHeaders());
+      setWholesaleCatalog((prev) =>
+        prev.map((p) => (p.id === productId ? { ...p, is_active_platform: 0 } : p))
+      );
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to delete product rule');
+    }
+  };
+
+  // Save Margin & Binance Config
   const handleSaveConfig = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -155,48 +235,73 @@ export const GodMode: React.FC = () => {
       setTimeout(() => setConfigSaved(false), 3000);
       loadGodModeData();
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to save configuration');
+      alert(err.response?.data?.error || 'Failed to save global configuration');
     }
   };
 
+  // Filtered Wholesale Catalog for GodMode
+  const filteredWholesale = wholesaleCatalog.filter((item) => {
+    if (!wholesaleSearch) return true;
+    const q = wholesaleSearch.toLowerCase();
+    return (
+      item.name.toLowerCase().includes(q) ||
+      item.category.toLowerCase().includes(q) ||
+      item.provider.toLowerCase().includes(q) ||
+      item.id.toLowerCase().includes(q)
+    );
+  });
+
   // ==========================================
-  // VIEW A: ACCESS GATE (TERMINAL LOCK)
+  // VIEW A: CYBER TERMINAL LOCK SCREEN
   // ==========================================
   if (!authenticated) {
     return (
-      <div className="min-h-screen bg-carbon-950 flex items-center justify-center p-4">
-        <div className="glass-card-cyber rounded-3xl p-8 max-w-md w-full border border-crimson-600/40 text-center space-y-6 shadow-2xl">
-          <div className="w-14 h-14 rounded-2xl bg-crimson-500/10 border border-crimson-500/30 text-crimson-500 flex items-center justify-center mx-auto">
-            <ShieldAlert className="w-8 h-8 animate-pulse" />
-          </div>
-
-          <div>
-            <span className="text-[10px] font-mono tracking-widest text-crimson-500 uppercase font-bold">
-              SECURITY CLEARANCE LEVEL 0
-            </span>
-            <h2 className="text-xl font-mono font-extrabold text-white mt-1">
-              GOD-MODE COMMAND CENTER
+      <div className="min-h-screen bg-carbon-950 flex items-center justify-center p-4 font-mono select-none">
+        <div className="w-full max-w-md glass-card-cyber rounded-2xl p-8 border border-crimson-600/30 space-y-6 shadow-2xl shadow-crimson-600/10">
+          <div className="text-center space-y-2">
+            <div className="w-12 h-12 rounded-xl bg-crimson-600/20 border border-crimson-500/40 flex items-center justify-center mx-auto text-crimson-400">
+              <ShieldAlert className="w-6 h-6 animate-pulse" />
+            </div>
+            <h2 className="text-xl font-black tracking-widest text-white uppercase">
+              MOGENT // GOD-MODE
             </h2>
+            <p className="text-xs text-zinc-500">
+              RESTRICTED SUPER-ADMIN COMMAND TERMINAL
+            </p>
           </div>
 
           {authError && (
-            <div className="p-3 rounded-xl bg-crimson-600/20 text-crimson-400 font-mono text-xs border border-crimson-500/30">
-              {authError}
+            <div className="p-3 rounded-xl bg-crimson-500/10 border border-crimson-500/30 text-crimson-400 text-xs flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <span>{authError}</span>
             </div>
           )}
 
           <form onSubmit={handleAuthSubmit} className="space-y-4">
-            <input
-              type="password"
-              placeholder="Enter God-Mode Token"
-              value={tokenInput}
-              onChange={(e) => setTokenInput(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl bg-carbon-900 border border-crimson-500/30 text-white font-mono text-xs focus:outline-none focus:border-crimson-400 text-center tracking-widest"
-            />
+            <div>
+              <label className="block text-xs font-bold text-zinc-400 mb-1.5 uppercase tracking-wider">
+                Enter Master Secret Token
+              </label>
+              <div className="relative">
+                <input
+                  type="password"
+                  required
+                  autoFocus
+                  placeholder="••••••••••••••••"
+                  value={tokenInput}
+                  onChange={(e) => setTokenInput(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl bg-carbon-900 border border-white/10 text-white font-mono text-sm focus:outline-none focus:border-crimson-500 transition-colors"
+                />
+                <Key className="w-4 h-4 text-zinc-500 absolute right-3.5 top-1/2 -translate-y-1/2" />
+              </div>
+            </div>
+
             <button
               type="submit"
-              className="w-full py-3 rounded-xl bg-crimson-600 hover:bg-crimson-500 text-white font-mono font-bold text-xs shadow-lg shadow-crimson-600/30 transition-all uppercase tracking-wider active:scale-98"
+              disabled={isSubmitting}
+              className="w-full py-3 rounded-xl bg-crimson-600 hover:bg-crimson-500 text-white font-bold text-xs uppercase tracking-widest shadow-lg shadow-crimson-600/30 transition-all flex items-center justify-center gap-2 active:scale-98 disabled:opacity-50"
             >
+              <Lock className="w-3.5 h-3.5" />
               Authenticate Terminal
             </button>
           </form>
@@ -312,213 +417,398 @@ export const GodMode: React.FC = () => {
           </div>
         </div>
 
-        {/* Row 2: Merchant Fleet Table & 1-Click Killswitches */}
-        <div className="space-y-4">
-          <div className="flex justify-between items-center">
-            <div>
-              <h3 className="text-base font-mono font-bold text-white uppercase tracking-wider">
-                Merchant Fleet Table ({merchants.length})
-              </h3>
-              <p className="text-xs text-zinc-400">Monitor all stores, wallets, and toggle emergency killswitches</p>
-            </div>
-          </div>
-
-          <div className="glass-card-cyber rounded-2xl border border-white/10 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs font-mono">
-                <thead className="bg-carbon-900 text-zinc-400 font-bold uppercase border-b border-white/10">
-                  <tr>
-                    <th className="p-4">Store / Slug</th>
-                    <th className="p-4">Owner Email</th>
-                    <th className="p-4">Bot Status</th>
-                    <th className="p-4">Wallet (USD)</th>
-                    <th className="p-4">Orders</th>
-                    <th className="p-4">Status</th>
-                    <th className="p-4 text-right">Emergency Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {merchants.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="p-8 text-center text-zinc-500 font-sans">
-                        No registered merchant stores found in fleet.
-                      </td>
-                    </tr>
-                  ) : (
-                    merchants.map((m) => (
-                      <tr key={m.id} className="hover:bg-white/[0.02]">
-                        <td className="p-4">
-                          <span className="font-bold text-white block">{m.name}</span>
-                          <span className="text-[11px] text-crimson-400">bot.mogent.tech/{m.slug}</span>
-                        </td>
-                        <td className="p-4 text-zinc-400">{m.owner_email}</td>
-                        <td className="p-4">
-                          {m.botHasToken ? (
-                            <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] ${m.botOnline ? 'bg-emerald-500/20 text-emerald-400 font-bold' : 'bg-amber-500/20 text-amber-300'}`}>
-                              <span className={`w-1.5 h-1.5 rounded-full ${m.botOnline ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`}></span>
-                              {m.bot_username ? `@${m.bot_username}` : 'Configured'}
-                            </span>
-                          ) : (
-                            <span className="text-zinc-600 text-[10px]">No Token</span>
-                          )}
-                        </td>
-                        <td className="p-4 font-bold text-laser-400 font-mono">${Number(m.wallet_usd).toFixed(2)}</td>
-                        <td className="p-4">{m.orders_count || 0}</td>
-                        <td className="p-4">
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                              m.status === 'ACTIVE'
-                                ? 'bg-emerald-500/20 text-emerald-400'
-                                : 'bg-crimson-500/20 text-crimson-400 animate-pulse'
-                            }`}
-                          >
-                            {m.status}
-                          </span>
-                        </td>
-                        <td className="p-4 text-right space-x-2">
-                          <button
-                            onClick={() => handleAdjustWallet(m.id, m.name)}
-                            className="px-2.5 py-1 rounded bg-carbon-800 hover:bg-carbon-700 text-white font-bold text-[10px]"
-                          >
-                            Adjust $
-                          </button>
-                          <button
-                            onClick={() => handleToggleKillswitch(m.id, m.status)}
-                            className={`px-2.5 py-1 rounded font-bold text-[10px] ${
-                              m.status === 'ACTIVE'
-                                ? 'bg-crimson-500/20 text-crimson-400 hover:bg-crimson-500/30 border border-crimson-500/30'
-                                : 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 border border-emerald-500/30'
-                            }`}
-                          >
-                            {m.status === 'ACTIVE' ? 'KILLSWITCH' : 'ACTIVATE'}
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+        {/* Navigation Tabs in GodMode */}
+        <div className="flex items-center gap-3 border-b border-white/10 pb-2">
+          <button
+            onClick={() => setGodTab('merchants')}
+            className={`px-4 py-2 rounded-xl text-xs font-mono font-bold tracking-wider uppercase transition-all ${
+              godTab === 'merchants'
+                ? 'bg-crimson-600 text-white shadow-lg shadow-crimson-600/30'
+                : 'text-zinc-400 hover:text-white'
+            }`}
+          >
+            Merchant Fleet ({merchants.length})
+          </button>
+          <button
+            onClick={() => setGodTab('wholesale')}
+            className={`px-4 py-2 rounded-xl text-xs font-mono font-bold tracking-wider uppercase transition-all ${
+              godTab === 'wholesale'
+                ? 'bg-crimson-600 text-white shadow-lg shadow-crimson-600/30'
+                : 'text-zinc-400 hover:text-white'
+            }`}
+          >
+            Wholesale Governance & Plan Gating ({wholesaleCatalog.length})
+          </button>
+          <button
+            onClick={() => setGodTab('config')}
+            className={`px-4 py-2 rounded-xl text-xs font-mono font-bold tracking-wider uppercase transition-all ${
+              godTab === 'config'
+                ? 'bg-crimson-600 text-white shadow-lg shadow-crimson-600/30'
+                : 'text-zinc-400 hover:text-white'
+            }`}
+          >
+            Wholesale Margin & Binance Engine
+          </button>
         </div>
 
-        {/* Row 3: Platform Margin Engine & Owner Binance Pay Credentials */}
-        <form onSubmit={handleSaveConfig} className="glass-card-cyber rounded-2xl p-6 sm:p-8 border border-white/10 space-y-6">
-          <div className="flex justify-between items-center border-b border-white/10 pb-4">
-            <div>
-              <h3 className="text-base font-mono font-bold text-white uppercase">
-                Global Wholesale Margin & Binance Pay Engine
-              </h3>
-              <p className="text-xs text-zinc-400">
-                Configure provider API keys, automated platform profit margin, and your receiving Binance credentials.
-              </p>
-            </div>
-            {configSaved && (
-              <span className="text-xs text-emerald-400 font-mono font-bold flex items-center gap-1">
-                <CheckCircle className="w-4 h-4" /> Config Applied Live
-              </span>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Wholesale Keys */}
-            <div className="space-y-4">
-              <h4 className="text-xs font-mono font-bold text-crimson-400 uppercase">1. Upstream Wholesale Providers</h4>
+        {/* ==========================================
+            TAB 1: MERCHANT FLEET & KILLSWITCHES
+           ========================================== */}
+        {godTab === 'merchants' && (
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
               <div>
-                <label className="block text-xs font-semibold text-zinc-300 mb-1">DigitalCore API Key</label>
-                <input
-                  type="text"
-                  placeholder="Paste digitalcore.top key"
-                  value={config.digitalcoreKey}
-                  onChange={(e) => setConfig({ ...config, digitalcoreKey: e.target.value })}
-                  className="w-full px-4 py-2 rounded-xl bg-carbon-900 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-crimson-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-zinc-300 mb-1">Canboso Buyer API Key</label>
-                <input
-                  type="text"
-                  placeholder="Paste canboso.com buyer key"
-                  value={config.canbosoKey}
-                  onChange={(e) => setConfig({ ...config, canbosoKey: e.target.value })}
-                  className="w-full px-4 py-2 rounded-xl bg-carbon-900 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-crimson-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-300 mb-1">Platform Fixed Fee ($)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={config.platformFeeFixedUsd}
-                    onChange={(e) => setConfig({ ...config, platformFeeFixedUsd: parseFloat(e.target.value) })}
-                    className="w-full px-4 py-2 rounded-xl bg-carbon-900 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-laser-500"
-                  />
-                  <span className="text-[10px] text-zinc-500">e.g. +$0.01 USD / item</span>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-300 mb-1">Platform Margin (%)</label>
-                  <input
-                    type="number"
-                    step="0.5"
-                    value={config.platformFeePct}
-                    onChange={(e) => setConfig({ ...config, platformFeePct: parseFloat(e.target.value) })}
-                    className="w-full px-4 py-2 rounded-xl bg-carbon-900 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-laser-500"
-                  />
-                  <span className="text-[10px] text-zinc-500">Optional % markup</span>
-                </div>
+                <h3 className="text-base font-mono font-bold text-white uppercase tracking-wider">
+                  Merchant Fleet Table ({merchants.length})
+                </h3>
+                <p className="text-xs text-zinc-400">Monitor all stores, wallets, and toggle emergency killswitches</p>
               </div>
             </div>
 
-            {/* Platform Owner Binance Pay */}
-            <div className="space-y-4">
-              <h4 className="text-xs font-mono font-bold text-laser-400 uppercase">2. Platform Owner Binance Pay (Tier 2)</h4>
-              <div>
-                <label className="block text-xs font-semibold text-zinc-300 mb-1">Your Binance Pay UID</label>
-                <input
-                  type="text"
-                  placeholder="Your personal UID shown to merchants"
-                  value={config.ownerBinanceUid}
-                  onChange={(e) => setConfig({ ...config, ownerBinanceUid: e.target.value })}
-                  className="w-full px-4 py-2 rounded-xl bg-carbon-900 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-laser-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-zinc-300 mb-1">Binance Read-Only API Key</label>
-                <input
-                  type="text"
-                  placeholder="Your Read-Only API Key"
-                  value={config.ownerBinanceApiKey}
-                  onChange={(e) => setConfig({ ...config, ownerBinanceApiKey: e.target.value })}
-                  className="w-full px-4 py-2 rounded-xl bg-carbon-900 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-laser-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-zinc-300 mb-1">
-                  Binance API Secret {config.ownerBinanceHasSecret && '(Secret already configured)'}
-                </label>
-                <input
-                  type="password"
-                  placeholder="Your Binance Secret Key"
-                  value={config.ownerBinanceApiSecret}
-                  onChange={(e) => setConfig({ ...config, ownerBinanceApiSecret: e.target.value })}
-                  className="w-full px-4 py-2 rounded-xl bg-carbon-900 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-laser-500"
-                />
+            <div className="glass-card-cyber rounded-2xl border border-white/10 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs font-mono">
+                  <thead className="bg-carbon-900 text-zinc-400 font-bold uppercase border-b border-white/10">
+                    <tr>
+                      <th className="p-4">Store / Slug</th>
+                      <th className="p-4">Owner Email</th>
+                      <th className="p-4">Bot Status</th>
+                      <th className="p-4">Wallet (USD)</th>
+                      <th className="p-4">Orders</th>
+                      <th className="p-4">Status</th>
+                      <th className="p-4 text-right">Emergency Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {merchants.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="p-8 text-center text-zinc-500 font-sans">
+                          No registered merchant stores found in fleet.
+                        </td>
+                      </tr>
+                    ) : (
+                      merchants.map((m) => (
+                        <tr key={m.id} className="hover:bg-white/[0.02]">
+                          <td className="p-4">
+                            <span className="font-bold text-white block">{m.name}</span>
+                            <span className="text-[11px] text-crimson-400">bot.mogent.tech/{m.slug}</span>
+                          </td>
+                          <td className="p-4 text-zinc-400">{m.owner_email}</td>
+                          <td className="p-4">
+                            {m.botHasToken ? (
+                              <span
+                                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] ${
+                                  m.botOnline
+                                    ? 'bg-emerald-500/20 text-emerald-400 font-bold'
+                                    : 'bg-amber-500/20 text-amber-300'
+                                }`}
+                              >
+                                <span
+                                  className={`w-1.5 h-1.5 rounded-full ${
+                                    m.botOnline ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'
+                                  }`}
+                                ></span>
+                                {m.bot_username ? `@${m.bot_username}` : 'Configured'}
+                              </span>
+                            ) : (
+                              <span className="text-zinc-600 text-[10px]">No Token</span>
+                            )}
+                          </td>
+                          <td className="p-4 font-bold text-laser-400 font-mono">${Number(m.wallet_usd).toFixed(2)}</td>
+                          <td className="p-4">{m.orders_count || 0}</td>
+                          <td className="p-4">
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                m.status === 'ACTIVE'
+                                  ? 'bg-emerald-500/20 text-emerald-400'
+                                  : 'bg-crimson-500/20 text-crimson-400 animate-pulse'
+                              }`}
+                            >
+                              {m.status}
+                            </span>
+                          </td>
+                          <td className="p-4 text-right space-x-2">
+                            <button
+                              onClick={() => handleAdjustWallet(m.id, m.name)}
+                              className="px-2.5 py-1 rounded bg-carbon-800 hover:bg-carbon-700 text-white font-bold text-[10px]"
+                            >
+                              Adjust $
+                            </button>
+                            <button
+                              onClick={() => handleToggleKillswitch(m.id, m.status)}
+                              className={`px-2.5 py-1 rounded font-bold text-[10px] ${
+                                m.status === 'ACTIVE'
+                                  ? 'bg-crimson-500/20 text-crimson-400 hover:bg-crimson-500/30 border border-crimson-500/30'
+                                  : 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 border border-emerald-500/30'
+                              }`}
+                            >
+                              {m.status === 'ACTIVE' ? 'KILLSWITCH' : 'ACTIVATE'}
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
+        )}
 
-          <button
-            type="submit"
-            className="px-6 py-3 rounded-xl bg-gradient-to-r from-crimson-600 to-crimson-500 hover:from-crimson-500 text-white font-mono font-bold text-xs uppercase tracking-wider shadow-lg shadow-crimson-600/30 active:scale-98"
-          >
-            Deploy & Save System Engine
-          </button>
-        </form>
+        {/* ==========================================
+            TAB 2: WHOLESALE GOVERNANCE & PLAN GATING
+           ========================================== */}
+        {godTab === 'wholesale' && (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-base font-mono font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                  <Zap className="w-5 h-5 text-crimson-400" /> Wholesale Catalog Governance & Gating
+                </h3>
+                <p className="text-xs text-zinc-400">
+                  Control which wholesale products are available to merchants, set minimum subscription plan tiers, or 1-click delete/disable items.
+                </p>
+              </div>
+              <button
+                onClick={loadWholesaleCatalog}
+                className="px-4 py-2 rounded-xl bg-carbon-800 hover:bg-carbon-700 text-zinc-300 text-xs font-mono flex items-center gap-2 self-start"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${wholesaleLoading ? 'animate-spin' : ''}`} /> Refresh Upstream
+              </button>
+            </div>
+
+            {/* Search Input */}
+            <div className="relative">
+              <Search className="w-4 h-4 text-zinc-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Search upstream catalog by product name, category, or ID..."
+                value={wholesaleSearch}
+                onChange={(e) => setWholesaleSearch(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-carbon-900 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-crimson-500"
+              />
+            </div>
+
+            {/* Governance Table */}
+            <div className="glass-card-cyber rounded-2xl border border-white/10 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs font-mono">
+                  <thead className="bg-carbon-900 text-zinc-400 font-bold uppercase border-b border-white/10">
+                    <tr>
+                      <th className="p-4">Product Name & Category</th>
+                      <th className="p-4">Provider</th>
+                      <th className="p-4">Base Cost</th>
+                      <th className="p-4">Cost with Fee</th>
+                      <th className="p-4">Minimum Plan Tier</th>
+                      <th className="p-4">Global Status</th>
+                      <th className="p-4 text-right">Owner Governance Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {filteredWholesale.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="p-8 text-center text-zinc-500 font-sans">
+                          No wholesale products match your search query.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredWholesale.map((p) => {
+                        const isGloballyActive = p.is_active_platform !== 0;
+                        return (
+                          <tr
+                            key={p.id}
+                            className={`hover:bg-white/[0.02] ${
+                              !isGloballyActive ? 'opacity-50 bg-crimson-950/20' : ''
+                            }`}
+                          >
+                            <td className="p-4">
+                              <span className="font-bold text-white block">{p.name}</span>
+                              <span className="text-[10px] text-zinc-500">
+                                {p.category} · {p.id}
+                              </span>
+                            </td>
+                            <td className="p-4">
+                              <span className="px-2 py-0.5 rounded text-[10px] uppercase font-bold bg-carbon-800 text-zinc-300">
+                                {p.provider}
+                              </span>
+                            </td>
+                            <td className="p-4 font-bold text-zinc-400">${p.base_price_usd.toFixed(2)}</td>
+                            <td className="p-4 font-bold text-emerald-400">
+                              ${p.cost_with_platform_fee_usd.toFixed(2)}
+                            </td>
+                            <td className="p-4">
+                              <select
+                                value={p.min_plan_tier || 'starter'}
+                                onChange={(e) => handleChangeMinPlanTier(p.id, e.target.value)}
+                                className="px-2.5 py-1 rounded bg-carbon-800 border border-white/10 text-white text-xs font-semibold focus:outline-none focus:border-laser-500"
+                              >
+                                <option value="starter">Starter (All Merchants)</option>
+                                <option value="pro">Pro Plan Only</option>
+                                <option value="enterprise">Enterprise Only</option>
+                              </select>
+                            </td>
+                            <td className="p-4">
+                              <span
+                                className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                                  isGloballyActive
+                                    ? 'bg-emerald-500/20 text-emerald-400'
+                                    : 'bg-crimson-500/20 text-crimson-400'
+                                }`}
+                              >
+                                {isGloballyActive ? 'ENABLED' : 'DELETED / OFF'}
+                              </span>
+                            </td>
+                            <td className="p-4 text-right space-x-2">
+                              <button
+                                onClick={() => handleToggleWholesaleStatus(p.id, isGloballyActive ? 1 : 0)}
+                                className={`px-2.5 py-1 rounded font-bold text-[10px] ${
+                                  isGloballyActive
+                                    ? 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30'
+                                    : 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30'
+                                }`}
+                              >
+                                {isGloballyActive ? 'Disable' : 'Enable'}
+                              </button>
+                              <button
+                                onClick={() => handleDeleteWholesaleProduct(p.id, p.name)}
+                                className="px-2.5 py-1 rounded bg-crimson-500/20 text-crimson-400 hover:bg-crimson-500/30 font-bold text-[10px]"
+                                title="Globally remove from all merchants & bots"
+                              >
+                                Delete
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ==========================================
+            TAB 3: PLATFORM MARGIN ENGINE & BINANCE CONFIG
+           ========================================== */}
+        {godTab === 'config' && (
+          <form onSubmit={handleSaveConfig} className="glass-card-cyber rounded-2xl p-6 sm:p-8 border border-white/10 space-y-6">
+            <div className="flex justify-between items-center border-b border-white/10 pb-4">
+              <div>
+                <h3 className="text-base font-mono font-bold text-white uppercase">
+                  Global Wholesale Margin & Binance Pay Engine
+                </h3>
+                <p className="text-xs text-zinc-400">
+                  Configure provider API keys, automated platform profit margin, and your receiving Binance credentials.
+                </p>
+              </div>
+              {configSaved && (
+                <span className="text-xs text-emerald-400 font-mono font-bold flex items-center gap-1">
+                  <CheckCircle className="w-4 h-4" /> Config Applied Live
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Wholesale Keys */}
+              <div className="space-y-4">
+                <h4 className="text-xs font-mono font-bold text-crimson-400 uppercase">1. Upstream Wholesale Providers</h4>
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1">DigitalCore API Key</label>
+                  <input
+                    type="text"
+                    placeholder="Paste digitalcore.top key"
+                    value={config.digitalcoreKey}
+                    onChange={(e) => setConfig({ ...config, digitalcoreKey: e.target.value })}
+                    className="w-full px-4 py-2 rounded-xl bg-carbon-900 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-crimson-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1">Canboso Buyer API Key</label>
+                  <input
+                    type="text"
+                    placeholder="Paste canboso.com buyer key"
+                    value={config.canbosoKey}
+                    onChange={(e) => setConfig({ ...config, canbosoKey: e.target.value })}
+                    className="w-full px-4 py-2 rounded-xl bg-carbon-900 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-crimson-500"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-zinc-300 mb-1">Platform Fixed Fee ($)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={config.platformFeeFixedUsd}
+                      onChange={(e) => setConfig({ ...config, platformFeeFixedUsd: parseFloat(e.target.value) })}
+                      className="w-full px-4 py-2 rounded-xl bg-carbon-900 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-laser-500"
+                    />
+                    <span className="text-[10px] text-zinc-500">e.g. +$0.01 USD / item</span>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-zinc-300 mb-1">Platform Margin (%)</label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      value={config.platformFeePct}
+                      onChange={(e) => setConfig({ ...config, platformFeePct: parseFloat(e.target.value) })}
+                      className="w-full px-4 py-2 rounded-xl bg-carbon-900 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-laser-500"
+                    />
+                    <span className="text-[10px] text-zinc-500">Optional % markup</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Platform Owner Binance Pay */}
+              <div className="space-y-4">
+                <h4 className="text-xs font-mono font-bold text-laser-400 uppercase">2. Platform Owner Binance Pay (Tier 2)</h4>
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1">Your Binance Pay UID</label>
+                  <input
+                    type="text"
+                    placeholder="Your personal UID shown to merchants"
+                    value={config.ownerBinanceUid}
+                    onChange={(e) => setConfig({ ...config, ownerBinanceUid: e.target.value })}
+                    className="w-full px-4 py-2 rounded-xl bg-carbon-900 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-laser-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1">Binance Read-Only API Key</label>
+                  <input
+                    type="text"
+                    placeholder="Your Read-Only API Key"
+                    value={config.ownerBinanceApiKey}
+                    onChange={(e) => setConfig({ ...config, ownerBinanceApiKey: e.target.value })}
+                    className="w-full px-4 py-2 rounded-xl bg-carbon-900 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-laser-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                    Binance API Secret {config.ownerBinanceHasSecret && '(Secret already configured)'}
+                  </label>
+                  <input
+                    type="password"
+                    placeholder="Your Binance Secret Key"
+                    value={config.ownerBinanceApiSecret}
+                    onChange={(e) => setConfig({ ...config, ownerBinanceApiSecret: e.target.value })}
+                    className="w-full px-4 py-2 rounded-xl bg-carbon-900 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-laser-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              className="px-6 py-3 rounded-xl bg-gradient-to-r from-crimson-600 to-crimson-500 hover:from-crimson-500 text-white font-mono font-bold text-xs uppercase tracking-wider shadow-lg shadow-crimson-600/30 active:scale-98"
+            >
+              Deploy & Save System Engine
+            </button>
+          </form>
+        )}
       </div>
     </div>
   );

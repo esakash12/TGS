@@ -133,29 +133,96 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
     await ctx.reply(msg, { parse_mode: 'HTML' });
   });
 
-  // 4. Products Catalog
+  // Helper to fetch active products for this tenant (respects merchant is_active AND platform wholesale rules)
+  const getActiveProductsForTenant = (groupId?: string | null) => {
+    let query = `
+      SELECT p.*, g.name as group_name, g.icon as group_icon
+      FROM products p
+      LEFT JOIN product_groups g ON p.group_id = g.id
+      LEFT JOIN platform_wholesale_rules r ON p.provider_product_id = r.provider_product_id
+      WHERE p.tenant_id = ?
+        AND p.is_active = 1
+        AND (p.provider = 'custom' OR r.is_active IS NULL OR r.is_active = 1)
+    `;
+    const params: any[] = [tenantId];
+
+    if (groupId === 'general') {
+      query += ` AND p.group_id IS NULL`;
+    } else if (groupId) {
+      query += ` AND p.group_id = ?`;
+      params.push(groupId);
+    }
+
+    query += ` ORDER BY p.retail_price_usd ASC`;
+    return db.prepare(query).all(...params) as any[];
+  };
+
+  // Helper to fetch active groups with product counts
+  const getActiveGroupsForTenant = () => {
+    const groups = db.prepare(`
+      SELECT g.*, COUNT(p.id) as active_count
+      FROM product_groups g
+      JOIN products p ON p.group_id = g.id
+      LEFT JOIN platform_wholesale_rules r ON p.provider_product_id = r.provider_product_id
+      WHERE g.tenant_id = ?
+        AND p.is_active = 1
+        AND (p.provider = 'custom' OR r.is_active IS NULL OR r.is_active = 1)
+      GROUP BY g.id
+      ORDER BY g.sort_order ASC, g.name ASC
+    `).all(tenantId) as any[];
+
+    const ungrouped = db.prepare(`
+      SELECT COUNT(p.id) as active_count
+      FROM products p
+      LEFT JOIN platform_wholesale_rules r ON p.provider_product_id = r.provider_product_id
+      WHERE p.tenant_id = ?
+        AND p.group_id IS NULL
+        AND p.is_active = 1
+        AND (p.provider = 'custom' OR r.is_active IS NULL OR r.is_active = 1)
+    `).get(tenantId) as any;
+
+    return {
+      groups,
+      ungroupedCount: Number(ungrouped?.active_count || 0),
+    };
+  };
+
+  // 4. Products Catalog (2-Tap Category Browsing)
   bot.hears([/🛍️ প্রোডাক্ট কিনুন/i, /🛍️ Products/i], async (ctx) => {
     const customer = getOrCreateCustomer(ctx.from);
     const isBn = customer.language === 'bn';
 
-    const products = db.prepare(`
-      SELECT * FROM products WHERE tenant_id = ? AND is_active = 1 ORDER BY category ASC, retail_price_usd ASC
-    `).all(tenantId) as any[];
+    const { groups, ungroupedCount } = getActiveGroupsForTenant();
+    const totalActive = groups.reduce((acc, g) => acc + g.active_count, 0) + ungroupedCount;
 
-    if (products.length === 0) {
+    if (totalActive === 0) {
       const emptyMsg = isBn
         ? '🛍️ বর্তমানে স্টোরে কোনো পণ্য স্টক নেই। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।'
         : '🛍️ No products currently available in this store. Please check back soon.';
       return ctx.reply(emptyMsg);
     }
 
-    const keyboard = new InlineKeyboard();
-    let currentCategory = '';
-
-    for (const p of products) {
-      if (p.category !== currentCategory) {
-        currentCategory = p.category;
+    // If groups exist, render 2-Tap Category Selection
+    if (groups.length > 0) {
+      const keyboard = new InlineKeyboard();
+      for (const g of groups) {
+        keyboard.text(`${g.icon || '📁'} ${g.name} (${g.active_count})`, `view_grp_${g.id}`).row();
       }
+      if (ungroupedCount > 0) {
+        keyboard.text(isBn ? `📦 সাধারণ আইটেম (${ungroupedCount})` : `📦 General Items (${ungroupedCount})`, `view_grp_general`).row();
+      }
+
+      const title = isBn
+        ? `📁 <b>প্রোডাক্ট ক্যাটাগরি / ফোল্ডার:</b>\nনিচে থেকে আপনার পছন্দের ক্যাটাগরিটি নির্বাচন করুন:`
+        : `📁 <b>Product Categories & Folders:</b>\nSelect a category from below:`;
+
+      return ctx.reply(title, { parse_mode: 'HTML', reply_markup: keyboard });
+    }
+
+    // Direct product listing if no custom groups defined
+    const products = getActiveProductsForTenant();
+    const keyboard = new InlineKeyboard();
+    for (const p of products) {
       const stockBadge = p.stock > 0 ? `($${Number(p.retail_price_usd).toFixed(2)})` : `(Out of stock)`;
       keyboard.text(`${p.name} - ${stockBadge}`, `view_p_${p.id}`).row();
     }
@@ -167,6 +234,80 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
     await ctx.reply(title, { parse_mode: 'HTML', reply_markup: keyboard });
   });
 
+  // Handle Group Selection Callback
+  bot.callbackQuery(/^view_grp_(.+)$/, async (ctx) => {
+    const grpId = ctx.match[1];
+    const customer = getOrCreateCustomer(ctx.from);
+    const isBn = customer.language === 'bn';
+
+    const products = getActiveProductsForTenant(grpId);
+    let groupTitle = isBn ? '📦 সাধারণ আইটেম' : '📦 General Items';
+
+    if (grpId !== 'general') {
+      const group = db.prepare('SELECT * FROM product_groups WHERE id = ? AND tenant_id = ?').get(grpId, tenantId) as any;
+      if (group) {
+        groupTitle = `${group.icon || '📁'} ${group.name}`;
+      }
+    }
+
+    if (products.length === 0) {
+      return ctx.answerCallbackQuery({
+        text: isBn ? 'এই ক্যাটাগরিতে বর্তমানে কোনো পণ্য নেই।' : 'No products in this category.',
+        show_alert: true,
+      });
+    }
+
+    const keyboard = new InlineKeyboard();
+    for (const p of products) {
+      const stockBadge = p.stock > 0 ? `($${Number(p.retail_price_usd).toFixed(2)})` : `(Out of stock)`;
+      keyboard.text(`${p.name} - ${stockBadge}`, `view_p_${p.id}`).row();
+    }
+    keyboard.text(isBn ? '⬅️ ক্যাটাগরি লিস্টে ফেরত যান' : '⬅️ Back to Categories', 'back_groups');
+
+    const text = isBn
+      ? `📁 <b>ক্যাটাগরি: ${groupTitle}</b>\n\nনিচের তালিকা থেকে আপনার কাঙ্খিত পণ্যটি বাছাই করুন:`
+      : `📁 <b>Category: ${groupTitle}</b>\n\nSelect a product from the list below:`;
+
+    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: keyboard });
+    await ctx.answerCallbackQuery();
+  });
+
+  // Back to Categories Callback
+  bot.callbackQuery('back_groups', async (ctx) => {
+    const customer = getOrCreateCustomer(ctx.from);
+    const isBn = customer.language === 'bn';
+    const { groups, ungroupedCount } = getActiveGroupsForTenant();
+
+    if (groups.length > 0) {
+      const keyboard = new InlineKeyboard();
+      for (const g of groups) {
+        keyboard.text(`${g.icon || '📁'} ${g.name} (${g.active_count})`, `view_grp_${g.id}`).row();
+      }
+      if (ungroupedCount > 0) {
+        keyboard.text(isBn ? `📦 সাধারণ আইটেম (${ungroupedCount})` : `📦 General Items (${ungroupedCount})`, `view_grp_general`).row();
+      }
+
+      const title = isBn
+        ? `📁 <b>প্রোডাক্ট ক্যাটাগরি / ফোল্ডার:</b>\nনিচে থেকে আপনার পছন্দের ক্যাটাগরিটি নির্বাচন করুন:`
+        : `📁 <b>Product Categories & Folders:</b>\nSelect a category from below:`;
+
+      await ctx.editMessageText(title, { parse_mode: 'HTML', reply_markup: keyboard });
+    } else {
+      const products = getActiveProductsForTenant();
+      const keyboard = new InlineKeyboard();
+      for (const p of products) {
+        const stockBadge = p.stock > 0 ? `($${Number(p.retail_price_usd).toFixed(2)})` : `(Out of stock)`;
+        keyboard.text(`${p.name} - ${stockBadge}`, `view_p_${p.id}`).row();
+      }
+      const title = isBn
+        ? `🛍️ <b>প্রোডাক্ট ক্যাটালগ:</b>\nনিচে থেকে আপনার পছন্দের আইটেমটি সিলেক্ট করুন:`
+        : `🛍️ <b>Product Catalog:</b>\nSelect an item from below:`;
+      await ctx.editMessageText(title, { parse_mode: 'HTML', reply_markup: keyboard });
+    }
+
+    await ctx.answerCallbackQuery();
+  });
+
   // Handle Product View Callback
   bot.callbackQuery(/^view_p_(.+)$/, async (ctx) => {
     const productId = ctx.match[1];
@@ -174,26 +315,35 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
     const isBn = customer.language === 'bn';
 
     const product = db.prepare(`
-      SELECT * FROM products WHERE id = ? AND tenant_id = ? AND is_active = 1
+      SELECT p.*, g.name as group_name, g.icon as group_icon, r.is_active as platform_active
+      FROM products p
+      LEFT JOIN product_groups g ON p.group_id = g.id
+      LEFT JOIN platform_wholesale_rules r ON p.provider_product_id = r.provider_product_id
+      WHERE p.id = ? AND p.tenant_id = ? AND p.is_active = 1
     `).get(productId, tenantId) as any;
 
-    if (!product) {
-      return ctx.answerCallbackQuery({ text: isBn ? 'পণ্যটি পাওয়া যায়নি।' : 'Product not found.', show_alert: true });
+    // Check if merchant disabled product OR site owner disabled wholesale product globally
+    if (!product || (product.provider !== 'custom' && product.platform_active === 0)) {
+      return ctx.answerCallbackQuery({
+        text: isBn ? 'পণ্যটি বর্তমানে অনুপলব্ধ।' : 'Product is currently unavailable.',
+        show_alert: true,
+      });
     }
 
     const price = Number(product.retail_price_usd).toFixed(2);
     const stock = product.stock;
+    const categoryName = product.group_name ? `${product.group_icon || '📁'} ${product.group_name}` : product.category;
 
     const desc = product.description ? `\n📝 ${product.description}\n` : '';
     const text = isBn
       ? `📦 <b>${product.name}</b>\n` +
-        `📂 ক্যাটাগরি: ${product.category}\n` +
+        `📂 ক্যাটাগরি: ${categoryName}\n` +
         `💵 মূল্য: <b>$${price} USD</b>\n` +
         `📊 বর্তমান স্টক: <b>${stock > 0 ? stock + ' টি এভেইলেবল' : 'আউট অব স্টক'}</b>\n` +
         desc +
         `\nআপনার বর্তমান ওয়ালেট: <b>$${Number(customer.balance_usd || 0).toFixed(2)} USD</b>`
       : `📦 <b>${product.name}</b>\n` +
-        `📂 Category: ${product.category}\n` +
+        `📂 Category: ${categoryName}\n` +
         `💵 Price: <b>$${price} USD</b>\n` +
         `📊 Stock: <b>${stock > 0 ? stock + ' in stock' : 'Out of stock'}</b>\n` +
         desc +
@@ -203,7 +353,12 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
     if (stock > 0) {
       keyboard.text(isBn ? '⚡ এখনি কিনুন (১টি)' : '⚡ Buy Now (1x)', `buy_${product.id}_1`).row();
     }
-    keyboard.text(isBn ? '⬅️ ব্যাকে যান' : '⬅️ Back to Catalog', 'back_catalog');
+
+    if (product.group_id) {
+      keyboard.text(isBn ? `⬅️ ব্যাকে যান (${product.group_name})` : `⬅️ Back to (${product.group_name})`, `view_grp_${product.group_id}`);
+    } else {
+      keyboard.text(isBn ? '⬅️ ব্যাকে যান' : '⬅️ Back to Categories', 'back_groups');
+    }
 
     await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: keyboard });
     await ctx.answerCallbackQuery();
@@ -252,23 +407,6 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
     await ctx.reply(successMsg, { parse_mode: 'HTML' });
   });
 
-  // Back to Catalog Callback
-  bot.callbackQuery('back_catalog', async (ctx) => {
-    const products = db.prepare(`
-      SELECT * FROM products WHERE tenant_id = ? AND is_active = 1 ORDER BY category ASC, retail_price_usd ASC
-    `).all(tenantId) as any[];
-
-    const keyboard = new InlineKeyboard();
-    for (const p of products) {
-      const stockBadge = p.stock > 0 ? `($${Number(p.retail_price_usd).toFixed(2)})` : `(Out of stock)`;
-      keyboard.text(`${p.name} - ${stockBadge}`, `view_p_${p.id}`).row();
-    }
-    await ctx.editMessageText('🛍️ <b>প্রোডাক্ট ক্যাটালগ:</b>\nনিচে থেকে আপনার পছন্দের আইটেমটি সিলেক্ট করুন:', {
-      parse_mode: 'HTML',
-      reply_markup: keyboard,
-    });
-    await ctx.answerCallbackQuery();
-  });
 
   // 5. Add Funds (Deposit)
   bot.hears([/➕ ব্যালেন্স রিচার্জ/i, /➕ Add Funds/i], async (ctx) => {

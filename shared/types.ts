@@ -53,9 +53,22 @@ export interface AdminUser {
   created_at: string;
 }
 
+export interface ProductGroup {
+  id: string;
+  tenant_id: string;
+  name: string;
+  icon?: string;
+  sort_order: number;
+  product_count?: number;
+  created_at: string;
+}
+
 export interface Product {
   id: string;
   tenant_id: string;
+  group_id?: string | null;
+  group_name?: string | null;
+  group_icon?: string | null;
   name: string;
   category: string;
   provider: ProviderType;
@@ -146,6 +159,15 @@ export interface AuthResponse {
   tenant?: Tenant;
 }
 
+export interface PlatformWholesaleRule {
+  provider_product_id: string;
+  is_active: number; // 1 or 0
+  min_plan_tier: 'starter' | 'pro' | 'enterprise';
+  custom_name?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface WholesaleProductDTO {
   id: string;
   name: string;
@@ -154,6 +176,8 @@ export interface WholesaleProductDTO {
   cost_with_platform_fee_usd: number; // Merchant sees this
   stock: number;
   category: string;
+  is_active_platform?: number; // 1 = available, 0 = globally disabled by owner
+  min_plan_tier?: 'starter' | 'pro' | 'enterprise';
 }
 
 export interface BotRuntimeStatus {

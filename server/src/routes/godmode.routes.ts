@@ -4,7 +4,12 @@ import { requireSuperAdmin } from '../middleware/auth';
 import { signToken } from '../services/auth';
 import { db } from '../db/database';
 import { encrypt, decrypt } from '../services/crypto';
-import { getDigitalCoreBalance, getCanbosoBalance } from '../services/wholesale';
+import {
+  getDigitalCoreBalance,
+  getCanbosoBalance,
+  fetchLiveWholesaleCatalog,
+  invalidateWholesaleCache,
+} from '../services/wholesale';
 import { botRegistry } from '../../../bot/src/registry';
 import { GODMODE_SECRET_TOKEN } from '../../../shared/constants';
 
@@ -220,3 +225,72 @@ godmodeRouter.put('/config', (req: Request, res: Response) => {
 
   res.json({ success: true, message: 'Global system configuration updated.' });
 });
+
+// ==========================================
+// 4. Wholesale Governance & Catalog Gating
+// ==========================================
+godmodeRouter.get('/wholesale-catalog', async (req: Request, res: Response) => {
+  try {
+    const catalog = await fetchLiveWholesaleCatalog(req.query.refresh === 'true');
+    const search = req.query.q ? String(req.query.q).toLowerCase().trim() : '';
+
+    let result = catalog;
+    if (search) {
+      result = catalog.filter(p =>
+        p.name.toLowerCase().includes(search) ||
+        p.category.toLowerCase().includes(search) ||
+        p.provider.toLowerCase().includes(search) ||
+        p.id.toLowerCase().includes(search)
+      );
+    }
+
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to fetch upstream wholesale catalog: ' + err.message });
+  }
+});
+
+// Update or set wholesale product rule (active status, minimum plan tier, custom name)
+godmodeRouter.put('/wholesale-rules/:id', (req: Request, res: Response) => {
+  const providerProductId = req.params.id;
+  const { isActive, minPlanTier, customName } = req.body;
+
+  db.prepare(`
+    INSERT INTO platform_wholesale_rules (
+      provider_product_id, is_active, min_plan_tier, custom_name, updated_at
+    ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(provider_product_id) DO UPDATE SET
+      is_active = COALESCE(?, is_active),
+      min_plan_tier = COALESCE(?, min_plan_tier),
+      custom_name = COALESCE(?, custom_name),
+      updated_at = CURRENT_TIMESTAMP
+  `).run(
+    providerProductId,
+    isActive !== undefined ? (isActive ? 1 : 0) : 1,
+    minPlanTier || 'starter',
+    customName || null,
+    isActive !== undefined ? (isActive ? 1 : 0) : null,
+    minPlanTier || null,
+    customName || null
+  );
+
+  invalidateWholesaleCache();
+  res.json({ success: true, providerProductId });
+});
+
+// 1-Click Delete / Disable Wholesale Product Globally
+godmodeRouter.delete('/wholesale-rules/:id', (req: Request, res: Response) => {
+  const providerProductId = req.params.id;
+
+  db.prepare(`
+    INSERT INTO platform_wholesale_rules (provider_product_id, is_active, updated_at)
+    VALUES (?, 0, CURRENT_TIMESTAMP)
+    ON CONFLICT(provider_product_id) DO UPDATE SET
+      is_active = 0,
+      updated_at = CURRENT_TIMESTAMP
+  `).run(providerProductId);
+
+  invalidateWholesaleCache();
+  res.json({ success: true, message: `Product ${providerProductId} globally disabled/deleted from platform.` });
+});
+

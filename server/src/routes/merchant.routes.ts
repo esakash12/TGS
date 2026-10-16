@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
 import { db } from '../db/database';
 import { encrypt, decrypt } from '../services/crypto';
-import { fetchLiveWholesaleCatalog } from '../services/wholesale';
+import { fetchLiveWholesaleCatalog, fetchLiveWholesaleCatalogForMerchant } from '../services/wholesale';
 import { verifyMerchantWholesaleTopup } from '../services/binance';
 import { botRegistry } from '../../../bot/src/registry';
 
@@ -67,20 +67,129 @@ merchantRouter.get('/overview', (req: AuthenticatedRequest, res: Response) => {
 });
 
 // ==========================================
+// 1.1. Merchant Custom Product Groups & Folders
+// ==========================================
+merchantRouter.get('/groups', (req: AuthenticatedRequest, res: Response) => {
+  const tenantId = req.tenant.id;
+  const groups = db.prepare(`
+    SELECT g.*, COUNT(p.id) as product_count
+    FROM product_groups g
+    LEFT JOIN products p ON p.group_id = g.id AND p.tenant_id = g.tenant_id
+    WHERE g.tenant_id = ?
+    GROUP BY g.id
+    ORDER BY g.sort_order ASC, g.created_at ASC
+  `).all(tenantId);
+  res.json(groups);
+});
+
+merchantRouter.post('/groups', (req: AuthenticatedRequest, res: Response) => {
+  const tenantId = req.tenant.id;
+  const { name, icon, sortOrder } = req.body;
+
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: 'Group name is required.' });
+  }
+
+  const groupId = 'grp_' + Math.random().toString(36).substring(2, 10);
+  db.prepare(`
+    INSERT INTO product_groups (id, tenant_id, name, icon, sort_order)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(groupId, tenantId, name.trim(), icon?.trim() || '📁', Number(sortOrder || 0));
+
+  const created = db.prepare('SELECT * FROM product_groups WHERE id = ?').get(groupId);
+  res.status(201).json(created);
+});
+
+merchantRouter.put('/groups/:id', (req: AuthenticatedRequest, res: Response) => {
+  const tenantId = req.tenant.id;
+  const groupId = req.params.id;
+  const { name, icon, sortOrder } = req.body;
+
+  db.prepare(`
+    UPDATE product_groups
+    SET name = COALESCE(?, name),
+        icon = COALESCE(?, icon),
+        sort_order = COALESCE(?, sort_order)
+    WHERE id = ? AND tenant_id = ?
+  `).run(name ? name.trim() : null, icon ? icon.trim() : null, sortOrder !== undefined ? Number(sortOrder) : null, groupId, tenantId);
+
+  const updated = db.prepare('SELECT * FROM product_groups WHERE id = ?').get(groupId);
+  res.json(updated);
+});
+
+merchantRouter.delete('/groups/:id', (req: AuthenticatedRequest, res: Response) => {
+  const tenantId = req.tenant.id;
+  const groupId = req.params.id;
+
+  const deleteTx = db.transaction(() => {
+    // Unlink products in this group safely
+    db.prepare(`
+      UPDATE products SET group_id = NULL WHERE tenant_id = ? AND group_id = ?
+    `).run(tenantId, groupId);
+
+    db.prepare(`
+      DELETE FROM product_groups WHERE id = ? AND tenant_id = ?
+    `).run(groupId, tenantId);
+  });
+
+  deleteTx();
+  res.json({ success: true, message: 'Group deleted. Associated products are now in General.' });
+});
+
+// ==========================================
 // 2. Products & Inventory Management
 // ==========================================
 merchantRouter.get('/products', (req: AuthenticatedRequest, res: Response) => {
   const tenantId = req.tenant.id;
-  const products = db.prepare(`
-    SELECT * FROM products WHERE tenant_id = ? ORDER BY created_at DESC
-  `).all(tenantId);
+  const type = req.query.type as string; // 'custom' | 'wholesale'
+
+  let query = `
+    SELECT p.*, g.name as group_name, g.icon as group_icon
+    FROM products p
+    LEFT JOIN product_groups g ON p.group_id = g.id
+    WHERE p.tenant_id = ?
+  `;
+  const params: any[] = [tenantId];
+
+  if (type === 'custom') {
+    query += ` AND p.provider = 'custom'`;
+  } else if (type === 'wholesale') {
+    query += ` AND p.provider != 'custom'`;
+  }
+
+  query += ` ORDER BY p.created_at DESC`;
+
+  const products = db.prepare(query).all(...params);
   res.json(products);
 });
 
-// Create Custom Product
+// 1-Click Instant Product ON/OFF Toggle
+merchantRouter.patch('/products/:id/toggle', (req: AuthenticatedRequest, res: Response) => {
+  const tenantId = req.tenant.id;
+  const productId = req.params.id;
+
+  const product = db.prepare('SELECT id, is_active FROM products WHERE id = ? AND tenant_id = ?').get(productId, tenantId) as any;
+  if (!product) {
+    return res.status(404).json({ error: 'Product not found.' });
+  }
+
+  const newActive = product.is_active ? 0 : 1;
+  db.prepare('UPDATE products SET is_active = ? WHERE id = ? AND tenant_id = ?').run(newActive, productId, tenantId);
+
+  const updated = db.prepare(`
+    SELECT p.*, g.name as group_name, g.icon as group_icon
+    FROM products p
+    LEFT JOIN product_groups g ON p.group_id = g.id
+    WHERE p.id = ?
+  `).get(productId);
+
+  res.json({ success: true, is_active: newActive, product: updated });
+});
+
+// Create Custom Product (with custom group selection)
 merchantRouter.post('/products', (req: AuthenticatedRequest, res: Response) => {
   const tenantId = req.tenant.id;
-  const { name, category, retailPriceUsd, description, inventoryItems } = req.body;
+  const { name, category, retailPriceUsd, description, inventoryItems, groupId } = req.body;
 
   if (!name || !retailPriceUsd) {
     return res.status(400).json({ error: 'Product name and retail price (USD) are required.' });
@@ -97,9 +206,9 @@ merchantRouter.post('/products', (req: AuthenticatedRequest, res: Response) => {
     // 1. Insert product
     db.prepare(`
       INSERT INTO products (
-        id, tenant_id, name, category, provider, retail_price_usd, stock, description
-      ) VALUES (?, ?, ?, ?, 'custom', ?, ?, ?)
-    `).run(productId, tenantId, name, category || 'General', Number(retailPriceUsd), items.length, description || '');
+        id, tenant_id, group_id, name, category, provider, retail_price_usd, stock, description
+      ) VALUES (?, ?, ?, ?, ?, 'custom', ?, ?, ?)
+    `).run(productId, tenantId, groupId || null, name.trim(), category || 'General', Number(retailPriceUsd), items.length, description || '');
 
     // 2. Insert inventory items
     if (items.length > 0) {
@@ -114,7 +223,12 @@ merchantRouter.post('/products', (req: AuthenticatedRequest, res: Response) => {
   });
 
   createTx();
-  const created = db.prepare('SELECT * FROM products WHERE id = ?').get(productId);
+  const created = db.prepare(`
+    SELECT p.*, g.name as group_name, g.icon as group_icon
+    FROM products p
+    LEFT JOIN product_groups g ON p.group_id = g.id
+    WHERE p.id = ?
+  `).get(productId);
   res.status(201).json(created);
 });
 
@@ -152,11 +266,11 @@ merchantRouter.post('/products/:id/stock', (req: AuthenticatedRequest, res: Resp
   res.json({ success: true, addedCount: items.length, product: updated });
 });
 
-// Toggle or update product
+// Update product
 merchantRouter.put('/products/:id', (req: AuthenticatedRequest, res: Response) => {
   const tenantId = req.tenant.id;
   const productId = req.params.id;
-  const { name, category, retailPriceUsd, isActive, description } = req.body;
+  const { name, category, retailPriceUsd, isActive, description, groupId } = req.body;
 
   db.prepare(`
     UPDATE products 
@@ -164,11 +278,27 @@ merchantRouter.put('/products/:id', (req: AuthenticatedRequest, res: Response) =
         category = COALESCE(?, category),
         retail_price_usd = COALESCE(?, retail_price_usd),
         is_active = COALESCE(?, is_active),
-        description = COALESCE(?, description)
+        description = COALESCE(?, description),
+        group_id = CASE WHEN ? IS NOT NULL THEN ? ELSE group_id END
     WHERE id = ? AND tenant_id = ?
-  `).run(name, category, retailPriceUsd ? Number(retailPriceUsd) : null, isActive !== undefined ? (isActive ? 1 : 0) : null, description, productId, tenantId);
+  `).run(
+    name ? name.trim() : null,
+    category ? category.trim() : null,
+    retailPriceUsd ? Number(retailPriceUsd) : null,
+    isActive !== undefined ? (isActive ? 1 : 0) : null,
+    description,
+    groupId !== undefined ? groupId : null,
+    groupId !== undefined ? (groupId || null) : null,
+    productId,
+    tenantId
+  );
 
-  const updated = db.prepare('SELECT * FROM products WHERE id = ?').get(productId);
+  const updated = db.prepare(`
+    SELECT p.*, g.name as group_name, g.icon as group_icon
+    FROM products p
+    LEFT JOIN product_groups g ON p.group_id = g.id
+    WHERE p.id = ?
+  `).get(productId);
   res.json(updated);
 });
 
@@ -181,21 +311,26 @@ merchantRouter.delete('/products/:id', (req: AuthenticatedRequest, res: Response
 });
 
 // ==========================================
-// 3. Upstream Wholesale Catalog & Import
+// 3. Upstream Wholesale Catalog & Search & Import
 // ==========================================
-merchantRouter.get('/wholesale/catalog', async (_req: AuthenticatedRequest, res: Response) => {
+merchantRouter.get('/wholesale/catalog', async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const catalog = await fetchLiveWholesaleCatalog();
+    const tenantId = req.tenant.id;
+    const tenant = db.prepare('SELECT plan_id FROM tenants WHERE id = ?').get(tenantId) as any;
+    const search = req.query.q ? String(req.query.q) : undefined;
+
+    // Filters out globally deleted/disabled wholesale products
+    const catalog = await fetchLiveWholesaleCatalogForMerchant(tenant?.plan_id || 'starter', search);
     res.json(catalog);
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to fetch wholesale catalog: ' + err.message });
   }
 });
 
-// Import wholesale product into store
+// Import wholesale product into store (with optional custom group)
 merchantRouter.post('/wholesale/import', (req: AuthenticatedRequest, res: Response) => {
   const tenantId = req.tenant.id;
-  const { wholesaleProductId, name, category, wholesaleCostUsd, retailPriceUsd, provider } = req.body;
+  const { wholesaleProductId, name, category, wholesaleCostUsd, retailPriceUsd, provider, groupId } = req.body;
 
   if (!wholesaleProductId || !retailPriceUsd) {
     return res.status(400).json({ error: 'Missing product ID or retail price' });
@@ -204,28 +339,29 @@ merchantRouter.post('/wholesale/import', (req: AuthenticatedRequest, res: Respon
   // Check if already imported
   const existing = db.prepare(`
     SELECT id FROM products WHERE tenant_id = ? AND provider_product_id = ?
-  `).get(tenantId, wholesaleProductId);
+  `).get(tenantId, wholesaleProductId) as any;
 
   if (existing) {
-    // update price
+    // update price, group and reactivate
     db.prepare(`
       UPDATE products 
-      SET retail_price_usd = ?, wholesale_price_usd = ?, is_active = 1 
+      SET retail_price_usd = ?, wholesale_price_usd = ?, group_id = COALESCE(?, group_id), is_active = 1 
       WHERE tenant_id = ? AND provider_product_id = ?
-    `).run(Number(retailPriceUsd), Number(wholesaleCostUsd), tenantId, wholesaleProductId);
-    return res.json({ success: true, updated: true });
+    `).run(Number(retailPriceUsd), Number(wholesaleCostUsd), groupId || null, tenantId, wholesaleProductId);
+    return res.json({ success: true, updated: true, productId: existing.id });
   }
 
   const productId = 'prd_' + Math.random().toString(36).substring(2, 10);
   db.prepare(`
     INSERT INTO products (
-      id, tenant_id, name, category, provider, provider_product_id,
+      id, tenant_id, group_id, name, category, provider, provider_product_id,
       wholesale_price_usd, retail_price_usd, stock, is_active
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 999, 1)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 999, 1)
   `).run(
     productId,
     tenantId,
-    name,
+    groupId || null,
+    name.trim(),
     category || 'Wholesale',
     provider || 'digitalcore',
     wholesaleProductId,

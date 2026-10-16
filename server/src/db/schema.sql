@@ -50,10 +50,21 @@ CREATE TABLE IF NOT EXISTS admin_users (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 3.1. Merchant Custom Product Groups / Folders
+CREATE TABLE IF NOT EXISTS product_groups (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    icon TEXT DEFAULT '📁',
+    sort_order INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- 4. Products Table (100% USD-first)
 CREATE TABLE IF NOT EXISTS products (
     id TEXT PRIMARY KEY,
     tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    group_id TEXT REFERENCES product_groups(id) ON DELETE SET NULL,
     name TEXT NOT NULL,
     category TEXT NOT NULL DEFAULT 'General',
     provider TEXT NOT NULL DEFAULT 'custom', -- custom, digitalcore, canboso
@@ -143,6 +154,17 @@ CREATE TABLE IF NOT EXISTS crypto_verified_transactions (
     verified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 10. Platform Wholesale Catalog Rules (God-Mode Availability & Plan Tier Gating)
+CREATE TABLE IF NOT EXISTS platform_wholesale_rules (
+    provider_product_id TEXT PRIMARY KEY,
+    is_active INTEGER DEFAULT 1,
+    min_plan_tier TEXT DEFAULT 'starter', -- starter, pro, enterprise
+    custom_name TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Seed initial default global config if empty
 INSERT OR IGNORE INTO global_system_config (id, platform_fee_fixed_usd, platform_fee_pct)
 VALUES (1, 0.01, 0.0);
+

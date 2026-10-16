@@ -23,5 +23,19 @@ export function initDatabase() {
   const schemaPath = path.join(__dirname, 'schema.sql');
   const schemaSql = fs.readFileSync(schemaPath, 'utf8');
   db.exec(schemaSql);
+
+  // Safe runtime migrations for existing production databases
+  try {
+    const tableInfo = db.prepare(`PRAGMA table_info(products)`).all() as any[];
+    const hasGroupId = tableInfo.some((col: any) => col.name === 'group_id');
+    if (!hasGroupId) {
+      db.exec(`ALTER TABLE products ADD COLUMN group_id TEXT REFERENCES product_groups(id) ON DELETE SET NULL;`);
+      console.log('✅ Migrated products table: added group_id column');
+    }
+  } catch (err: any) {
+    console.warn('Migration notice (group_id):', err.message);
+  }
+
   console.log('✅ SQLite WAL Database initialized successfully at:', DB_PATH);
 }
+
