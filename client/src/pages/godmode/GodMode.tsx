@@ -31,7 +31,10 @@ import {
   Calendar,
   Sparkles,
   Ticket,
+  Copy,
+  Check,
 } from 'lucide-react';
+import { CyberDialog, CyberDialogOptions } from '../../components/CyberDialog';
 
 export const GodMode: React.FC = () => {
   const [tokenInput, setTokenInput] = useState('');
@@ -39,8 +42,23 @@ export const GodMode: React.FC = () => {
   const [authError, setAuthError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Navigation tab inside GodMode
-  const [godTab, setGodTab] = useState<'merchants' | 'wholesale' | 'plans' | 'config'>('merchants');
+  // Modern Popup Dialog System
+  const [dialog, setDialog] = useState<CyberDialogOptions | null>(null);
+
+  const showNotice = (title: string, message: string, tone: 'success' | 'danger' | 'warning' | 'info' = 'info') => {
+    setDialog({ type: 'alert', tone, title, message });
+  };
+
+  const showConfirm = (title: string, message: string, onConfirm: () => void, tone: 'danger' | 'warning' | 'info' = 'danger', confirmText?: string) => {
+    setDialog({ type: 'confirm', tone, title, message, onConfirm, confirmText });
+  };
+
+  const showPrompt = (title: string, message: string, inputLabel: string, defaultValue: string, onConfirm: (val?: string) => void) => {
+    setDialog({ type: 'prompt', tone: 'info', title, message, inputLabel, defaultValue, onConfirm });
+  };
+
+  // Navigation tab inside GodMode (Dedicated tabs for Plans, Coupons, and Ledger)
+  const [godTab, setGodTab] = useState<'merchants' | 'wholesale' | 'plans' | 'coupons' | 'subscriptions' | 'config'>('merchants');
 
   const [overview, setOverview] = useState<any>(null);
   const [merchants, setMerchants] = useState<any[]>([]);
@@ -66,6 +84,8 @@ export const GodMode: React.FC = () => {
     priceMonthlyUsd: '',
     priceYearlyUsd: '',
     maxProducts: '50',
+    maxResaleProducts: '5',
+    maxCustomProducts: '50',
     allowWholesale: true,
     allowBinancePay: true,
     allowCustomBranding: false,
@@ -77,6 +97,7 @@ export const GodMode: React.FC = () => {
 
   // Coupon Modal
   const [showCouponModal, setShowCouponModal] = useState(false);
+  const [copiedCouponId, setCopiedCouponId] = useState<number | null>(null);
   const [couponForm, setCouponForm] = useState({
     code: '',
     discountType: 'PERCENTAGE',
@@ -196,37 +217,60 @@ export const GodMode: React.FC = () => {
     const newStatus = currentStatus === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE';
     const action = newStatus === 'SUSPENDED' ? 'SUSPEND (Kill Bot & Lock Store)' : 'ACTIVATE';
 
-    if (!confirm(`Are you sure you want to ${action} this merchant store?`)) return;
-
-    try {
-      await axios.post(
-        `/api/godmode/merchants/${merchantId}/status`,
-        { status: newStatus },
-        getHeaders()
-      );
-      loadGodModeData();
-    } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to update merchant status');
-    }
+    showConfirm(
+      `${action} Merchant Store?`,
+      `Are you sure you want to ${action} this merchant store? All associated bot instances and store operations will be affected immediately.`,
+      async () => {
+        try {
+          await axios.post(
+            `/api/godmode/merchants/${merchantId}/status`,
+            { status: newStatus },
+            getHeaders()
+          );
+          loadGodModeData();
+          showNotice('Status Updated', `Merchant store status changed to ${newStatus}.`, 'success');
+        } catch (err: any) {
+          showNotice('Action Failed', err.response?.data?.error || 'Failed to update merchant status', 'danger');
+        }
+      },
+      newStatus === 'SUSPENDED' ? 'danger' : 'warning',
+      action
+    );
   };
 
   // Adjust Merchant Wallet
   const handleAdjustWallet = async (merchantId: string, storeName: string) => {
-    const delta = prompt(`Adjust USD balance for "${storeName}". Enter delta amount (e.g. +10 or -5):`);
-    if (!delta || isNaN(parseFloat(delta))) return;
-
-    const note = prompt('Audit note for this adjustment:', 'Manual GodMode credit');
-
-    try {
-      await axios.post(
-        `/api/godmode/merchants/${merchantId}/adjust-wallet`,
-        { amountDeltaUsd: parseFloat(delta), note },
-        getHeaders()
-      );
-      loadGodModeData();
-    } catch (err: any) {
-      alert(err.response?.data?.error || 'Wallet adjustment failed');
-    }
+    showPrompt(
+      'Adjust Merchant Balance',
+      `Enter USD balance adjustment for "${storeName}". Use + for credit and - for debit:`,
+      'Delta Amount ($ USD)',
+      '+10.00',
+      (delta) => {
+        if (!delta || isNaN(parseFloat(delta))) {
+          showNotice('Invalid Input', 'Please enter a valid numeric delta amount.', 'warning');
+          return;
+        }
+        showPrompt(
+          'Audit Note',
+          `Add an audit note for adjusting $${delta} USD on "${storeName}":`,
+          'Audit Reason',
+          'Manual GodMode credit',
+          async (note) => {
+            try {
+              await axios.post(
+                `/api/godmode/merchants/${merchantId}/adjust-wallet`,
+                { amountDeltaUsd: parseFloat(delta), note: note || 'Manual GodMode credit' },
+                getHeaders()
+              );
+              loadGodModeData();
+              showNotice('Balance Updated', `Successfully adjusted balance by $${delta} USD.`, 'success');
+            } catch (err: any) {
+              showNotice('Adjustment Failed', err.response?.data?.error || 'Wallet adjustment failed', 'danger');
+            }
+          }
+        );
+      }
+    );
   };
 
   // Wholesale Product Availability Toggle
@@ -241,8 +285,9 @@ export const GodMode: React.FC = () => {
       setWholesaleCatalog((prev) =>
         prev.map((p) => (p.id === productId ? { ...p, is_active_platform: newActive } : p))
       );
+      showNotice('Product Updated', `Product status set to ${newActive ? 'Enabled' : 'Disabled'}.`, 'success');
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to toggle product status');
+      showNotice('Action Failed', err.response?.data?.error || 'Failed to toggle product status', 'danger');
     }
   };
 
@@ -257,33 +302,37 @@ export const GodMode: React.FC = () => {
       setWholesaleCatalog((prev) =>
         prev.map((p) => (p.id === productId ? { ...p, min_plan_tier: newTier } : p))
       );
+      showNotice('Tier Gating Updated', `Minimum plan tier requirement set to "${newTier}".`, 'success');
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to change plan tier requirement');
+      showNotice('Action Failed', err.response?.data?.error || 'Failed to change plan tier requirement', 'danger');
     }
   };
 
   // 1-Click Delete / Remove Product from Platform
   const handleDeleteWholesaleProduct = async (productId: string, name: string) => {
-    if (
-      !confirm(
-        `Globally delete/disable "${name}"? It will immediately disappear from merchant wholesale catalogs and Telegram bots.`
-      )
-    )
-      return;
-
-    try {
-      await axios.delete(`/api/godmode/wholesale-rules/${productId}`, getHeaders());
-      setWholesaleCatalog((prev) =>
-        prev.map((p) => (p.id === productId ? { ...p, is_active_platform: 0 } : p))
-      );
-    } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to delete product rule');
-    }
+    showConfirm(
+      'Globally Delete Wholesale Product?',
+      `Are you sure you want to globally delete/disable "${name}"? It will immediately disappear from all merchant wholesale catalogs and Telegram bots.`,
+      async () => {
+        try {
+          await axios.delete(`/api/godmode/wholesale-rules/${productId}`, getHeaders());
+          setWholesaleCatalog((prev) =>
+            prev.map((p) => (p.id === productId ? { ...p, is_active_platform: 0 } : p))
+          );
+          showNotice('Product Deleted', `"${name}" removed from platform catalog.`, 'success');
+        } catch (err: any) {
+          showNotice('Action Failed', err.response?.data?.error || 'Failed to delete product rule', 'danger');
+        }
+      },
+      'danger',
+      'Delete Product'
+    );
   };
 
   // 1-Click Bulk Wholesale Governance Action
   const handleBulkWholesaleAction = async (action: 'disable_all' | 'enable_all' | 'set_tier', minPlanTier?: string) => {
     const providerName = wholesaleProviderFilter.toUpperCase();
+    const title = action === 'disable_all' ? 'Disable All Products?' : action === 'enable_all' ? 'Enable All Products?' : 'Set Tier for All Products?';
     const confirmMsg =
       action === 'disable_all'
         ? `Disable all wholesale products currently shown (${providerName})? They will immediately be hidden from all merchant stores and Telegram bots.`
@@ -291,26 +340,31 @@ export const GodMode: React.FC = () => {
         ? `Enable all wholesale products (${providerName}) for merchants?`
         : `Set minimum plan tier for all ${providerName} products to "${minPlanTier}"?`;
 
-    if (!confirm(confirmMsg)) return;
-
-    try {
-      setWholesaleLoading(true);
-      const res = await axios.post(
-        '/api/godmode/wholesale-rules/bulk',
-        {
-          action,
-          provider: wholesaleProviderFilter,
-          minPlanTier,
-        },
-        getHeaders()
-      );
-      alert(res.data.message || 'Bulk action executed successfully.');
-      await loadWholesaleCatalog();
-    } catch (err: any) {
-      alert(err.response?.data?.error || 'Bulk action failed');
-    } finally {
-      setWholesaleLoading(false);
-    }
+    showConfirm(
+      title,
+      confirmMsg,
+      async () => {
+        try {
+          setWholesaleLoading(true);
+          const res = await axios.post(
+            '/api/godmode/wholesale-rules/bulk',
+            {
+              action,
+              provider: wholesaleProviderFilter,
+              minPlanTier,
+            },
+            getHeaders()
+          );
+          showNotice('Bulk Action Completed', res.data.message || 'Bulk action executed successfully.', 'success');
+          await loadWholesaleCatalog();
+        } catch (err: any) {
+          showNotice('Bulk Action Failed', err.response?.data?.error || 'Bulk action failed', 'danger');
+        } finally {
+          setWholesaleLoading(false);
+        }
+      },
+      action === 'disable_all' ? 'danger' : 'info'
+    );
   };
 
   // Save Margin & Binance Config
@@ -321,8 +375,9 @@ export const GodMode: React.FC = () => {
       setConfigSaved(true);
       setTimeout(() => setConfigSaved(false), 3000);
       loadGodModeData();
+      showNotice('Configuration Saved', 'Wholesale keys, margin settings, and owner Binance Pay UID updated.', 'success');
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to save global configuration');
+      showNotice('Save Failed', err.response?.data?.error || 'Failed to save global configuration', 'danger');
     }
   };
 
@@ -336,10 +391,12 @@ export const GodMode: React.FC = () => {
       priceMonthlyUsd: '',
       priceYearlyUsd: '',
       maxProducts: '50',
+      maxResaleProducts: '5',
+      maxCustomProducts: '50',
       allowWholesale: true,
       allowBinancePay: true,
       allowCustomBranding: false,
-      featuresText: '1 Active Telegram Bot\nUp to 50 Products\nInstant Binance Pay\nCommunity Support',
+      featuresText: '1 Active Telegram Bot\n5 Wholesale Resale Products\nUp to 50 Custom Products\nInstant Binance Pay\nCommunity Support',
       isPopular: false,
       isActive: true,
       sortOrder: String(plans.length + 1),
@@ -355,7 +412,9 @@ export const GodMode: React.FC = () => {
       description: plan.description || '',
       priceMonthlyUsd: String(plan.price_monthly_usd),
       priceYearlyUsd: String(plan.price_yearly_usd),
-      maxProducts: String(plan.max_products),
+      maxProducts: String(plan.max_products || 50),
+      maxResaleProducts: String(plan.max_resale_products !== undefined ? plan.max_resale_products : 5),
+      maxCustomProducts: String(plan.max_custom_products !== undefined ? plan.max_custom_products : (plan.max_products || 50)),
       allowWholesale: Boolean(plan.allow_wholesale),
       allowBinancePay: Boolean(plan.allow_binance_pay),
       allowCustomBranding: Boolean(plan.allow_custom_branding),
@@ -375,50 +434,34 @@ export const GodMode: React.FC = () => {
       .filter(Boolean);
 
     try {
+      const payload = {
+        name: planForm.name,
+        description: planForm.description,
+        priceMonthlyUsd: parseFloat(planForm.priceMonthlyUsd) || 0,
+        priceYearlyUsd: parseFloat(planForm.priceYearlyUsd) || 0,
+        maxProducts: parseInt(planForm.maxCustomProducts) || 50,
+        maxResaleProducts: parseInt(planForm.maxResaleProducts) || 5,
+        maxCustomProducts: parseInt(planForm.maxCustomProducts) || 50,
+        allowWholesale: planForm.allowWholesale,
+        allowBinancePay: planForm.allowBinancePay,
+        allowCustomBranding: planForm.allowCustomBranding,
+        features,
+        isPopular: planForm.isPopular,
+        isActive: planForm.isActive,
+        sortOrder: parseInt(planForm.sortOrder) || 0,
+      };
+
       if (editingPlan) {
-        await axios.put(
-          `/api/godmode/plans/${editingPlan.id}`,
-          {
-            name: planForm.name,
-            description: planForm.description,
-            priceMonthlyUsd: parseFloat(planForm.priceMonthlyUsd) || 0,
-            priceYearlyUsd: parseFloat(planForm.priceYearlyUsd) || 0,
-            maxProducts: parseInt(planForm.maxProducts) || 50,
-            allowWholesale: planForm.allowWholesale,
-            allowBinancePay: planForm.allowBinancePay,
-            allowCustomBranding: planForm.allowCustomBranding,
-            features,
-            isPopular: planForm.isPopular,
-            isActive: planForm.isActive,
-            sortOrder: parseInt(planForm.sortOrder) || 0,
-          },
-          getHeaders()
-        );
+        await axios.put(`/api/godmode/plans/${editingPlan.id}`, payload, getHeaders());
+        showNotice('Plan Updated', `Subscription plan "${planForm.name}" updated successfully.`, 'success');
       } else {
-        await axios.post(
-          '/api/godmode/plans',
-          {
-            id: planForm.id,
-            name: planForm.name,
-            description: planForm.description,
-            priceMonthlyUsd: parseFloat(planForm.priceMonthlyUsd) || 0,
-            priceYearlyUsd: parseFloat(planForm.priceYearlyUsd) || 0,
-            maxProducts: parseInt(planForm.maxProducts) || 50,
-            allowWholesale: planForm.allowWholesale,
-            allowBinancePay: planForm.allowBinancePay,
-            allowCustomBranding: planForm.allowCustomBranding,
-            features,
-            isPopular: planForm.isPopular,
-            isActive: planForm.isActive,
-            sortOrder: parseInt(planForm.sortOrder) || 0,
-          },
-          getHeaders()
-        );
+        await axios.post('/api/godmode/plans', { ...payload, id: planForm.id }, getHeaders());
+        showNotice('Plan Created', `New subscription plan "${planForm.name}" created successfully.`, 'success');
       }
       setShowPlanModal(false);
       loadGodModeData();
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to save plan');
+      showNotice('Save Failed', err.response?.data?.error || 'Failed to save plan', 'danger');
     }
   };
 
@@ -430,20 +473,28 @@ export const GodMode: React.FC = () => {
         getHeaders()
       );
       loadGodModeData();
+      showNotice('Plan Status Changed', `Plan "${plan.name}" is now ${plan.is_active ? 'deactivated' : 'active'}.`, 'success');
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to toggle plan status');
+      showNotice('Toggle Failed', err.response?.data?.error || 'Failed to toggle plan status', 'danger');
     }
   };
 
   const handleDeletePlan = async (planId: string, planName: string) => {
-    if (!confirm(`Delete or deactivate plan "${planName}"?`)) return;
-    try {
-      const res = await axios.delete(`/api/godmode/plans/${planId}`, getHeaders());
-      alert(res.data.message || 'Plan deleted');
-      loadGodModeData();
-    } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to delete plan');
-    }
+    showConfirm(
+      'Delete Subscription Plan?',
+      `Are you sure you want to delete or deactivate plan "${planName}"? If merchants are already using it, it will be safely deactivated.`,
+      async () => {
+        try {
+          const res = await axios.delete(`/api/godmode/plans/${planId}`, getHeaders());
+          showNotice('Plan Deleted', res.data.message || 'Plan deleted', 'success');
+          loadGodModeData();
+        } catch (err: any) {
+          showNotice('Action Failed', err.response?.data?.error || 'Failed to delete plan', 'danger');
+        }
+      },
+      'danger',
+      'Delete Plan'
+    );
   };
 
   // Coupon Handlers
@@ -477,9 +528,10 @@ export const GodMode: React.FC = () => {
         getHeaders()
       );
       setShowCouponModal(false);
+      showNotice('Coupon Created', `Discount voucher "${couponForm.code.toUpperCase()}" is live and ready for merchants!`, 'success');
       loadGodModeData();
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to create coupon');
+      showNotice('Coupon Error', err.response?.data?.error || 'Failed to create coupon', 'danger');
     }
   };
 
@@ -491,19 +543,28 @@ export const GodMode: React.FC = () => {
         getHeaders()
       );
       loadGodModeData();
+      showNotice('Coupon Status', `Coupon "${coupon.code}" is now ${coupon.is_active ? 'disabled' : 'active'}.`, 'success');
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to toggle coupon');
+      showNotice('Action Failed', err.response?.data?.error || 'Failed to toggle coupon', 'danger');
     }
   };
 
   const handleDeleteCoupon = async (couponId: number, code: string) => {
-    if (!confirm(`Delete coupon "${code}"?`)) return;
-    try {
-      await axios.delete(`/api/godmode/coupons/${couponId}`, getHeaders());
-      loadGodModeData();
-    } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to delete coupon');
-    }
+    showConfirm(
+      'Delete Discount Coupon?',
+      `Are you sure you want to permanently delete coupon "${code}"?`,
+      async () => {
+        try {
+          await axios.delete(`/api/godmode/coupons/${couponId}`, getHeaders());
+          showNotice('Coupon Deleted', `Coupon "${code}" deleted successfully.`, 'success');
+          loadGodModeData();
+        } catch (err: any) {
+          showNotice('Action Failed', err.response?.data?.error || 'Failed to delete coupon', 'danger');
+        }
+      },
+      'danger',
+      'Delete Coupon'
+    );
   };
 
   // Filtered Wholesale Catalog for GodMode (with Provider & API Category Folders)
@@ -716,46 +777,72 @@ export const GodMode: React.FC = () => {
         </div>
 
         {/* Navigation Tabs in GodMode */}
-        <div className="flex items-center gap-3 border-b border-white/10 pb-2">
+        <div className="flex items-center gap-2 overflow-x-auto border-b border-white/10 pb-2">
           <button
             onClick={() => setGodTab('merchants')}
-            className={`px-4 py-2 rounded-xl text-xs font-mono font-bold tracking-wider uppercase transition-all ${
+            className={`px-4 py-2 rounded-xl text-xs font-mono font-bold tracking-wider uppercase transition-all whitespace-nowrap flex items-center gap-1.5 ${
               godTab === 'merchants'
                 ? 'bg-crimson-600 text-white shadow-lg shadow-crimson-600/30'
-                : 'text-zinc-400 hover:text-white'
+                : 'text-zinc-400 hover:text-white bg-carbon-900 border border-white/5'
             }`}
           >
-            Merchant Fleet ({merchants.length})
+            <Layers className="w-3.5 h-3.5" />
+            <span>Merchant Fleet ({merchants.length})</span>
           </button>
           <button
             onClick={() => setGodTab('wholesale')}
-            className={`px-4 py-2 rounded-xl text-xs font-mono font-bold tracking-wider uppercase transition-all ${
+            className={`px-4 py-2 rounded-xl text-xs font-mono font-bold tracking-wider uppercase transition-all whitespace-nowrap flex items-center gap-1.5 ${
               godTab === 'wholesale'
                 ? 'bg-crimson-600 text-white shadow-lg shadow-crimson-600/30'
-                : 'text-zinc-400 hover:text-white'
+                : 'text-zinc-400 hover:text-white bg-carbon-900 border border-white/5'
             }`}
           >
-            Wholesale Governance & Plan Gating ({wholesaleCatalog.length})
+            <FolderOpen className="w-3.5 h-3.5" />
+            <span>Wholesale Governance ({wholesaleCatalog.length})</span>
           </button>
           <button
             onClick={() => setGodTab('plans')}
-            className={`px-4 py-2 rounded-xl text-xs font-mono font-bold tracking-wider uppercase transition-all ${
+            className={`px-4 py-2 rounded-xl text-xs font-mono font-bold tracking-wider uppercase transition-all whitespace-nowrap flex items-center gap-1.5 ${
               godTab === 'plans'
                 ? 'bg-crimson-600 text-white shadow-lg shadow-crimson-600/30'
-                : 'text-zinc-400 hover:text-white'
+                : 'text-zinc-400 hover:text-white bg-carbon-900 border border-white/5'
             }`}
           >
-            Plans & Coupons Engine ({plans.length})
+            <Sparkles className="w-3.5 h-3.5 text-laser-400" />
+            <span>Subscription Plans ({plans.length})</span>
+          </button>
+          <button
+            onClick={() => setGodTab('coupons')}
+            className={`px-4 py-2 rounded-xl text-xs font-mono font-bold tracking-wider uppercase transition-all whitespace-nowrap flex items-center gap-1.5 ${
+              godTab === 'coupons'
+                ? 'bg-laser-600 text-white shadow-lg shadow-laser-600/30'
+                : 'text-laser-400 hover:text-white bg-carbon-900 border border-laser-500/20'
+            }`}
+          >
+            <Ticket className="w-3.5 h-3.5" />
+            <span>🎟️ Discount Coupons ({coupons.length})</span>
+          </button>
+          <button
+            onClick={() => setGodTab('subscriptions')}
+            className={`px-4 py-2 rounded-xl text-xs font-mono font-bold tracking-wider uppercase transition-all whitespace-nowrap flex items-center gap-1.5 ${
+              godTab === 'subscriptions'
+                ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30'
+                : 'text-zinc-400 hover:text-white bg-carbon-900 border border-white/5'
+            }`}
+          >
+            <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Payment Ledger ({subscriptionsHistory.length})</span>
           </button>
           <button
             onClick={() => setGodTab('config')}
-            className={`px-4 py-2 rounded-xl text-xs font-mono font-bold tracking-wider uppercase transition-all ${
+            className={`px-4 py-2 rounded-xl text-xs font-mono font-bold tracking-wider uppercase transition-all whitespace-nowrap flex items-center gap-1.5 ${
               godTab === 'config'
                 ? 'bg-crimson-600 text-white shadow-lg shadow-crimson-600/30'
-                : 'text-zinc-400 hover:text-white'
+                : 'text-zinc-400 hover:text-white bg-carbon-900 border border-white/5'
             }`}
           >
-            Wholesale Margin & Binance Engine
+            <Sliders className="w-3.5 h-3.5" />
+            <span>Margin & Binance Engine</span>
           </button>
         </div>
 
@@ -1301,9 +1388,13 @@ export const GodMode: React.FC = () => {
                             <span className="text-zinc-400">Yearly:</span>
                             <span className="text-laser-400 font-bold">${p.price_yearly_usd.toFixed(2)} USD</span>
                           </div>
-                          <div className="flex justify-between text-xs border-t border-white/5 pt-1 text-[11px]">
-                            <span className="text-zinc-500">Max Products:</span>
-                            <span className="text-zinc-300">{p.max_products === -1 ? 'Unlimited' : p.max_products}</span>
+                          <div className="flex justify-between text-xs border-t border-white/5 pt-1.5 text-[11px]">
+                            <span className="text-zinc-400">🛍️ Resale Quota:</span>
+                            <span className="text-emerald-400 font-bold">{p.max_resale_products === -1 ? 'Unlimited' : `${p.max_resale_products} items`}</span>
+                          </div>
+                          <div className="flex justify-between text-xs text-[11px]">
+                            <span className="text-zinc-400">📦 Custom Quota:</span>
+                            <span className="text-laser-400 font-bold">{p.max_custom_products === -1 ? 'Unlimited' : `${p.max_custom_products} items`}</span>
                           </div>
                         </div>
 
@@ -1354,147 +1445,205 @@ export const GodMode: React.FC = () => {
                 })}
               </div>
             </div>
+          </div>
+        )}
 
-            {/* 2. Coupons Section */}
-            <div className="space-y-4 pt-6 border-t border-white/10">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <div>
-                  <h3 className="text-base font-mono font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                    <Ticket className="w-4 h-4 text-laser-400" />
-                    Promotional & Discount Coupons ({coupons.length})
-                  </h3>
-                  <p className="text-xs text-zinc-400">Create discount vouchers with percentage or fixed USD amounts</p>
-                </div>
-                <button
-                  onClick={handleOpenCreateCoupon}
-                  className="px-4 py-2 rounded-xl bg-laser-600 hover:bg-laser-500 text-white font-mono font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-md shadow-laser-600/30"
-                >
-                  <Plus className="w-4 h-4" /> Create Coupon
-                </button>
+        {/* ==========================================
+            TAB 5: PROMOTIONAL & DISCOUNT COUPONS ENGINE
+           ========================================== */}
+        {godTab === 'coupons' && (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div>
+                <h3 className="text-base font-mono font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                  <Ticket className="w-5 h-5 text-laser-400" />
+                  Promotional & Discount Coupons ({coupons.length})
+                </h3>
+                <p className="text-xs text-zinc-400">
+                  Create discount vouchers for merchants. Percentage (%) or fixed USD ($) discounts with usage limits & expiry dates.
+                </p>
               </div>
+              <button
+                onClick={handleOpenCreateCoupon}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-laser-600 to-laser-500 hover:from-laser-500 text-white font-mono font-bold text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-laser-600/30 active:scale-95 transition-all"
+              >
+                <Plus className="w-4 h-4" /> Create New Coupon
+              </button>
+            </div>
 
-              <div className="glass-card-cyber rounded-2xl border border-white/10 overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-carbon-900 border-b border-white/10 font-mono text-zinc-400 uppercase text-[10px]">
-                      <tr>
-                        <th className="p-3.5">Coupon Code</th>
-                        <th className="p-3.5">Discount</th>
-                        <th className="p-3.5">Applicable Tier</th>
-                        <th className="p-3.5">Cycle</th>
-                        <th className="p-3.5">Usage</th>
-                        <th className="p-3.5">Expires</th>
-                        <th className="p-3.5">Status</th>
-                        <th className="p-3.5 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/5 font-mono">
-                      {coupons.length === 0 ? (
-                        <tr>
-                          <td colSpan={8} className="p-6 text-center text-zinc-500 text-xs font-sans">
-                            No coupons created yet. Click "+ Create Coupon" to add promotional codes.
-                          </td>
-                        </tr>
-                      ) : (
-                        coupons.map((c) => (
-                          <tr key={c.id} className="hover:bg-white/[0.02]">
-                            <td className="p-3.5 font-bold text-white">{c.code}</td>
-                            <td className="p-3.5 text-emerald-400 font-bold">
-                              {c.discount_type === 'PERCENTAGE' ? `${c.discount_value}% OFF` : `$${Number(c.discount_value).toFixed(2)} OFF`}
-                            </td>
-                            <td className="p-3.5 text-zinc-300">{c.applicable_plan_id === 'ALL' ? 'All Plans' : c.applicable_plan_id}</td>
-                            <td className="p-3.5 text-zinc-300">{c.applicable_cycle}</td>
-                            <td className="p-3.5 text-zinc-400">
-                              {c.used_count} / {c.max_uses === -1 ? '∞' : c.max_uses}
-                            </td>
-                            <td className="p-3.5 text-zinc-400">
-                              {c.expires_at ? new Date(c.expires_at).toLocaleDateString() : 'Never'}
-                            </td>
-                            <td className="p-3.5">
-                              <span
-                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                                  c.is_active ? 'bg-emerald-500/20 text-emerald-400' : 'bg-zinc-800 text-zinc-500'
-                                }`}
-                              >
-                                {c.is_active ? 'Active' : 'Disabled'}
-                              </span>
-                            </td>
-                            <td className="p-3.5 text-right">
-                              <div className="flex items-center justify-end gap-2">
-                                <button
-                                  onClick={() => handleToggleCoupon(c)}
-                                  className="p-1 rounded bg-carbon-800 hover:bg-carbon-700 text-zinc-300"
-                                  title="Toggle Status"
-                                >
-                                  {c.is_active ? <ToggleRight className="w-3.5 h-3.5 text-emerald-400" /> : <ToggleLeft className="w-3.5 h-3.5 text-zinc-500" />}
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteCoupon(c.id, c.code)}
-                                  className="p-1 rounded bg-carbon-800 hover:bg-crimson-500/20 text-zinc-400 hover:text-crimson-400"
-                                  title="Delete Coupon"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
+            {/* Quick summary cards for Coupons */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 font-mono">
+              <div className="glass-card-cyber rounded-xl p-4 border border-white/10 space-y-1">
+                <span className="text-[10px] text-zinc-400 uppercase">Total Coupons Created</span>
+                <div className="text-xl font-bold text-white">{coupons.length}</div>
+              </div>
+              <div className="glass-card-cyber rounded-xl p-4 border border-white/10 space-y-1">
+                <span className="text-[10px] text-zinc-400 uppercase">Active Coupons</span>
+                <div className="text-xl font-bold text-emerald-400">{coupons.filter(c => c.is_active).length}</div>
+              </div>
+              <div className="glass-card-cyber rounded-xl p-4 border border-white/10 space-y-1">
+                <span className="text-[10px] text-zinc-400 uppercase">Total Redemptions</span>
+                <div className="text-xl font-bold text-laser-400">
+                  {coupons.reduce((acc, c) => acc + (c.used_count || 0), 0)}
                 </div>
               </div>
             </div>
 
-            {/* 3. Subscription History Audit Ledger */}
-            <div className="space-y-4 pt-6 border-t border-white/10">
+            <div className="glass-card-cyber rounded-2xl border border-white/10 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-carbon-900 border-b border-white/10 font-mono text-zinc-400 uppercase text-[10px]">
+                    <tr>
+                      <th className="p-3.5">Coupon Code</th>
+                      <th className="p-3.5">Discount Value</th>
+                      <th className="p-3.5">Applicable Tier</th>
+                      <th className="p-3.5">Billing Cycle</th>
+                      <th className="p-3.5">Usage Count</th>
+                      <th className="p-3.5">Expiration</th>
+                      <th className="p-3.5">Status</th>
+                      <th className="p-3.5 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5 font-mono">
+                    {coupons.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="p-8 text-center text-zinc-500 text-xs font-sans">
+                          No coupons created yet. Click "+ Create New Coupon" above to generate promotional codes!
+                        </td>
+                      </tr>
+                    ) : (
+                      coupons.map((c) => (
+                        <tr key={c.id} className="hover:bg-white/[0.02]">
+                          <td className="p-3.5">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-white text-sm tracking-wider px-2.5 py-1 rounded-lg bg-carbon-800 border border-white/10">
+                                {c.code}
+                              </span>
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(c.code);
+                                  setCopiedCouponId(c.id);
+                                  setTimeout(() => setCopiedCouponId(null), 2000);
+                                }}
+                                className="p-1 rounded bg-carbon-800 hover:bg-carbon-700 text-zinc-400 hover:text-white"
+                                title="Copy Code"
+                              >
+                                {copiedCouponId === c.id ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                              </button>
+                            </div>
+                          </td>
+                          <td className="p-3.5 text-emerald-400 font-bold text-sm">
+                            {c.discount_type === 'PERCENTAGE' ? `${c.discount_value}% OFF` : `$${Number(c.discount_value).toFixed(2)} OFF`}
+                          </td>
+                          <td className="p-3.5 text-zinc-300">
+                            <span className="px-2 py-0.5 rounded text-[10px] bg-carbon-800">
+                              {c.applicable_plan_id === 'ALL' ? 'All Plans' : c.applicable_plan_id}
+                            </span>
+                          </td>
+                          <td className="p-3.5 text-zinc-300">
+                            <span className="px-2 py-0.5 rounded text-[10px] bg-carbon-800">
+                              {c.applicable_cycle}
+                            </span>
+                          </td>
+                          <td className="p-3.5 text-zinc-400">
+                            {c.used_count} / {c.max_uses === -1 ? '∞' : c.max_uses}
+                          </td>
+                          <td className="p-3.5 text-zinc-400">
+                            {c.expires_at ? new Date(c.expires_at).toLocaleDateString() : 'Never'}
+                          </td>
+                          <td className="p-3.5">
+                            <span
+                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                                c.is_active ? 'bg-emerald-500/20 text-emerald-400' : 'bg-zinc-800 text-zinc-500'
+                              }`}
+                            >
+                              {c.is_active ? 'Active' : 'Disabled'}
+                            </span>
+                          </td>
+                          <td className="p-3.5 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                onClick={() => handleToggleCoupon(c)}
+                                className="p-1.5 rounded-lg bg-carbon-800 hover:bg-carbon-700 text-zinc-300"
+                                title="Toggle Status"
+                              >
+                                {c.is_active ? <ToggleRight className="w-4 h-4 text-emerald-400" /> : <ToggleLeft className="w-4 h-4 text-zinc-500" />}
+                              </button>
+                              <button
+                                onClick={() => handleDeleteCoupon(c.id, c.code)}
+                                className="p-1.5 rounded-lg bg-carbon-800 hover:bg-crimson-500/20 text-zinc-400 hover:text-crimson-400"
+                                title="Delete Coupon"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ==========================================
+            TAB 6: SUBSCRIPTION PAYMENT AUDIT LEDGER
+           ========================================== */}
+        {godTab === 'subscriptions' && (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <div>
                 <h3 className="text-base font-mono font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                  <DollarSign className="w-4 h-4 text-emerald-400" />
+                  <DollarSign className="w-5 h-5 text-emerald-400" />
                   Subscription Payment Ledger (Direct to Owner UID)
                 </h3>
                 <p className="text-xs text-zinc-400">Audited Binance Pay subscriptions purchased across all merchants</p>
               </div>
+              <div className="px-4 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono text-xs font-bold">
+                Total Revenue: ${subTotalRevenue.toFixed(2)} USDT
+              </div>
+            </div>
 
-              <div className="glass-card-cyber rounded-2xl border border-white/10 overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-carbon-900 border-b border-white/10 font-mono text-zinc-400 uppercase text-[10px]">
+            <div className="glass-card-cyber rounded-2xl border border-white/10 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-carbon-900 border-b border-white/10 font-mono text-zinc-400 uppercase text-[10px]">
+                    <tr>
+                      <th className="p-3.5">Store / Merchant</th>
+                      <th className="p-3.5">Plan</th>
+                      <th className="p-3.5">Cycle</th>
+                      <th className="p-3.5">Paid USDT</th>
+                      <th className="p-3.5">Coupon</th>
+                      <th className="p-3.5">Binance Trx ID</th>
+                      <th className="p-3.5">Timestamp</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5 font-mono">
+                    {subscriptionsHistory.length === 0 ? (
                       <tr>
-                        <th className="p-3.5">Store / Merchant</th>
-                        <th className="p-3.5">Plan</th>
-                        <th className="p-3.5">Cycle</th>
-                        <th className="p-3.5">Paid USDT</th>
-                        <th className="p-3.5">Coupon</th>
-                        <th className="p-3.5">Binance Trx ID</th>
-                        <th className="p-3.5">Timestamp</th>
+                        <td colSpan={7} className="p-8 text-center text-zinc-500 text-xs font-sans">
+                          No subscription payments recorded yet.
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/5 font-mono">
-                      {subscriptionsHistory.length === 0 ? (
-                        <tr>
-                          <td colSpan={7} className="p-6 text-center text-zinc-500 text-xs font-sans">
-                            No subscription payments recorded yet.
+                    ) : (
+                      subscriptionsHistory.map((s) => (
+                        <tr key={s.id} className="hover:bg-white/[0.02]">
+                          <td className="p-3.5 font-bold text-white">
+                            {s.tenant_name} <span className="text-zinc-500 font-normal">({s.tenant_slug})</span>
                           </td>
+                          <td className="p-3.5 text-laser-400 font-bold">{s.plan_name}</td>
+                          <td className="p-3.5 text-zinc-300">{s.billing_cycle}</td>
+                          <td className="p-3.5 text-emerald-400 font-bold">${Number(s.final_amount_paid_usd).toFixed(2)}</td>
+                          <td className="p-3.5 text-zinc-400">{s.coupon_code || '-'}</td>
+                          <td className="p-3.5 text-zinc-300 font-mono">{s.trx_id}</td>
+                          <td className="p-3.5 text-zinc-400">{new Date(s.created_at).toLocaleString()}</td>
                         </tr>
-                      ) : (
-                        subscriptionsHistory.map((s) => (
-                          <tr key={s.id} className="hover:bg-white/[0.02]">
-                            <td className="p-3.5 font-bold text-white">
-                              {s.tenant_name} <span className="text-zinc-500 font-normal">({s.tenant_slug})</span>
-                            </td>
-                            <td className="p-3.5 text-laser-400 font-bold">{s.plan_name}</td>
-                            <td className="p-3.5 text-zinc-300">{s.billing_cycle}</td>
-                            <td className="p-3.5 text-emerald-400 font-bold">${Number(s.final_amount_paid_usd).toFixed(2)}</td>
-                            <td className="p-3.5 text-zinc-400">{s.coupon_code || '-'}</td>
-                            <td className="p-3.5 text-zinc-300 font-mono">{s.trx_id}</td>
-                            <td className="p-3.5 text-zinc-400">{new Date(s.created_at).toLocaleString()}</td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                      ))
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
@@ -1575,13 +1724,26 @@ export const GodMode: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-3 gap-3">
                   <div>
-                    <label className="block font-semibold text-zinc-300 mb-1">Max Products (-1 for unlimited)</label>
+                    <label className="block font-semibold text-zinc-300 mb-1">Resale Limit (-1 unlim)</label>
                     <input
                       type="number"
-                      value={planForm.maxProducts}
-                      onChange={(e) => setPlanForm({ ...planForm, maxProducts: e.target.value })}
+                      required
+                      placeholder="5"
+                      value={planForm.maxResaleProducts}
+                      onChange={(e) => setPlanForm({ ...planForm, maxResaleProducts: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-zinc-300 mb-1">Custom Limit (-1 unlim)</label>
+                    <input
+                      type="number"
+                      required
+                      placeholder="50"
+                      value={planForm.maxCustomProducts}
+                      onChange={(e) => setPlanForm({ ...planForm, maxCustomProducts: e.target.value })}
                       className="w-full px-3 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono"
                     />
                   </div>
@@ -1784,6 +1946,9 @@ export const GodMode: React.FC = () => {
             </div>
           </div>
         )}
+
+        {/* Global CyberDialog Popup Modal */}
+        <CyberDialog dialog={dialog} onClose={() => setDialog(null)} />
       </div>
     </div>
   );

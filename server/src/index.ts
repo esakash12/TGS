@@ -42,6 +42,8 @@ app.get('/api/public/plans', (_req: Request, res: Response) => {
         price_monthly_usd: Number(p.price_monthly_usd),
         price_yearly_usd: Number(p.price_yearly_usd),
         max_products: Number(p.max_products),
+        max_resale_products: p.max_resale_products !== undefined && p.max_resale_products !== null ? Number(p.max_resale_products) : 5,
+        max_custom_products: p.max_custom_products !== undefined && p.max_custom_products !== null ? Number(p.max_custom_products) : Number(p.max_products || 50),
       };
     });
     res.json(formatted);

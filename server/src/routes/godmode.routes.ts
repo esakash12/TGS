@@ -364,6 +364,8 @@ godmodeRouter.get('/plans', (_req: Request, res: Response) => {
         price_monthly_usd: Number(p.price_monthly_usd),
         price_yearly_usd: Number(p.price_yearly_usd),
         max_products: Number(p.max_products),
+        max_resale_products: p.max_resale_products !== undefined && p.max_resale_products !== null ? Number(p.max_resale_products) : 5,
+        max_custom_products: p.max_custom_products !== undefined && p.max_custom_products !== null ? Number(p.max_custom_products) : Number(p.max_products || 50),
       };
     });
     res.json(formatted);
@@ -380,6 +382,8 @@ godmodeRouter.post('/plans', (req: Request, res: Response) => {
     priceMonthlyUsd,
     priceYearlyUsd,
     maxProducts,
+    maxResaleProducts,
+    maxCustomProducts,
     allowWholesale,
     allowBinancePay,
     allowCustomBranding,
@@ -400,19 +404,23 @@ godmodeRouter.post('/plans', (req: Request, res: Response) => {
   }
 
   const featuresJson = JSON.stringify(Array.isArray(features) ? features : []);
+  const customLimit = maxCustomProducts !== undefined ? Number(maxCustomProducts) : (maxProducts !== undefined ? Number(maxProducts) : 50);
+  const resaleLimit = maxResaleProducts !== undefined ? Number(maxResaleProducts) : 5;
 
   db.prepare(`
     INSERT INTO subscription_plans (
-      id, name, description, price_monthly_usd, price_yearly_usd, max_products,
+      id, name, description, price_monthly_usd, price_yearly_usd, max_products, max_resale_products, max_custom_products,
       allow_wholesale, allow_binance_pay, allow_custom_branding, features_json, is_popular, is_active, sort_order
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     planId,
     name,
     description || '',
     Number(priceMonthlyUsd) || 0,
     priceYearlyUsd !== undefined ? Number(priceYearlyUsd) : (Number(priceMonthlyUsd) * 10),
-    maxProducts !== undefined ? Number(maxProducts) : 50,
+    customLimit,
+    resaleLimit,
+    customLimit,
     allowWholesale ? 1 : 0,
     allowBinancePay ? 1 : 0,
     allowCustomBranding ? 1 : 0,
@@ -433,6 +441,8 @@ godmodeRouter.put('/plans/:id', (req: Request, res: Response) => {
     priceMonthlyUsd,
     priceYearlyUsd,
     maxProducts,
+    maxResaleProducts,
+    maxCustomProducts,
     allowWholesale,
     allowBinancePay,
     allowCustomBranding,
@@ -456,6 +466,8 @@ godmodeRouter.put('/plans/:id', (req: Request, res: Response) => {
         price_monthly_usd = COALESCE(?, price_monthly_usd),
         price_yearly_usd = COALESCE(?, price_yearly_usd),
         max_products = COALESCE(?, max_products),
+        max_resale_products = COALESCE(?, max_resale_products),
+        max_custom_products = COALESCE(?, max_custom_products),
         allow_wholesale = COALESCE(?, allow_wholesale),
         allow_binance_pay = COALESCE(?, allow_binance_pay),
         allow_custom_branding = COALESCE(?, allow_custom_branding),
@@ -471,6 +483,8 @@ godmodeRouter.put('/plans/:id', (req: Request, res: Response) => {
     priceMonthlyUsd !== undefined ? Number(priceMonthlyUsd) : null,
     priceYearlyUsd !== undefined ? Number(priceYearlyUsd) : null,
     maxProducts !== undefined ? Number(maxProducts) : null,
+    maxResaleProducts !== undefined ? Number(maxResaleProducts) : null,
+    maxCustomProducts !== undefined ? Number(maxCustomProducts) : null,
     allowWholesale !== undefined ? (allowWholesale ? 1 : 0) : null,
     allowBinancePay !== undefined ? (allowBinancePay ? 1 : 0) : null,
     allowCustomBranding !== undefined ? (allowCustomBranding ? 1 : 0) : null,

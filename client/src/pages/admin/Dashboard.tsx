@@ -39,11 +39,28 @@ import {
   ArrowUpDown,
   Check,
   Sparkles,
+  Tag,
 } from 'lucide-react';
+import { CyberDialog, CyberDialogOptions } from '../../components/CyberDialog';
 
 export const Dashboard: React.FC = () => {
   const { user, tenant, token, logout, refreshSession } = useAuth();
   const navigate = useNavigate();
+
+  // Modern Cyber Popup Dialog System
+  const [dialog, setDialog] = useState<CyberDialogOptions | null>(null);
+
+  const showNotice = (title: string, message: string, tone: 'success' | 'danger' | 'warning' | 'info' = 'info') => {
+    setDialog({ type: 'alert', tone, title, message });
+  };
+
+  const showConfirm = (title: string, message: string, onConfirm: () => void, tone: 'danger' | 'warning' | 'info' = 'danger', confirmText?: string) => {
+    setDialog({ type: 'confirm', tone, title, message, onConfirm, confirmText });
+  };
+
+  const showPrompt = (title: string, message: string, inputLabel: string, defaultValue: string, onConfirm: (val?: string) => void) => {
+    setDialog({ type: 'prompt', tone: 'info', title, message, inputLabel, defaultValue, onConfirm });
+  };
 
   const [activeTab, setActiveTab] = useState<'overview' | 'groups' | 'custom_products' | 'wholesale' | 'store_products' | 'deposits' | 'customers' | 'subscription' | 'settings'>('overview');
   const [overview, setOverview] = useState<any>(null);
@@ -368,6 +385,24 @@ export const Dashboard: React.FC = () => {
     }
   };
 
+  // Check active subscription helper
+  const requireActiveSubscription = (): boolean => {
+    if (subData?.subscription?.status === 'EXPIRED') {
+      showConfirm(
+        'Subscription Required',
+        'Your merchant subscription is currently inactive. Please choose a subscription tier and activate with Binance Pay to use full catalog and bot features.',
+        () => {
+          const plan = subData?.plans?.find((p: any) => p.id === subData?.subscription?.planId) || subData?.plans?.[0];
+          if (plan) handleOpenUpgradeModal(plan, subData?.subscription?.cycle || 'MONTHLY');
+        },
+        'warning',
+        'Choose Plan & Activate ⚡'
+      );
+      return false;
+    }
+    return true;
+  };
+
   // 1-Click Product ON/OFF Toggle
   const handleToggleProduct = async (productId: string, currentActive: number) => {
     try {
@@ -376,13 +411,14 @@ export const Dashboard: React.FC = () => {
         prev.map((p) => (p.id === productId ? { ...p, is_active: res.data.is_active } : p))
       );
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to toggle product status');
+      showNotice('Product Status', err.response?.data?.error || 'Failed to toggle product status', 'danger');
     }
   };
 
   // Group Management Handlers
   const handleCreateGroup = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!requireActiveSubscription()) return;
     if (!newGroupName.trim()) return;
     try {
       await axios.post(
@@ -401,24 +437,33 @@ export const Dashboard: React.FC = () => {
       loadGroups();
       loadDashboardData();
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to create category');
+      showNotice('Category Creation', err.response?.data?.error || 'Failed to create category', 'danger');
     }
   };
 
   const handleDeleteGroup = async (groupId: string, groupName: string) => {
-    if (!confirm(`Delete category "${groupName}"? Products in this folder will be unassigned safely.`)) return;
-    try {
-      await axios.delete(`/api/merchant/groups/${groupId}`, authHeaders);
-      loadGroups();
-      loadDashboardData();
-    } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to delete category');
-    }
+    showConfirm(
+      'Delete Category',
+      `Delete category "${groupName}"? Products in this folder will be safely unassigned.`,
+      async () => {
+        try {
+          await axios.delete(`/api/merchant/groups/${groupId}`, authHeaders);
+          loadGroups();
+          loadDashboardData();
+          showNotice('Category Deleted', `Category "${groupName}" deleted safely.`, 'success');
+        } catch (err: any) {
+          showNotice('Delete Failed', err.response?.data?.error || 'Failed to delete category', 'danger');
+        }
+      },
+      'danger',
+      'Delete Category'
+    );
   };
 
   // Create Custom Product
   const handleCreateProduct = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!requireActiveSubscription()) return;
     try {
       await axios.post(
         '/api/merchant/products',
@@ -438,7 +483,7 @@ export const Dashboard: React.FC = () => {
       setNewProdGroupId('');
       loadDashboardData();
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to create product');
+      showNotice('Product Creation', err.response?.data?.error || 'Failed to create product', 'danger');
     }
   };
 
@@ -456,23 +501,32 @@ export const Dashboard: React.FC = () => {
       setAddStockKeys('');
       loadDashboardData();
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to add stock');
+      showNotice('Inventory Stock', err.response?.data?.error || 'Failed to add stock', 'danger');
     }
   };
 
   // Delete product
   const handleDeleteProduct = async (productId: string, productName: string) => {
-    if (!confirm(`Delete "${productName}" from your store?`)) return;
-    try {
-      await axios.delete(`/api/merchant/products/${productId}`, authHeaders);
-      loadDashboardData();
-    } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to delete product');
-    }
+    showConfirm(
+      'Delete Product',
+      `Delete "${productName}" from your store? This action cannot be undone.`,
+      async () => {
+        try {
+          await axios.delete(`/api/merchant/products/${productId}`, authHeaders);
+          loadDashboardData();
+          showNotice('Product Deleted', `"${productName}" has been removed from your store.`, 'success');
+        } catch (err: any) {
+          showNotice('Delete Failed', err.response?.data?.error || 'Failed to delete product', 'danger');
+        }
+      },
+      'danger',
+      'Delete Product'
+    );
   };
 
   // Open Wholesale Import Modal
   const handleOpenImportModal = (item: any) => {
+    if (!requireActiveSubscription()) return;
     setImportModalItem(item);
     const defaultMargin = parseFloat(marginFixedUsd) || 0.20;
     const calculatedPrice = (item.cost_with_platform_fee_usd + defaultMargin).toFixed(2);
@@ -486,6 +540,7 @@ export const Dashboard: React.FC = () => {
   const handleConfirmImport = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!importModalItem) return;
+    if (!requireActiveSubscription()) return;
     setImportLoading(true);
     try {
       let finalGroupId = importGroupId || null;
@@ -515,9 +570,9 @@ export const Dashboard: React.FC = () => {
       );
       setImportModalItem(null);
       loadDashboardData();
-      alert('Product imported successfully to your store catalog!');
+      showNotice('Wholesale Import', 'Product imported successfully to your store catalog!', 'success');
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to import product');
+      showNotice('Import Failed', err.response?.data?.error || 'Failed to import product', 'danger');
     } finally {
       setImportLoading(false);
     }
@@ -532,30 +587,31 @@ export const Dashboard: React.FC = () => {
         ? 'all WHOLESALE products'
         : 'all CUSTOM accounts';
 
-    if (
-      !confirm(
-        `Are you sure you want to completely remove ${label} from your bot and store? This action will immediately delete them from your bot catalog.`
-      )
-    ) {
-      return;
-    }
-
-    setClearLoading(true);
-    try {
-      const res = await axios.delete(`/api/merchant/products/clear-all?type=${scope}`, authHeaders);
-      alert(res.data?.message || 'Products cleared successfully.');
-      setShowClearModal(false);
-      loadDashboardData();
-    } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to clear products');
-    } finally {
-      setClearLoading(false);
-    }
+    showConfirm(
+      'Clear Store Products',
+      `Are you sure you want to completely remove ${label} from your bot and store? This action will immediately delete them from your bot catalog.`,
+      async () => {
+        setClearLoading(true);
+        try {
+          const res = await axios.delete(`/api/merchant/products/clear-all?type=${scope}`, authHeaders);
+          showNotice('Products Cleared', res.data?.message || 'Products cleared successfully.', 'success');
+          setShowClearModal(false);
+          loadDashboardData();
+        } catch (err: any) {
+          showNotice('Clear Failed', err.response?.data?.error || 'Failed to clear products', 'danger');
+        } finally {
+          setClearLoading(false);
+        }
+      },
+      'danger',
+      'Confirm & Clear Products'
+    );
   };
 
   // Apply Global Profit Margin across all wholesale items
   const handleApplyGlobalMargin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!requireActiveSubscription()) return;
     setMarginLoading(true);
     try {
       const res = await axios.post(
@@ -567,11 +623,11 @@ export const Dashboard: React.FC = () => {
         },
         authHeaders
       );
-      alert(`Applied profit margin to ${res.data.updatedCount} wholesale products in your store!`);
+      showNotice('Margin Applied', `Applied profit margin to ${res.data.updatedCount} wholesale products in your store!`, 'success');
       setShowMarginModal(false);
       loadDashboardData();
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to apply profit margin');
+      showNotice('Margin Error', err.response?.data?.error || 'Failed to apply profit margin', 'danger');
     } finally {
       setMarginLoading(false);
     }
@@ -582,12 +638,14 @@ export const Dashboard: React.FC = () => {
     setSyncingPrices(true);
     try {
       const res = await axios.post('/api/merchant/products/sync-prices', {}, authHeaders);
-      alert(
-        `Sync completed! Upstream prices checked. Updated ${res.data.updatedCount} out of ${res.data.totalWholesale} products while keeping your configured profit margins.`
+      showNotice(
+        'Price Sync Complete',
+        `Upstream prices checked. Updated ${res.data.updatedCount} out of ${res.data.totalWholesale} products while keeping your configured profit margins.`,
+        'success'
       );
       loadDashboardData();
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to sync upstream prices');
+      showNotice('Price Sync Failed', err.response?.data?.error || 'Failed to sync upstream prices', 'danger');
     } finally {
       setSyncingPrices(false);
     }
@@ -604,7 +662,7 @@ export const Dashboard: React.FC = () => {
     if (!editingProduct) return;
     const priceNum = parseFloat(newEditPrice);
     if (isNaN(priceNum) || priceNum <= 0) {
-      alert('Please enter a valid retail price.');
+      showNotice('Invalid Price', 'Please enter a valid retail price greater than 0.', 'warning');
       return;
     }
     try {
@@ -616,42 +674,67 @@ export const Dashboard: React.FC = () => {
       setEditingProduct(null);
       loadDashboardData();
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to update price');
+      showNotice('Price Update Failed', err.response?.data?.error || 'Failed to update price', 'danger');
     }
   };
 
   // Bulk Import
   const handleBulkImport = async () => {
-    if (!confirm('Auto-import all available wholesale items with a default +20% and +$0.50 profit margin?')) return;
-    try {
-      const res = await axios.post('/api/merchant/wholesale/bulk-enable', { markupPct: 20, markupFixedUsd: 0.50 }, authHeaders);
-      alert(`Successfully synchronized ${res.data.count} wholesale products!`);
-      loadDashboardData();
-    } catch (err: any) {
-      alert(err.response?.data?.error || 'Bulk import failed');
-    }
+    if (!requireActiveSubscription()) return;
+    showConfirm(
+      'Bulk Wholesale Import',
+      'Auto-import all available wholesale items with a default +20% and +$0.50 profit margin?',
+      async () => {
+        try {
+          const res = await axios.post('/api/merchant/wholesale/bulk-enable', { markupPct: 20, markupFixedUsd: 0.50 }, authHeaders);
+          showNotice('Bulk Import Complete', `Successfully synchronized ${res.data.count} wholesale products!`, 'success');
+          loadDashboardData();
+        } catch (err: any) {
+          showNotice('Bulk Import Failed', err.response?.data?.error || 'Bulk import failed', 'danger');
+        }
+      },
+      'info',
+      'Import Wholesale Items'
+    );
   };
 
   // Approve Deposit
   const handleApproveDeposit = async (id: number) => {
-    try {
-      await axios.post(`/api/merchant/deposits/${id}/approve`, {}, authHeaders);
-      loadDashboardData();
-    } catch (err: any) {
-      alert(err.response?.data?.error || 'Approval failed');
-    }
+    showConfirm(
+      'Approve Deposit',
+      'Are you sure you want to approve this customer deposit? Their balance will be immediately credited.',
+      async () => {
+        try {
+          await axios.post(`/api/merchant/deposits/${id}/approve`, {}, authHeaders);
+          showNotice('Deposit Approved', 'Customer deposit approved and balance credited.', 'success');
+          loadDashboardData();
+        } catch (err: any) {
+          showNotice('Approval Failed', err.response?.data?.error || 'Approval failed', 'danger');
+        }
+      },
+      'warning',
+      'Approve & Credit Balance'
+    );
   };
 
   // Reject Deposit
   const handleRejectDeposit = async (id: number) => {
-    const reason = prompt('Enter rejection reason (sent to customer):', 'Incorrect TrxID or amount mismatch');
-    if (reason === null) return;
-    try {
-      await axios.post(`/api/merchant/deposits/${id}/reject`, { reason }, authHeaders);
-      loadDashboardData();
-    } catch (err: any) {
-      alert(err.response?.data?.error || 'Rejection failed');
-    }
+    showPrompt(
+      'Reject Deposit',
+      'Enter rejection reason that will be sent to the customer on Telegram:',
+      'Rejection Reason',
+      'Incorrect TrxID or amount mismatch',
+      async (reason) => {
+        if (!reason) return;
+        try {
+          await axios.post(`/api/merchant/deposits/${id}/reject`, { reason }, authHeaders);
+          showNotice('Deposit Rejected', 'Customer deposit has been rejected.', 'info');
+          loadDashboardData();
+        } catch (err: any) {
+          showNotice('Rejection Failed', err.response?.data?.error || 'Rejection failed', 'danger');
+        }
+      }
+    );
   };
 
   // Save Settings
@@ -685,7 +768,7 @@ export const Dashboard: React.FC = () => {
       loadDashboardData();
       refreshSession();
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Failed to save settings');
+      showNotice('Settings Error', err.response?.data?.error || 'Failed to save settings', 'danger');
     }
   };
 
@@ -894,20 +977,22 @@ export const Dashboard: React.FC = () => {
         {subData?.subscription && (subData.subscription.status === 'EXPIRED' || (subData.subscription.daysRemaining !== undefined && subData.subscription.daysRemaining <= 3)) && (
           <div className={`p-4 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border ${
             subData.subscription.status === 'EXPIRED'
-              ? 'bg-crimson-950/40 border-crimson-500/40 text-crimson-200'
+              ? 'bg-crimson-950/40 border-crimson-500/40 text-crimson-200 shadow-lg shadow-crimson-900/20'
               : 'bg-amber-950/40 border-amber-500/40 text-amber-200'
           }`}>
             <div className="flex items-center gap-3">
-              <AlertCircle className="w-5 h-5 flex-shrink-0" />
+              <div className={`p-2 rounded-xl ${subData.subscription.status === 'EXPIRED' ? 'bg-crimson-500/20 text-crimson-400' : 'bg-amber-500/20 text-amber-400'}`}>
+                <Zap className="w-5 h-5 flex-shrink-0" />
+              </div>
               <div>
                 <span className="font-bold text-xs sm:text-sm block">
                   {subData.subscription.status === 'EXPIRED'
-                    ? 'Store Subscription Expired!'
+                    ? 'Subscription Required — Activate Store & Bot'
                     : `Subscription Expiring in ${subData.subscription.daysRemaining} days!`}
                 </span>
                 <span className="text-xs opacity-80">
                   {subData.subscription.status === 'EXPIRED'
-                    ? 'Your Telegram store bot is paused. Renew your subscription to immediately resume automated sales.'
+                    ? 'New stores require an active subscription to launch your Telegram bot and add products. Activate with Binance Pay for instant automated access.'
                     : 'Renew your subscription before it expires to prevent service interruption.'}
                 </span>
               </div>
@@ -917,9 +1002,10 @@ export const Dashboard: React.FC = () => {
                 const targetPlan = subData.plans?.find((p: any) => p.id === subData.subscription.planId) || subData.plans?.[0];
                 if (targetPlan) handleOpenUpgradeModal(targetPlan, subData.subscription.cycle || 'MONTHLY');
               }}
-              className="px-4 py-2 rounded-xl bg-crimson-600 hover:bg-crimson-500 text-white font-bold text-xs whitespace-nowrap shadow-md shadow-crimson-600/30"
+              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-crimson-600 to-crimson-500 hover:from-crimson-500 text-white font-bold text-xs whitespace-nowrap shadow-md shadow-crimson-600/30 flex items-center gap-1.5"
             >
-              Renew / Upgrade Now ⚡
+              <Sparkles className="w-3.5 h-3.5" />
+              {subData.subscription.status === 'EXPIRED' ? 'Activate Subscription Now ⚡' : 'Renew / Upgrade Now ⚡'}
             </button>
           </div>
         )}
@@ -2136,8 +2222,8 @@ export const Dashboard: React.FC = () => {
                 </button>
               </div>
 
-              {/* 3 Metric Mini-Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 border-t border-white/10 pt-6">
+              {/* 4 Metric Mini-Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 border-t border-white/10 pt-6">
                 <div className="p-4 rounded-2xl bg-carbon-900/60 border border-white/5 space-y-1">
                   <span className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider block">
                     Access Expiration
@@ -2145,33 +2231,61 @@ export const Dashboard: React.FC = () => {
                   <div className="text-lg font-bold text-white flex items-center gap-2">
                     <span>
                       {subData?.subscription?.status === 'EXPIRED'
-                        ? 'Expired'
-                        : `⏳ ${subData?.subscription?.daysRemaining ?? 7} Days Remaining`}
+                        ? 'Expired / Inactive'
+                        : `⏳ ${subData?.subscription?.daysRemaining ?? 0} Days Remaining`}
                     </span>
                   </div>
                   <span className="text-[11px] text-zinc-500 font-mono block">
                     {subData?.subscription?.expiresAt
                       ? `Valid until ${new Date(subData.subscription.expiresAt).toLocaleDateString()}`
-                      : 'Free Trial Period'}
+                      : 'Subscription Required'}
                   </span>
                 </div>
 
                 <div className="p-4 rounded-2xl bg-carbon-900/60 border border-white/5 space-y-1">
-                  <span className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider block">
-                    Product Catalog Quota
-                  </span>
+                  <div className="flex justify-between items-center">
+                    <span className="text-[11px] font-mono text-laser-400 uppercase tracking-wider block font-bold">
+                      Wholesale Quota
+                    </span>
+                    <span className="text-[10px] font-mono text-zinc-400">Resale Items</span>
+                  </div>
                   <div className="text-lg font-bold text-white">
-                    {subData?.subscription?.productCount ?? products.length} /{' '}
-                    {subData?.subscription?.maxProducts === -1 ? 'Unlimited' : subData?.subscription?.maxProducts ?? 50}
+                    {subData?.subscription?.resaleProductCount ?? 0} /{' '}
+                    {subData?.subscription?.maxResaleProducts === -1 ? 'Unlimited' : (subData?.subscription?.maxResaleProducts ?? 1)}
                   </div>
                   <div className="w-full bg-carbon-800 rounded-full h-1.5 overflow-hidden mt-1">
                     <div
                       className="bg-laser-500 h-full rounded-full transition-all"
                       style={{
                         width: `${
-                          subData?.subscription?.maxProducts === -1
+                          subData?.subscription?.maxResaleProducts === -1
                             ? 20
-                            : Math.min(100, (((subData?.subscription?.productCount ?? products.length) / (subData?.subscription?.maxProducts || 50)) * 100))
+                            : Math.min(100, (((subData?.subscription?.resaleProductCount ?? 0) / (subData?.subscription?.maxResaleProducts || 1)) * 100))
+                        }%`,
+                      }}
+                    ></div>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-carbon-900/60 border border-white/5 space-y-1">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[11px] font-mono text-emerald-400 uppercase tracking-wider block font-bold">
+                      Custom Quota
+                    </span>
+                    <span className="text-[10px] font-mono text-zinc-400">Direct Accounts</span>
+                  </div>
+                  <div className="text-lg font-bold text-white">
+                    {subData?.subscription?.customProductCount ?? 0} /{' '}
+                    {subData?.subscription?.maxCustomProducts === -1 ? 'Unlimited' : (subData?.subscription?.maxCustomProducts ?? 50)}
+                  </div>
+                  <div className="w-full bg-carbon-800 rounded-full h-1.5 overflow-hidden mt-1">
+                    <div
+                      className="bg-emerald-500 h-full rounded-full transition-all"
+                      style={{
+                        width: `${
+                          subData?.subscription?.maxCustomProducts === -1
+                            ? 20
+                            : Math.min(100, (((subData?.subscription?.customProductCount ?? 0) / (subData?.subscription?.maxCustomProducts || 50)) * 100))
                         }%`,
                       }}
                     ></div>
@@ -2183,8 +2297,10 @@ export const Dashboard: React.FC = () => {
                     Telegram Bot Engine
                   </span>
                   <div className="text-lg font-bold text-emerald-400 flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                    <span>{subData?.subscription?.status === 'EXPIRED' ? 'Paused' : 'Active & Running'}</span>
+                    <span className={`w-2 h-2 rounded-full ${subData?.subscription?.status === 'EXPIRED' ? 'bg-crimson-500' : 'bg-emerald-400 animate-pulse'}`}></span>
+                    <span className={subData?.subscription?.status === 'EXPIRED' ? 'text-crimson-400' : 'text-emerald-400'}>
+                      {subData?.subscription?.status === 'EXPIRED' ? 'Paused (Renew Needed)' : 'Active & Running'}
+                    </span>
                   </div>
                   <span className="text-[11px] text-zinc-500 font-mono block">
                     @{tenant?.bot_username || 'Telegram Bot'}
@@ -2275,10 +2391,22 @@ export const Dashboard: React.FC = () => {
                           </span>
                         </div>
 
-                        <div className="border-t border-white/10 pt-4 space-y-2.5">
+                        <div className="border-t border-white/10 pt-4 space-y-2">
                           <span className="text-[10px] font-mono font-bold text-zinc-400 uppercase tracking-wider block">
-                            Included Capabilities:
+                            Included Quotas & Capabilities:
                           </span>
+                          <div className="flex items-center gap-2 text-xs text-laser-300 font-semibold bg-laser-950/40 p-2 rounded-xl border border-laser-500/20">
+                            <Tag className="w-3.5 h-3.5 text-laser-400 flex-shrink-0" />
+                            <span>
+                              Resale / Wholesale: <strong>{p.max_resale_products === -1 ? 'Unlimited' : `${p.max_resale_products} products`}</strong>
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-emerald-300 font-semibold bg-emerald-950/40 p-2 rounded-xl border border-emerald-500/20">
+                            <Package className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                            <span>
+                              Custom Accounts: <strong>{p.max_custom_products === -1 ? 'Unlimited' : `${p.max_custom_products} products`}</strong>
+                            </span>
+                          </div>
                           {features.map((feat: string, idx: number) => (
                             <div key={idx} className="flex items-center gap-2 text-xs text-zinc-300">
                               <CheckCircle className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
@@ -2453,7 +2581,7 @@ export const Dashboard: React.FC = () => {
                   type="button"
                   onClick={() => {
                     navigator.clipboard.writeText(subData?.ownerBinanceUid || '1147094108');
-                    alert('Owner Binance UID copied to clipboard!');
+                    showNotice('UID Copied', 'Platform Owner Binance UID copied to clipboard!', 'success');
                   }}
                   className="px-3 py-1.5 rounded-lg bg-carbon-800 hover:bg-carbon-700 text-xs font-mono text-zinc-300"
                 >
@@ -3188,6 +3316,9 @@ export const Dashboard: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Modern Cyber Dialog Modal System */}
+      <CyberDialog dialog={dialog} onClose={() => setDialog(null)} />
     </div>
   );
 };

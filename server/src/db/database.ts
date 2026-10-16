@@ -52,40 +52,64 @@ export function initDatabase() {
     }
 
     // Tenant customization columns
-    const tenantTableInfo = db.prepare(`PRAGMA table_info(tenants)`).all() as any[];
-    if (!tenantTableInfo.some((col: any) => col.name === 'about_text')) {
-      db.exec(`ALTER TABLE tenants ADD COLUMN about_text TEXT;`);
-      console.log('✅ Migrated tenants table: added about_text column');
+    try {
+      const tenantTableInfo = db.prepare(`PRAGMA table_info(tenants)`).all() as any[];
+      if (!tenantTableInfo.some((col: any) => col.name === 'about_text')) {
+        db.exec(`ALTER TABLE tenants ADD COLUMN about_text TEXT;`);
+        console.log('✅ Migrated tenants table: added about_text column');
+      }
+      if (!tenantTableInfo.some((col: any) => col.name === 'support_text')) {
+        db.exec(`ALTER TABLE tenants ADD COLUMN support_text TEXT;`);
+        console.log('✅ Migrated tenants table: added support_text column');
+      }
+      if (!tenantTableInfo.some((col: any) => col.name === 'welcome_text')) {
+        db.exec(`ALTER TABLE tenants ADD COLUMN welcome_text TEXT;`);
+        console.log('✅ Migrated tenants table: added welcome_text column');
+      }
+      if (!tenantTableInfo.some((col: any) => col.name === 'subscription_cycle')) {
+        db.exec(`ALTER TABLE tenants ADD COLUMN subscription_cycle TEXT DEFAULT 'MONTHLY';`);
+        console.log('✅ Migrated tenants table: added subscription_cycle column');
+      }
+      if (!tenantTableInfo.some((col: any) => col.name === 'subscription_status')) {
+        db.exec(`ALTER TABLE tenants ADD COLUMN subscription_status TEXT DEFAULT 'EXPIRED';`);
+        console.log('✅ Migrated tenants table: added subscription_status column');
+      }
+      if (!tenantTableInfo.some((col: any) => col.name === 'subscription_started_at')) {
+        // SQLite ALTER TABLE does not allow non-constant DEFAULT CURRENT_TIMESTAMP
+        db.exec(`ALTER TABLE tenants ADD COLUMN subscription_started_at TIMESTAMP;`);
+        db.exec(`UPDATE tenants SET subscription_started_at = CURRENT_TIMESTAMP WHERE subscription_started_at IS NULL;`);
+        console.log('✅ Migrated tenants table: added subscription_started_at column');
+      }
+      if (!tenantTableInfo.some((col: any) => col.name === 'subscription_expires_at')) {
+        db.exec(`ALTER TABLE tenants ADD COLUMN subscription_expires_at TIMESTAMP;`);
+        console.log('✅ Migrated tenants table: added subscription_expires_at column');
+      }
+      if (!tenantTableInfo.some((col: any) => col.name === 'trial_ends_at')) {
+        db.exec(`ALTER TABLE tenants ADD COLUMN trial_ends_at TIMESTAMP;`);
+        console.log('✅ Migrated tenants table: added trial_ends_at column');
+      }
+    } catch (err: any) {
+      console.warn('Migration notice (tenants columns):', err.message);
     }
-    if (!tenantTableInfo.some((col: any) => col.name === 'support_text')) {
-      db.exec(`ALTER TABLE tenants ADD COLUMN support_text TEXT;`);
-      console.log('✅ Migrated tenants table: added support_text column');
-    }
-    if (!tenantTableInfo.some((col: any) => col.name === 'welcome_text')) {
-      db.exec(`ALTER TABLE tenants ADD COLUMN welcome_text TEXT;`);
-      console.log('✅ Migrated tenants table: added welcome_text column');
-    }
-    if (!tenantTableInfo.some((col: any) => col.name === 'subscription_cycle')) {
-      db.exec(`ALTER TABLE tenants ADD COLUMN subscription_cycle TEXT DEFAULT 'MONTHLY';`);
-      console.log('✅ Migrated tenants table: added subscription_cycle column');
-    }
-    if (!tenantTableInfo.some((col: any) => col.name === 'subscription_status')) {
-      db.exec(`ALTER TABLE tenants ADD COLUMN subscription_status TEXT DEFAULT 'TRIAL';`);
-      console.log('✅ Migrated tenants table: added subscription_status column');
-    }
-    if (!tenantTableInfo.some((col: any) => col.name === 'subscription_started_at')) {
-      db.exec(`ALTER TABLE tenants ADD COLUMN subscription_started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`);
-      console.log('✅ Migrated tenants table: added subscription_started_at column');
-    }
-    if (!tenantTableInfo.some((col: any) => col.name === 'subscription_expires_at')) {
-      db.exec(`ALTER TABLE tenants ADD COLUMN subscription_expires_at TIMESTAMP;`);
-      // Give existing active tenants 30 days active subscription
-      db.exec(`UPDATE tenants SET subscription_expires_at = datetime('now', '+30 days'), subscription_status = 'ACTIVE' WHERE subscription_expires_at IS NULL;`);
-      console.log('✅ Migrated tenants table: added subscription_expires_at column');
-    }
-    if (!tenantTableInfo.some((col: any) => col.name === 'trial_ends_at')) {
-      db.exec(`ALTER TABLE tenants ADD COLUMN trial_ends_at TIMESTAMP;`);
-      console.log('✅ Migrated tenants table: added trial_ends_at column');
+
+    // Subscription Plans separate limits (Wholesale/Resale vs Custom)
+    try {
+      const planTableInfo = db.prepare(`PRAGMA table_info(subscription_plans)`).all() as any[];
+      if (!planTableInfo.some((col: any) => col.name === 'max_resale_products')) {
+        db.exec(`ALTER TABLE subscription_plans ADD COLUMN max_resale_products INTEGER DEFAULT 5;`);
+        console.log('✅ Migrated subscription_plans table: added max_resale_products column');
+      }
+      if (!planTableInfo.some((col: any) => col.name === 'max_custom_products')) {
+        db.exec(`ALTER TABLE subscription_plans ADD COLUMN max_custom_products INTEGER DEFAULT 50;`);
+        console.log('✅ Migrated subscription_plans table: added max_custom_products column');
+      }
+
+      // Sync default starter limits: 1 resale, 50 custom
+      db.exec(`UPDATE subscription_plans SET max_resale_products = 1, max_custom_products = 50 WHERE id = 'starter';`);
+      db.exec(`UPDATE subscription_plans SET max_resale_products = 25, max_custom_products = 250 WHERE id = 'pro';`);
+      db.exec(`UPDATE subscription_plans SET max_resale_products = -1, max_custom_products = -1 WHERE id = 'enterprise';`);
+    } catch (err: any) {
+      console.warn('Migration notice (subscription_plans columns):', err.message);
     }
   } catch (err: any) {
     console.warn('Migration notice (columns):', err.message);

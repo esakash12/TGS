@@ -25,6 +25,25 @@ function ensureTenant(req: AuthenticatedRequest, res: Response, next: Function) 
 
 merchantRouter.use(ensureTenant);
 
+// Helper: Check if merchant has an active, unexpired subscription
+export function checkMerchantSubscription(tenantId: string): { active: boolean; error?: string; plan?: any } {
+  const tenant = db.prepare('SELECT plan_id, subscription_status, subscription_expires_at FROM tenants WHERE id = ?').get(tenantId) as any;
+  if (!tenant) {
+    return { active: false, error: 'Tenant not found.' };
+  }
+
+  const isExpired = !tenant.subscription_expires_at || new Date(tenant.subscription_expires_at) < new Date();
+  if (tenant.subscription_status !== 'ACTIVE' || isExpired) {
+    return {
+      active: false,
+      error: 'An active subscription plan is required to perform this action. Please activate your store subscription.',
+    };
+  }
+
+  const plan = db.prepare('SELECT * FROM subscription_plans WHERE id = ?').get(tenant.plan_id || 'starter') as any;
+  return { active: true, plan };
+}
+
 // ==========================================
 // 1. Dashboard Overview Metrics
 // ==========================================
@@ -88,6 +107,11 @@ merchantRouter.get('/groups', (req: AuthenticatedRequest, res: Response) => {
 
 merchantRouter.post('/groups', (req: AuthenticatedRequest, res: Response) => {
   const tenantId = req.tenant.id;
+  const subCheck = checkMerchantSubscription(tenantId);
+  if (!subCheck.active) {
+    return res.status(403).json({ error: subCheck.error, subscriptionRequired: true });
+  }
+
   const { name, icon, sortOrder } = req.body;
 
   if (!name || !name.trim()) {
@@ -193,10 +217,27 @@ merchantRouter.patch('/products/:id/toggle', (req: AuthenticatedRequest, res: Re
 // Create Custom Product (with custom group selection)
 merchantRouter.post('/products', (req: AuthenticatedRequest, res: Response) => {
   const tenantId = req.tenant.id;
+  const subCheck = checkMerchantSubscription(tenantId);
+  if (!subCheck.active) {
+    return res.status(403).json({ error: subCheck.error, subscriptionRequired: true });
+  }
+
   const { name, category, retailPriceUsd, description, inventoryItems, groupId } = req.body;
 
   if (!name || !retailPriceUsd) {
     return res.status(400).json({ error: 'Product name and retail price (USD) are required.' });
+  }
+
+  // Quota validation: Custom Product Limit
+  const plan = subCheck.plan;
+  const customLimit = plan?.max_custom_products !== undefined ? Number(plan.max_custom_products) : (plan?.max_products ? Number(plan.max_products) : 50);
+  if (customLimit !== -1) {
+    const countRow = db.prepare("SELECT COUNT(id) as count FROM products WHERE tenant_id = ? AND provider = 'custom'").get(tenantId) as any;
+    if (countRow && countRow.count >= customLimit) {
+      return res.status(400).json({
+        error: `Custom product quota reached (${customLimit} items) on your current ${plan?.name || 'Starter'} plan. Please upgrade your subscription plan to add more custom products.`,
+      });
+    }
   }
 
   const productId = 'prd_' + Math.random().toString(36).substring(2, 10);
@@ -418,18 +459,41 @@ merchantRouter.get('/wholesale/catalog', async (req: AuthenticatedRequest, res: 
 // Import wholesale product into store (with optional custom group)
 merchantRouter.post('/wholesale/import', (req: AuthenticatedRequest, res: Response) => {
   const tenantId = req.tenant.id;
+  const subCheck = checkMerchantSubscription(tenantId);
+  if (!subCheck.active) {
+    return res.status(403).json({ error: subCheck.error, subscriptionRequired: true });
+  }
+
+  const plan = subCheck.plan;
+  if (plan?.allow_wholesale === 0) {
+    return res.status(403).json({
+      error: 'Wholesale reseller access is not included in your current subscription tier. Please upgrade your plan to unlock wholesale products.',
+    });
+  }
+
   const { wholesaleProductId, name, category, wholesaleCostUsd, retailPriceUsd, provider, groupId } = req.body;
 
   if (!wholesaleProductId || !retailPriceUsd) {
     return res.status(400).json({ error: 'Missing product ID or retail price' });
   }
 
-  const markupFixed = Number((Number(retailPriceUsd) - Number(wholesaleCostUsd)).toFixed(2));
-
   // Check if already imported
   const existing = db.prepare(`
     SELECT id FROM products WHERE tenant_id = ? AND provider_product_id = ?
   `).get(tenantId, wholesaleProductId) as any;
+
+  // Resale Product Quota check (if adding a new wholesale item)
+  const resaleLimit = plan?.max_resale_products !== undefined ? Number(plan.max_resale_products) : 5;
+  if (!existing && resaleLimit !== -1) {
+    const countRow = db.prepare("SELECT COUNT(id) as count FROM products WHERE tenant_id = ? AND provider != 'custom'").get(tenantId) as any;
+    if (countRow && countRow.count >= resaleLimit) {
+      return res.status(400).json({
+        error: `Wholesale resale product limit reached (${resaleLimit} items) on your current ${plan?.name || 'Starter'} plan. Please upgrade your subscription plan to add more items.`,
+      });
+    }
+  }
+
+  const markupFixed = Number((Number(retailPriceUsd) - Number(wholesaleCostUsd)).toFixed(2));
 
   if (existing) {
     // update price, group, margin and reactivate
@@ -815,9 +879,11 @@ merchantRouter.get('/subscription/current', (req: AuthenticatedRequest, res: Res
     }
   }
 
-  // Product Usage
-  const productCountResult = db.prepare('SELECT COUNT(id) as count FROM products WHERE tenant_id = ?').get(tenantId) as any;
-  const productCount = Number(productCountResult?.count || 0);
+  // Product Usage (Separate Custom vs Wholesale Resale)
+  const customCountRow = db.prepare("SELECT COUNT(id) as count FROM products WHERE tenant_id = ? AND provider = 'custom'").get(tenantId) as any;
+  const resaleCountRow = db.prepare("SELECT COUNT(id) as count FROM products WHERE tenant_id = ? AND provider != 'custom'").get(tenantId) as any;
+  const customProductCount = Number(customCountRow?.count || 0);
+  const resaleProductCount = Number(resaleCountRow?.count || 0);
 
   // Platform Owner Binance UID
   const globalConfig = db.prepare('SELECT owner_binance_uid FROM global_system_config WHERE id = 1').get() as any;
@@ -837,6 +903,8 @@ merchantRouter.get('/subscription/current', (req: AuthenticatedRequest, res: Res
       price_monthly_usd: Number(p.price_monthly_usd),
       price_yearly_usd: Number(p.price_yearly_usd),
       max_products: Number(p.max_products),
+      max_resale_products: p.max_resale_products !== undefined && p.max_resale_products !== null ? Number(p.max_resale_products) : 5,
+      max_custom_products: p.max_custom_products !== undefined && p.max_custom_products !== null ? Number(p.max_custom_products) : Number(p.max_products || 50),
     };
   });
 
@@ -853,7 +921,11 @@ merchantRouter.get('/subscription/current', (req: AuthenticatedRequest, res: Res
       trialEndsAt: tenant.trial_ends_at,
       daysRemaining,
       maxProducts: plan ? Number(plan.max_products) : 50,
-      productCount,
+      maxResaleProducts: plan?.max_resale_products !== undefined ? Number(plan.max_resale_products) : 5,
+      maxCustomProducts: plan?.max_custom_products !== undefined ? Number(plan.max_custom_products) : (plan?.max_products ? Number(plan.max_products) : 50),
+      productCount: customProductCount + resaleProductCount,
+      customProductCount,
+      resaleProductCount,
       features,
     },
     ownerBinanceUid: globalConfig?.owner_binance_uid || '',

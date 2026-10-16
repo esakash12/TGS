@@ -209,7 +209,9 @@ export interface SubscriptionPlan {
   description?: string;
   price_monthly_usd: number;
   price_yearly_usd: number;
-  max_products: number;
+  max_products: number; // legacy fallback
+  max_resale_products: number; // Wholesale / resale products limit (-1 for unlimited)
+  max_custom_products: number; // Custom products limit (-1 for unlimited)
   allow_wholesale: number;
   allow_binance_pay: number;
   allow_custom_branding: number;

@@ -182,7 +182,9 @@ CREATE TABLE IF NOT EXISTS subscription_plans (
     description TEXT,
     price_monthly_usd NUMERIC NOT NULL,
     price_yearly_usd NUMERIC NOT NULL,
-    max_products INTEGER DEFAULT 50,           -- -1 for unlimited
+    max_products INTEGER DEFAULT 50,           -- -1 for unlimited (legacy fallback)
+    max_resale_products INTEGER DEFAULT 5,     -- Wholesale/resale item limit (-1 for unlimited)
+    max_custom_products INTEGER DEFAULT 50,    -- Custom digital item limit (-1 for unlimited)
     allow_wholesale INTEGER DEFAULT 1,
     allow_binance_pay INTEGER DEFAULT 1,
     allow_custom_branding INTEGER DEFAULT 0,
@@ -233,20 +235,20 @@ VALUES (1, 0.01, 0.0);
 
 -- Seed default initial plans if not present
 INSERT OR IGNORE INTO subscription_plans (
-    id, name, description, price_monthly_usd, price_yearly_usd, max_products,
+    id, name, description, price_monthly_usd, price_yearly_usd, max_products, max_resale_products, max_custom_products,
     allow_wholesale, allow_binance_pay, allow_custom_branding, features_json, is_popular, is_active, sort_order
 ) VALUES 
 (
-    'starter', 'Starter Cloud', 'Perfect for newly launched digital stores', 8.00, 80.00, 50,
-    1, 1, 0, '["1 Active Telegram Bot", "Up to 50 Products", "bKash / Nagad Auto-Convert", "Instant Binance Pay SAPI", "Community Support"]', 0, 1, 1
+    'starter', 'Starter Cloud', 'Perfect for newly launched digital stores', 8.00, 80.00, 50, 1, 50,
+    1, 1, 0, '["1 Active Telegram Bot", "1 Wholesale Resale Product", "Up to 50 Custom Products", "bKash / Nagad Auto-Convert", "Instant Binance Pay SAPI", "Community Support"]', 0, 1, 1
 ),
 (
-    'pro', 'Pro Merchant', 'Most popular choice for growing businesses', 20.00, 200.00, 250,
-    1, 1, 0, '["3 Active Telegram Bots", "Up to 250 Products", "Instant Binance Pay Auto-Deposit", "Wholesale Reseller Access", "Auto Margin Engine", "Priority Telegram Support"]', 1, 1, 2
+    'pro', 'Pro Merchant', 'Most popular choice for growing businesses', 20.00, 200.00, 250, 25, 250,
+    1, 1, 0, '["3 Active Telegram Bots", "25 Wholesale Resale Products", "Up to 250 Custom Products", "Instant Binance Pay Auto-Deposit", "Wholesale Reseller Access", "Auto Margin Engine", "Priority Telegram Support"]', 1, 1, 2
 ),
 (
-    'enterprise', 'Enterprise VIP', 'Unlimited power for high-volume automated sellers', 48.00, 480.00, -1,
-    1, 1, 1, '["Unlimited Telegram Bots", "Unlimited Products", "Zero Platform Wholesale Fees", "Custom Domain & Branding", "Dedicated Account Manager", "Custom API Integrations"]', 0, 1, 3
+    'enterprise', 'Enterprise VIP', 'Unlimited power for high-volume automated sellers', 48.00, 480.00, -1, -1, -1,
+    1, 1, 1, '["Unlimited Telegram Bots", "Unlimited Wholesale Products", "Unlimited Custom Products", "Zero Platform Wholesale Fees", "Custom Domain & Branding", "Dedicated Account Manager", "Custom API Integrations"]', 0, 1, 3
 );
 
 
