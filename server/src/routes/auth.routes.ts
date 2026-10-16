@@ -70,9 +70,17 @@ authRouter.get('/me', requireAuth, (req: AuthenticatedRequest, res: Response) =>
   if (user?.tenant_id) {
     const raw = db.prepare('SELECT * FROM tenants WHERE id = ?').get(user.tenant_id) as any;
     if (raw) {
-      raw.payment_numbers_json = JSON.parse(raw.payment_numbers_json || '{}');
-      const decryptedBinance = decrypt(raw.binance_config_json_enc);
-      raw.binance_config_json = JSON.parse(decryptedBinance || '{}');
+      try {
+        raw.payment_numbers_json = JSON.parse(raw.payment_numbers_json || '{}');
+      } catch (e) {
+        raw.payment_numbers_json = {};
+      }
+      try {
+        const decryptedBinance = decrypt(raw.binance_config_json_enc);
+        raw.binance_config_json = JSON.parse(decryptedBinance || '{}');
+      } catch (e) {
+        raw.binance_config_json = {};
+      }
       tenant = raw;
     }
   }

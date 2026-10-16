@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken';
 import { db } from '../db/database';
-import { hashPassword, comparePassword } from './crypto';
+import { hashPassword, comparePassword, decrypt } from './crypto';
 import { AdminUser, Tenant, AuthResponse } from '../../../shared/types';
 import { DEFAULT_USD_TO_BDT_RATE } from '../../../shared/constants';
 
@@ -74,10 +74,19 @@ export async function registerMerchant(params: {
   const user = db.prepare('SELECT id, username, email, role, tenant_id FROM admin_users WHERE id = ?').get(userId) as any;
   const tenant = db.prepare('SELECT * FROM tenants WHERE id = ?').get(tenantId) as any;
 
-  // Parse JSON fields
+  // Parse JSON fields safely
   if (tenant) {
-    tenant.payment_numbers_json = JSON.parse(tenant.payment_numbers_json || '{}');
-    tenant.binance_config_json = JSON.parse(tenant.binance_config_json_enc || '{}');
+    try {
+      tenant.payment_numbers_json = JSON.parse(tenant.payment_numbers_json || '{}');
+    } catch (e) {
+      tenant.payment_numbers_json = {};
+    }
+    try {
+      const decBinance = decrypt(tenant.binance_config_json_enc);
+      tenant.binance_config_json = JSON.parse(decBinance || '{}');
+    } catch (e) {
+      tenant.binance_config_json = {};
+    }
   }
 
   const token = signToken({
@@ -112,8 +121,17 @@ export async function loginMerchant(identifier: string, password: string): Promi
       if (rawTenant.status === 'SUSPENDED') {
         throw new Error('This store has been suspended. Please contact platform administration.');
       }
-      rawTenant.payment_numbers_json = JSON.parse(rawTenant.payment_numbers_json || '{}');
-      rawTenant.binance_config_json = JSON.parse(rawTenant.binance_config_json_enc || '{}');
+      try {
+        rawTenant.payment_numbers_json = JSON.parse(rawTenant.payment_numbers_json || '{}');
+      } catch (e) {
+        rawTenant.payment_numbers_json = {};
+      }
+      try {
+        const decBinance = decrypt(rawTenant.binance_config_json_enc);
+        rawTenant.binance_config_json = JSON.parse(decBinance || '{}');
+      } catch (e) {
+        rawTenant.binance_config_json = {};
+      }
       tenant = rawTenant;
     }
   }

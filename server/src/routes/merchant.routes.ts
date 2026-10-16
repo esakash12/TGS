@@ -636,9 +636,17 @@ merchantRouter.get('/settings', (req: AuthenticatedRequest, res: Response) => {
   const tenantId = req.tenant.id;
   const tenant = db.prepare('SELECT * FROM tenants WHERE id = ?').get(tenantId) as any;
 
-  tenant.payment_numbers_json = JSON.parse(tenant.payment_numbers_json || '{}');
-  const decryptedBinance = decrypt(tenant.binance_config_json_enc);
-  tenant.binance_config_json = JSON.parse(decryptedBinance || '{}');
+  try {
+    tenant.payment_numbers_json = JSON.parse(tenant.payment_numbers_json || '{}');
+  } catch (e) {
+    tenant.payment_numbers_json = {};
+  }
+  try {
+    const decryptedBinance = decrypt(tenant.binance_config_json_enc);
+    tenant.binance_config_json = JSON.parse(decryptedBinance || '{}');
+  } catch (e) {
+    tenant.binance_config_json = {};
+  }
 
   res.json({
     name: tenant.name,
@@ -682,7 +690,12 @@ merchantRouter.put('/settings', async (req: AuthenticatedRequest, res: Response)
   // Handle Binance Config Encryption
   let newBinanceEnc = current.binance_config_json_enc;
   if (binanceConfig) {
-    const existingConfig = JSON.parse(decrypt(current.binance_config_json_enc) || '{}');
+    let existingConfig: any = {};
+    try {
+      existingConfig = JSON.parse(decrypt(current.binance_config_json_enc) || '{}');
+    } catch (e) {
+      existingConfig = {};
+    }
     const merged = {
       uid: binanceConfig.uid ?? existingConfig.uid ?? '',
       apiKey: binanceConfig.apiKey && !binanceConfig.apiKey.includes('••••') ? binanceConfig.apiKey : existingConfig.apiKey ?? '',
