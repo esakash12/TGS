@@ -294,3 +294,55 @@ godmodeRouter.delete('/wholesale-rules/:id', (req: Request, res: Response) => {
   res.json({ success: true, message: `Product ${providerProductId} globally disabled/deleted from platform.` });
 });
 
+// 1-Click Bulk Wholesale Governance (Disable All, Enable All, or Bulk Set Minimum Plan Tier)
+godmodeRouter.post('/wholesale-rules/bulk', async (req: Request, res: Response) => {
+  const { action, provider, minPlanTier, productIds } = req.body;
+  // action: 'disable_all' | 'enable_all' | 'set_tier'
+
+  try {
+    const catalog = await fetchLiveWholesaleCatalog();
+    let targetProducts = catalog;
+
+    if (Array.isArray(productIds) && productIds.length > 0) {
+      targetProducts = catalog.filter(p => productIds.includes(p.id));
+    } else if (provider && provider !== 'all') {
+      targetProducts = catalog.filter(p => p.provider.toLowerCase() === provider.toLowerCase());
+    }
+
+    const stmt = db.prepare(`
+      INSERT INTO platform_wholesale_rules (
+        provider_product_id, is_active, min_plan_tier, updated_at
+      ) VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(provider_product_id) DO UPDATE SET
+        is_active = COALESCE(?, is_active),
+        min_plan_tier = COALESCE(?, min_plan_tier),
+        updated_at = CURRENT_TIMESTAMP
+    `);
+
+    const bulkTx = db.transaction(() => {
+      for (const p of targetProducts) {
+        if (action === 'disable_all') {
+          stmt.run(p.id, 0, p.min_plan_tier || 'starter', 0, null);
+        } else if (action === 'enable_all') {
+          stmt.run(p.id, 1, p.min_plan_tier || 'starter', 1, null);
+        } else if (action === 'set_tier' && minPlanTier) {
+          stmt.run(p.id, 1, minPlanTier, null, minPlanTier);
+        }
+      }
+    });
+
+    bulkTx();
+    invalidateWholesaleCache();
+
+    res.json({
+      success: true,
+      action,
+      affectedCount: targetProducts.length,
+      message: `Successfully executed ${action} across ${targetProducts.length} wholesale products.`
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Bulk update failed: ' + err.message });
+  }
+});
+
+

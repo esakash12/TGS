@@ -65,7 +65,11 @@ class DynamicBotRegistry {
       this.slugToTenantId.set(slug, tenantId);
 
       const appUrl = process.env.APP_URL || (process.env.APP_DOMAIN ? `https://${process.env.APP_DOMAIN}` : '');
-      const isWebhookMode = process.env.BOT_RUNNER_MODE !== 'polling' && Boolean(appUrl);
+      const isWebhookMode = process.env.BOT_RUNNER_MODE !== 'polling' && Boolean(appUrl) && appUrl.startsWith('https://');
+
+      bot.catch((err) => {
+        console.error(`[@${botInfo.username || slug}] Bot unhandled error:`, err.message || err);
+      });
 
       if (isWebhookMode) {
         try {
@@ -74,11 +78,14 @@ class DynamicBotRegistry {
           console.log(`🌐 [@${botInfo.username}] Webhook registered successfully: ${webhookUrl}`);
         } catch (webhookErr: any) {
           console.warn(`[BotRegistry] Webhook set failed for @${botInfo.username}, falling back to polling:`, webhookErr.message);
+          await bot.api.deleteWebhook({ drop_pending_updates: false }).catch(() => {});
           bot.start({
             onStart: () => console.log(`🚀 [@${botInfo.username}] Polling fallback started for tenant: ${slug}`),
           }).catch(err => console.error(`[@${botInfo.username}] Polling error:`, err));
         }
       } else {
+        // Polling mode: always clear any webhook registered on Telegram to prevent 409 Conflict
+        await bot.api.deleteWebhook({ drop_pending_updates: false }).catch(() => {});
         bot.start({
           onStart: () => console.log(`🚀 [@${botInfo.username}] Long-polling started for tenant: ${slug}`),
         }).catch(err => console.error(`[@${botInfo.username}] Polling error:`, err));

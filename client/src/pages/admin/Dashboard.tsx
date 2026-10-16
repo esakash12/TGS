@@ -547,33 +547,24 @@ export const Dashboard: React.FC = () => {
     return true;
   });
 
-  // Filtered Wholesale Catalog with Provider & Upstream Category Folders
+  // Filtered Wholesale Catalog with Upstream Category Folders (White-Labeled)
   const filteredWholesale = wholesaleCatalog.filter((item) => {
     const matchSearch =
       wholesaleSearch === '' ||
       item.name.toLowerCase().includes(wholesaleSearch.toLowerCase()) ||
       item.category.toLowerCase().includes(wholesaleSearch.toLowerCase()) ||
-      item.provider.toLowerCase().includes(wholesaleSearch.toLowerCase()) ||
       item.id.toLowerCase().includes(wholesaleSearch.toLowerCase());
 
     const matchCategory =
       wholesaleCategoryFilter === 'all' ||
       item.category.toLowerCase() === wholesaleCategoryFilter.toLowerCase();
 
-    const matchProvider =
-      wholesaleProviderFilter === 'all' ||
-      item.provider.toLowerCase() === wholesaleProviderFilter.toLowerCase();
-
-    return matchSearch && matchCategory && matchProvider;
+    return matchSearch && matchCategory;
   });
 
-  // Unique wholesale categories for filter chips (filtered by active provider)
+  // Unique wholesale categories for filter chips
   const wholesaleCategories = Array.from(
-    new Set(
-      wholesaleCatalog
-        .filter((i) => wholesaleProviderFilter === 'all' || i.provider.toLowerCase() === wholesaleProviderFilter.toLowerCase())
-        .map((i) => i.category)
-    )
+    new Set(wholesaleCatalog.map((i) => i.category))
   ).filter(Boolean);
 
   return (
@@ -1042,10 +1033,10 @@ export const Dashboard: React.FC = () => {
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
                 <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <Zap className="w-5 h-5 text-crimson-400" /> Upstream Wholesale Products
+                  <Zap className="w-5 h-5 text-crimson-400" /> Cloud Wholesale Sourcing Catalog
                 </h3>
                 <p className="text-xs text-zinc-400">
-                  Search live upstream products from DigitalCore & Canboso APIs. Filter by provider and default API folders, then import with 1 click!
+                  Search live digital products across global cloud providers. Filter by brand folders, set profit margins, and import to your bot with 1 click!
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2.5">
@@ -1072,62 +1063,7 @@ export const Dashboard: React.FC = () => {
               </div>
             </div>
 
-            {/* Upstream Provider Filter Tabs */}
-            <div className="flex items-center gap-2 border-b border-white/10 pb-3 overflow-x-auto">
-              <button
-                onClick={() => {
-                  setWholesaleProviderFilter('all');
-                  setWholesaleCategoryFilter('all');
-                }}
-                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
-                  wholesaleProviderFilter === 'all'
-                    ? 'bg-crimson-500 text-white shadow-md'
-                    : 'bg-carbon-800 text-zinc-400 hover:text-white'
-                }`}
-              >
-                <Layers className="w-3.5 h-3.5" />
-                <span>All Providers</span>
-                <span className="px-2 py-0.5 rounded-full text-[10px] bg-black/30 font-mono">
-                  {wholesaleCatalog.length}
-                </span>
-              </button>
-              <button
-                onClick={() => {
-                  setWholesaleProviderFilter('digitalcore');
-                  setWholesaleCategoryFilter('all');
-                }}
-                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
-                  wholesaleProviderFilter === 'digitalcore'
-                    ? 'bg-laser-600 text-white shadow-md'
-                    : 'bg-carbon-800 text-zinc-400 hover:text-white'
-                }`}
-              >
-                <Zap className="w-3.5 h-3.5 text-yellow-400" />
-                <span>DigitalCore API</span>
-                <span className="px-2 py-0.5 rounded-full text-[10px] bg-black/30 font-mono">
-                  {wholesaleCatalog.filter((i) => i.provider?.toLowerCase() === 'digitalcore').length}
-                </span>
-              </button>
-              <button
-                onClick={() => {
-                  setWholesaleProviderFilter('canboso');
-                  setWholesaleCategoryFilter('all');
-                }}
-                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
-                  wholesaleProviderFilter === 'canboso'
-                    ? 'bg-purple-600 text-white shadow-md'
-                    : 'bg-carbon-800 text-zinc-400 hover:text-white'
-                }`}
-              >
-                <ShoppingBag className="w-3.5 h-3.5 text-purple-300" />
-                <span>Canboso API</span>
-                <span className="px-2 py-0.5 rounded-full text-[10px] bg-black/30 font-mono">
-                  {wholesaleCatalog.filter((i) => i.provider?.toLowerCase() === 'canboso').length}
-                </span>
-              </button>
-            </div>
-
-            {/* Search Input & Category Filters */}
+            {/* Search Input & Category Folders */}
             <div className="glass-card rounded-2xl p-4 border border-white/10 space-y-3">
               <div className="relative">
                 <Search className="w-4 h-4 text-zinc-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -1148,10 +1084,10 @@ export const Dashboard: React.FC = () => {
                 )}
               </div>
 
-              {/* Category Filter Chips (Default API Folders) */}
+              {/* Category Filter Chips (Brand & Service Folders) */}
               <div className="space-y-1.5">
                 <div className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <FolderOpen className="w-3.5 h-3.5 text-laser-400" /> Default Upstream API Folders:
+                  <FolderOpen className="w-3.5 h-3.5 text-laser-400" /> Product Folders:
                 </div>
                 <div className="flex items-center gap-2 overflow-x-auto pt-0.5 pb-1">
                   <button
@@ -1164,14 +1100,12 @@ export const Dashboard: React.FC = () => {
                   >
                     <span>📁 All Folders</span>
                     <span className="text-[10px] opacity-80">
-                      ({wholesaleCatalog.filter((i) => wholesaleProviderFilter === 'all' || i.provider?.toLowerCase() === wholesaleProviderFilter.toLowerCase()).length})
+                      ({wholesaleCatalog.length})
                     </span>
                   </button>
                   {wholesaleCategories.map((cat) => {
                     const catCount = wholesaleCatalog.filter(
-                      (i) =>
-                        (wholesaleProviderFilter === 'all' || i.provider?.toLowerCase() === wholesaleProviderFilter.toLowerCase()) &&
-                        i.category?.toLowerCase() === cat.toLowerCase()
+                      (i) => i.category?.toLowerCase() === cat.toLowerCase()
                     ).length;
                     return (
                       <button
@@ -1200,7 +1134,7 @@ export const Dashboard: React.FC = () => {
                   <AlertCircle className="w-8 h-8 text-zinc-600 mx-auto" />
                   <p className="text-white font-semibold">No matching wholesale products found.</p>
                   <p className="text-xs text-zinc-400">
-                    Try adjusting your search query or check if upstream API keys are active.
+                    Try adjusting your search query or check if upstream catalog is active.
                   </p>
                 </div>
               ) : (
@@ -1211,15 +1145,15 @@ export const Dashboard: React.FC = () => {
                   >
                     <div className="space-y-2">
                       <div className="flex justify-between items-start gap-2">
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-carbon-800 text-zinc-400 uppercase">
-                          {item.provider}
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-carbon-800 text-laser-400 border border-laser-500/20 uppercase flex items-center gap-1">
+                          <span>{item.icon || '⚡'}</span> Cloud Sourcing
                         </span>
                         <span className="text-xs font-mono text-emerald-400 font-bold">
                           In Stock ({item.stock})
                         </span>
                       </div>
                       <h4 className="font-bold text-sm text-white">{item.name}</h4>
-                      <div className="text-xs text-zinc-400">Category: {item.category}</div>
+                      <div className="text-xs text-zinc-400">Folder: {item.category}</div>
                     </div>
 
                     <div className="border-t border-white/10 pt-3 flex items-center justify-between">
@@ -1361,7 +1295,7 @@ export const Dashboard: React.FC = () => {
                                   : 'bg-laser-500/20 text-laser-300'
                               }`}
                             >
-                              {p.provider === 'custom' ? 'Custom Stock' : `Wholesale (${p.provider})`}
+                              {p.provider === 'custom' ? 'Custom Stock' : 'Cloud Sourcing (Auto)'}
                             </span>
                           </td>
                           <td className="p-4 font-mono">
@@ -1646,6 +1580,82 @@ export const Dashboard: React.FC = () => {
                     }
                     className="w-full px-4 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-crimson-500"
                   />
+                </div>
+              </div>
+            </div>
+
+            {/* Merchant's Own Automated Binance Pay Setup */}
+            <div className="glass-card rounded-2xl p-6 border border-white/10 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs font-mono font-bold text-yellow-400 uppercase flex items-center gap-1.5">
+                    <span>🟡</span> 4. Your Merchant Binance Pay (Automated Instant Deposits)
+                  </h4>
+                  <p className="text-xs text-zinc-400 mt-1">
+                    Allow your Telegram bot customers to deposit USDT directly to your personal Binance account with instant, zero-touch verification via Binance SAPI.
+                  </p>
+                </div>
+                <span className="px-2.5 py-1 rounded-full text-[10px] font-mono font-bold bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">
+                  {settingsData.binanceConfig?.uid ? 'CONFIGURED' : 'OPTIONAL'}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                    Your Binance Pay UID <span className="text-crimson-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 123456789"
+                    value={settingsData.binanceConfig?.uid || ''}
+                    onChange={(e) =>
+                      setSettingsData({
+                        ...settingsData,
+                        binanceConfig: { ...settingsData.binanceConfig, uid: e.target.value.trim() },
+                      })
+                    }
+                    className="w-full px-4 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-yellow-500"
+                  />
+                  <span className="text-[10px] text-zinc-500 mt-1 block">Found in Binance App &rarr; Pay &rarr; My Pay ID</span>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                    Binance API Key
+                  </label>
+                  <input
+                    type="text"
+                    placeholder={settingsData.binanceConfig?.apiKey || 'Paste API Key'}
+                    value={settingsData.binanceConfig?.apiKey?.includes('••••') ? '' : settingsData.binanceConfig?.apiKey || ''}
+                    onChange={(e) =>
+                      setSettingsData({
+                        ...settingsData,
+                        binanceConfig: { ...settingsData.binanceConfig, apiKey: e.target.value.trim() },
+                      })
+                    }
+                    className="w-full px-4 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-yellow-500"
+                  />
+                  <span className="text-[10px] text-zinc-500 mt-1 block">API Key with Pay Query permission</span>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                    Binance API Secret
+                  </label>
+                  <input
+                    type="password"
+                    placeholder={settingsData.binanceConfig?.hasSecret ? '•••••••• (Secret Configured)' : 'Paste API Secret'}
+                    value={settingsData.binanceConfig?.apiSecret || ''}
+                    onChange={(e) =>
+                      setSettingsData({
+                        ...settingsData,
+                        binanceConfig: { ...settingsData.binanceConfig, apiSecret: e.target.value.trim() },
+                      })
+                    }
+                    className="w-full px-4 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-yellow-500"
+                  />
+                  <span className="text-[10px] text-zinc-500 mt-1 block">Encrypted with AES-256 in database</span>
                 </div>
               </div>
             </div>
@@ -2105,7 +2115,7 @@ export const Dashboard: React.FC = () => {
                 <div>
                   <span className="font-bold text-xs block text-white">Clear Wholesale Items Only</span>
                   <span className="text-[11px] text-zinc-400">
-                    Purges DigitalCore & Canboso items ({products.filter((p) => p.provider !== 'custom').length} products), preserving your custom accounts.
+                    Purges cloud wholesale catalog items ({products.filter((p) => p.provider !== 'custom').length} products), preserving your custom accounts.
                   </span>
                 </div>
               </label>
@@ -2166,7 +2176,7 @@ export const Dashboard: React.FC = () => {
             </div>
 
             <p className="text-xs text-zinc-400">
-              Set a unified profit margin for all wholesale products. When upstream providers (DigitalCore/Canboso) change prices, your retail selling prices automatically update to preserve your profit!
+              Set a unified profit margin for all wholesale products. When upstream cloud providers change prices, your retail selling prices automatically update to preserve your profit!
             </p>
 
             <form onSubmit={handleApplyGlobalMargin} className="space-y-4 pt-2">

@@ -24,6 +24,7 @@ import {
   Sliders,
   Folder,
   FolderOpen,
+  Ban,
 } from 'lucide-react';
 
 export const GodMode: React.FC = () => {
@@ -227,6 +228,38 @@ export const GodMode: React.FC = () => {
       );
     } catch (err: any) {
       alert(err.response?.data?.error || 'Failed to delete product rule');
+    }
+  };
+
+  // 1-Click Bulk Wholesale Governance Action
+  const handleBulkWholesaleAction = async (action: 'disable_all' | 'enable_all' | 'set_tier', minPlanTier?: string) => {
+    const providerName = wholesaleProviderFilter.toUpperCase();
+    const confirmMsg =
+      action === 'disable_all'
+        ? `Disable all wholesale products currently shown (${providerName})? They will immediately be hidden from all merchant stores and Telegram bots.`
+        : action === 'enable_all'
+        ? `Enable all wholesale products (${providerName}) for merchants?`
+        : `Set minimum plan tier for all ${providerName} products to "${minPlanTier}"?`;
+
+    if (!confirm(confirmMsg)) return;
+
+    try {
+      setWholesaleLoading(true);
+      const res = await axios.post(
+        '/api/godmode/wholesale-rules/bulk',
+        {
+          action,
+          provider: wholesaleProviderFilter,
+          minPlanTier,
+        },
+        getHeaders()
+      );
+      alert(res.data.message || 'Bulk action executed successfully.');
+      await loadWholesaleCatalog();
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Bulk action failed');
+    } finally {
+      setWholesaleLoading(false);
     }
   };
 
@@ -590,12 +623,28 @@ export const GodMode: React.FC = () => {
                   Control which wholesale products are available to merchants, set minimum subscription plan tiers, or 1-click delete/disable items.
                 </p>
               </div>
-              <button
-                onClick={loadWholesaleCatalog}
-                className="px-4 py-2 rounded-xl bg-carbon-800 hover:bg-carbon-700 text-zinc-300 text-xs font-mono flex items-center gap-2 self-start"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${wholesaleLoading ? 'animate-spin' : ''}`} /> Refresh Upstream
-              </button>
+              <div className="flex flex-wrap items-center gap-2 self-start">
+                <button
+                  onClick={() => handleBulkWholesaleAction('disable_all')}
+                  className="px-3.5 py-2 rounded-xl bg-red-600/20 hover:bg-red-600/30 border border-red-500/40 text-red-300 text-xs font-mono font-bold flex items-center gap-1.5 transition-all shadow-sm"
+                  title="1-Click Disable All wholesale items currently filtered"
+                >
+                  <Ban className="w-3.5 h-3.5" /> 1-Click Disable All
+                </button>
+                <button
+                  onClick={() => handleBulkWholesaleAction('enable_all')}
+                  className="px-3.5 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 text-xs font-mono font-bold flex items-center gap-1.5 transition-all shadow-sm"
+                  title="1-Click Enable All wholesale items currently filtered"
+                >
+                  <CheckCircle className="w-3.5 h-3.5" /> 1-Click Enable All
+                </button>
+                <button
+                  onClick={loadWholesaleCatalog}
+                  className="px-4 py-2 rounded-xl bg-carbon-800 hover:bg-carbon-700 text-zinc-300 text-xs font-mono flex items-center gap-2"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${wholesaleLoading ? 'animate-spin' : ''}`} /> Refresh Upstream
+                </button>
+              </div>
             </div>
 
             {/* Upstream Provider Filter Tabs */}

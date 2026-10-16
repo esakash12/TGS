@@ -64,6 +64,33 @@ export function invalidateWholesaleCache() {
   catalogCache = null;
 }
 
+export function extractCategoryFromProduct(name: string, idOrSlug?: string, emoji?: string): { category: string; icon: string } {
+  const combined = `${name || ''} ${idOrSlug || ''} ${emoji || ''}`.toLowerCase();
+
+  if (/gemini/i.test(combined)) return { category: 'Gemini', icon: '🇬' };
+  if (/chatgpt|openai|gpt/i.test(combined)) return { category: 'ChatGPT', icon: '🤖' };
+  if (/claude|anthropic/i.test(combined)) return { category: 'Claude', icon: '☀️' };
+  if (/notion/i.test(combined)) return { category: 'Notion Business', icon: '🗃' };
+  if (/github/i.test(combined)) return { category: 'GitHub', icon: '🐙' };
+  if (/capcut/i.test(combined)) return { category: 'CapCut', icon: '🎬' };
+  if (/grok|x\.ai/i.test(combined)) return { category: 'Grok', icon: '𝕏' };
+  if (/canva/i.test(combined)) return { category: 'Canva', icon: '🎨' };
+  if (/loveable/i.test(combined)) return { category: 'Loveable Pro', icon: '🚀' };
+  if (/telegram|tg\s*prem/i.test(combined)) return { category: 'Telegram Premium', icon: '✈️' };
+  if (/vpn|nord|express|surfshark/i.test(combined)) return { category: 'VPN', icon: '🛡️' };
+  if (/youtube/i.test(combined)) return { category: 'YouTube', icon: '▶️' };
+  if (/email|gmail|mail/i.test(combined)) return { category: 'Email', icon: '✉️' };
+  if (/figma/i.test(combined)) return { category: 'Figma', icon: '🖋️' };
+  if (/duolingo/i.test(combined)) return { category: 'Doulingo', icon: '🦉' };
+  if (/leonardo/i.test(combined)) return { category: 'Leonardo AI', icon: '🎨' };
+  if (/muse/i.test(combined)) return { category: 'Muse AI', icon: '♾️' };
+  if (/netflix|spotify|disney|prime|hulu|crunchyroll|streaming/i.test(combined)) return { category: 'Streaming & OTT', icon: '🍿' };
+  if (/api\s*key|api\s*gateway|tokens/i.test(combined)) return { category: 'API Keys', icon: '🔑' };
+  if (/cursor|v0|replit|developer/i.test(combined)) return { category: 'Developer Tools', icon: '💻' };
+
+  return { category: 'General Digital', icon: '📦' };
+}
+
 export const PLAN_TIERS_RANK: Record<string, number> = {
   starter: 1,
   pro: 2,
@@ -95,6 +122,7 @@ export async function fetchLiveWholesaleCatalog(forceRefresh = false): Promise<W
       if (Array.isArray(res.data)) {
         for (const item of res.data) {
           const basePrice = Number(item.price || 0);
+          const catInfo = extractCategoryFromProduct(item.name, item.id);
           allProducts.push({
             id: `dc_${item.id}`,
             name: item.name,
@@ -102,7 +130,9 @@ export async function fetchLiveWholesaleCatalog(forceRefresh = false): Promise<W
             base_price_usd: basePrice,
             cost_with_platform_fee_usd: applyPlatformFee(basePrice),
             stock: Number(item.stock || 0),
-            category: item.category || 'Digital Services',
+            category: catInfo.category,
+            icon: catInfo.icon,
+            description: item.description || '',
           });
         }
       }
@@ -121,6 +151,7 @@ export async function fetchLiveWholesaleCatalog(forceRefresh = false): Promise<W
       if (res.data?.success && Array.isArray(res.data.products)) {
         for (const item of res.data.products) {
           const basePrice = Number(item.price?.amount || 0);
+          const catInfo = extractCategoryFromProduct(item.name, String(item.productId), item.emoji);
           allProducts.push({
             id: `cb_${item.productId}`,
             name: item.name,
@@ -128,7 +159,9 @@ export async function fetchLiveWholesaleCatalog(forceRefresh = false): Promise<W
             base_price_usd: basePrice,
             cost_with_platform_fee_usd: applyPlatformFee(basePrice),
             stock: Number(item.availability?.available ?? 999),
-            category: 'VPN & Streaming',
+            category: catInfo.category,
+            icon: catInfo.icon,
+            description: item.description || '',
           });
         }
       }

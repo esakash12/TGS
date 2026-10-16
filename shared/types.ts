@@ -179,6 +179,8 @@ export interface WholesaleProductDTO {
   cost_with_platform_fee_usd: number; // Merchant sees this
   stock: number;
   category: string;
+  icon?: string;
+  description?: string;
   is_active_platform?: number; // 1 = available, 0 = globally disabled by owner
   min_plan_tier?: 'starter' | 'pro' | 'enterprise';
 }
