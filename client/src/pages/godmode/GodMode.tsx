@@ -22,6 +22,8 @@ import {
   EyeOff,
   ShoppingBag,
   Sliders,
+  Folder,
+  FolderOpen,
 } from 'lucide-react';
 
 export const GodMode: React.FC = () => {
@@ -37,6 +39,8 @@ export const GodMode: React.FC = () => {
   const [merchants, setMerchants] = useState<any[]>([]);
   const [wholesaleCatalog, setWholesaleCatalog] = useState<any[]>([]);
   const [wholesaleSearch, setWholesaleSearch] = useState('');
+  const [wholesaleProviderFilter, setWholesaleProviderFilter] = useState<'all' | 'digitalcore' | 'canboso'>('all');
+  const [wholesaleCategoryFilter, setWholesaleCategoryFilter] = useState('all');
   const [wholesaleLoading, setWholesaleLoading] = useState(false);
 
   const [config, setConfig] = useState<any>({
@@ -239,17 +243,34 @@ export const GodMode: React.FC = () => {
     }
   };
 
-  // Filtered Wholesale Catalog for GodMode
+  // Filtered Wholesale Catalog for GodMode (with Provider & API Category Folders)
   const filteredWholesale = wholesaleCatalog.filter((item) => {
-    if (!wholesaleSearch) return true;
-    const q = wholesaleSearch.toLowerCase();
-    return (
+    const q = wholesaleSearch ? wholesaleSearch.toLowerCase().trim() : '';
+    const matchSearch =
+      !q ||
       item.name.toLowerCase().includes(q) ||
       item.category.toLowerCase().includes(q) ||
       item.provider.toLowerCase().includes(q) ||
-      item.id.toLowerCase().includes(q)
-    );
+      item.id.toLowerCase().includes(q);
+
+    const matchProvider =
+      wholesaleProviderFilter === 'all' ||
+      item.provider.toLowerCase() === wholesaleProviderFilter.toLowerCase();
+
+    const matchCategory =
+      wholesaleCategoryFilter === 'all' ||
+      item.category.toLowerCase() === wholesaleCategoryFilter.toLowerCase();
+
+    return matchSearch && matchProvider && matchCategory;
   });
+
+  const wholesaleCategories = Array.from(
+    new Set(
+      wholesaleCatalog
+        .filter((i) => wholesaleProviderFilter === 'all' || i.provider.toLowerCase() === wholesaleProviderFilter.toLowerCase())
+        .map((i) => i.category)
+    )
+  ).filter(Boolean);
 
   // ==========================================
   // VIEW A: CYBER TERMINAL LOCK SCREEN
@@ -577,16 +598,117 @@ export const GodMode: React.FC = () => {
               </button>
             </div>
 
-            {/* Search Input */}
-            <div className="relative">
-              <Search className="w-4 h-4 text-zinc-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="Search upstream catalog by product name, category, or ID..."
-                value={wholesaleSearch}
-                onChange={(e) => setWholesaleSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-carbon-900 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-crimson-500"
-              />
+            {/* Upstream Provider Filter Tabs */}
+            <div className="flex items-center gap-2 border-b border-white/10 pb-3 overflow-x-auto">
+              <button
+                onClick={() => {
+                  setWholesaleProviderFilter('all');
+                  setWholesaleCategoryFilter('all');
+                }}
+                className={`px-4 py-2 rounded-xl text-xs font-mono font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
+                  wholesaleProviderFilter === 'all'
+                    ? 'bg-crimson-600 text-white shadow-md shadow-crimson-600/30'
+                    : 'bg-carbon-900 text-zinc-400 hover:text-white border border-white/5'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>ALL PROVIDERS</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] bg-black/40">
+                  {wholesaleCatalog.length}
+                </span>
+              </button>
+              <button
+                onClick={() => {
+                  setWholesaleProviderFilter('digitalcore');
+                  setWholesaleCategoryFilter('all');
+                }}
+                className={`px-4 py-2 rounded-xl text-xs font-mono font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
+                  wholesaleProviderFilter === 'digitalcore'
+                    ? 'bg-laser-600 text-white shadow-md shadow-laser-600/30'
+                    : 'bg-carbon-900 text-zinc-400 hover:text-white border border-white/5'
+                }`}
+              >
+                <Zap className="w-3.5 h-3.5 text-yellow-400" />
+                <span>DIGITALCORE API</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] bg-black/40">
+                  {wholesaleCatalog.filter((i) => i.provider?.toLowerCase() === 'digitalcore').length}
+                </span>
+              </button>
+              <button
+                onClick={() => {
+                  setWholesaleProviderFilter('canboso');
+                  setWholesaleCategoryFilter('all');
+                }}
+                className={`px-4 py-2 rounded-xl text-xs font-mono font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
+                  wholesaleProviderFilter === 'canboso'
+                    ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30'
+                    : 'bg-carbon-900 text-zinc-400 hover:text-white border border-white/5'
+                }`}
+              >
+                <ShoppingBag className="w-3.5 h-3.5 text-purple-300" />
+                <span>CANBOSO API</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] bg-black/40">
+                  {wholesaleCatalog.filter((i) => i.provider?.toLowerCase() === 'canboso').length}
+                </span>
+              </button>
+            </div>
+
+            {/* Search Input & Category Filters */}
+            <div className="glass-card-cyber rounded-2xl p-4 border border-white/10 space-y-3">
+              <div className="relative">
+                <Search className="w-4 h-4 text-zinc-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Search upstream catalog by product name, category folder, or ID..."
+                  value={wholesaleSearch}
+                  onChange={(e) => setWholesaleSearch(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-carbon-900 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-crimson-500"
+                />
+              </div>
+
+              {/* Upstream Category Folder Chips */}
+              <div className="space-y-1.5">
+                <div className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider font-mono flex items-center gap-1.5">
+                  <FolderOpen className="w-3.5 h-3.5 text-laser-400" /> UPSTREAM API FOLDERS:
+                </div>
+                <div className="flex items-center gap-2 overflow-x-auto pt-0.5 pb-1">
+                  <button
+                    onClick={() => setWholesaleCategoryFilter('all')}
+                    className={`px-3 py-1 rounded-lg text-xs font-mono font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                      wholesaleCategoryFilter === 'all'
+                        ? 'bg-crimson-600 text-white shadow'
+                        : 'bg-carbon-900 text-zinc-400 hover:text-white border border-white/5'
+                    }`}
+                  >
+                    <span>📁 ALL FOLDERS</span>
+                    <span className="text-[10px] opacity-80">
+                      ({wholesaleCatalog.filter((i) => wholesaleProviderFilter === 'all' || i.provider?.toLowerCase() === wholesaleProviderFilter.toLowerCase()).length})
+                    </span>
+                  </button>
+                  {wholesaleCategories.map((cat) => {
+                    const catCount = wholesaleCatalog.filter(
+                      (i) =>
+                        (wholesaleProviderFilter === 'all' || i.provider?.toLowerCase() === wholesaleProviderFilter.toLowerCase()) &&
+                        i.category?.toLowerCase() === cat.toLowerCase()
+                    ).length;
+                    return (
+                      <button
+                        key={cat}
+                        onClick={() => setWholesaleCategoryFilter(cat)}
+                        className={`px-3 py-1 rounded-lg text-xs font-mono font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                          wholesaleCategoryFilter.toLowerCase() === cat.toLowerCase()
+                            ? 'bg-crimson-600 text-white shadow'
+                            : 'bg-carbon-900 text-zinc-400 hover:text-white border border-white/5'
+                        }`}
+                      >
+                        <Folder className="w-3 h-3 opacity-60" />
+                        <span>{cat}</span>
+                        <span className="text-[10px] opacity-75">({catCount})</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
 
             {/* Governance Table */}

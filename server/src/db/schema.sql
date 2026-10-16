@@ -71,6 +71,9 @@ CREATE TABLE IF NOT EXISTS products (
     provider_product_id TEXT,
     wholesale_price_usd NUMERIC DEFAULT 0.0,
     retail_price_usd NUMERIC NOT NULL,
+    markup_fixed_usd NUMERIC DEFAULT 0.0,
+    markup_pct NUMERIC DEFAULT 0.0,
+    pricing_mode TEXT DEFAULT 'fixed', -- fixed, pct
     stock INTEGER DEFAULT 0,
     is_active INTEGER DEFAULT 1,
     description TEXT,

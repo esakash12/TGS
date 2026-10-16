@@ -124,7 +124,7 @@ godmodeRouter.get('/merchants', (_req: Request, res: Response) => {
 
 // 1-Click Emergency Killswitch (Toggle SUSPENDED / ACTIVE)
 godmodeRouter.post('/merchants/:id/status', async (req: Request, res: Response) => {
-  const tenantId = req.params.id;
+  const tenantId = String(req.params.id);
   const { status } = req.body;
 
   if (status !== 'ACTIVE' && status !== 'SUSPENDED') {
@@ -145,7 +145,7 @@ godmodeRouter.post('/merchants/:id/status', async (req: Request, res: Response) 
 
 // Adjust Merchant Wholesale Wallet Balance
 godmodeRouter.post('/merchants/:id/adjust-wallet', (req: Request, res: Response) => {
-  const tenantId = req.params.id;
+  const tenantId = String(req.params.id);
   const { amountDeltaUsd, note } = req.body;
 
   if (amountDeltaUsd === undefined || isNaN(Number(amountDeltaUsd))) {

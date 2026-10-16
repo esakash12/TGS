@@ -268,3 +268,54 @@ export async function purchaseUpstreamProduct(params: {
 
   return { success: false, deliveredItems: [], orderId: '', error: 'Unknown provider' };
 }
+
+export async function syncLivePricesForTenant(tenantId: string): Promise<{ updatedCount: number; totalWholesale: number }> {
+  const catalog = await fetchLiveWholesaleCatalog(true);
+  const catalogMap = new Map<string, WholesaleProductDTO>();
+  for (const item of catalog) {
+    catalogMap.set(item.id, item);
+  }
+
+  const wholesaleProducts = db.prepare(`
+    SELECT * FROM products WHERE tenant_id = ? AND provider != 'custom'
+  `).all(tenantId) as any[];
+
+  let updatedCount = 0;
+
+  const updateTx = db.transaction(() => {
+    for (const p of wholesaleProducts) {
+      if (!p.provider_product_id) continue;
+      const upstreamItem = catalogMap.get(p.provider_product_id);
+      if (!upstreamItem) continue;
+
+      const currentUpstreamCost = upstreamItem.cost_with_platform_fee_usd;
+      let newRetailPrice = p.retail_price_usd;
+      let fixedMargin: number | null = null;
+
+      if (p.pricing_mode === 'pct' && p.markup_pct) {
+        newRetailPrice = Number((currentUpstreamCost * (1 + p.markup_pct / 100)).toFixed(2));
+      } else {
+        // Fixed USD margin rule
+        fixedMargin = p.markup_fixed_usd !== undefined && p.markup_fixed_usd !== null
+          ? Number(p.markup_fixed_usd)
+          : Math.max(0, Number((p.retail_price_usd - p.wholesale_price_usd).toFixed(2)));
+        newRetailPrice = Number((currentUpstreamCost + fixedMargin).toFixed(2));
+      }
+
+      if (Number(p.wholesale_price_usd) !== currentUpstreamCost || Number(p.retail_price_usd) !== newRetailPrice) {
+        db.prepare(`
+          UPDATE products
+          SET wholesale_price_usd = ?,
+              retail_price_usd = ?,
+              markup_fixed_usd = COALESCE(markup_fixed_usd, ?)
+          WHERE id = ? AND tenant_id = ?
+        `).run(currentUpstreamCost, newRetailPrice, fixedMargin, p.id, tenantId);
+        updatedCount++;
+      }
+    }
+  });
+
+  updateTx();
+  return { updatedCount, totalWholesale: wholesaleProducts.length };
+}
+

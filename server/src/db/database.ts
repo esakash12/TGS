@@ -32,8 +32,26 @@ export function initDatabase() {
       db.exec(`ALTER TABLE products ADD COLUMN group_id TEXT REFERENCES product_groups(id) ON DELETE SET NULL;`);
       console.log('✅ Migrated products table: added group_id column');
     }
+
+    const hasMarkupFixed = tableInfo.some((col: any) => col.name === 'markup_fixed_usd');
+    if (!hasMarkupFixed) {
+      db.exec(`ALTER TABLE products ADD COLUMN markup_fixed_usd NUMERIC DEFAULT 0.0;`);
+      console.log('✅ Migrated products table: added markup_fixed_usd column');
+    }
+
+    const hasMarkupPct = tableInfo.some((col: any) => col.name === 'markup_pct');
+    if (!hasMarkupPct) {
+      db.exec(`ALTER TABLE products ADD COLUMN markup_pct NUMERIC DEFAULT 0.0;`);
+      console.log('✅ Migrated products table: added markup_pct column');
+    }
+
+    const hasPricingMode = tableInfo.some((col: any) => col.name === 'pricing_mode');
+    if (!hasPricingMode) {
+      db.exec(`ALTER TABLE products ADD COLUMN pricing_mode TEXT DEFAULT 'fixed';`);
+      console.log('✅ Migrated products table: added pricing_mode column');
+    }
   } catch (err: any) {
-    console.warn('Migration notice (group_id):', err.message);
+    console.warn('Migration notice (products columns):', err.message);
   }
 
   console.log('✅ SQLite WAL Database initialized successfully at:', DB_PATH);

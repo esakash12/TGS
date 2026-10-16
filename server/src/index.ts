@@ -27,7 +27,7 @@ app.use('/api/godmode', godmodeRouter);
 
 // Telegram Webhook Endpoint for Multi-Bot Routing
 app.post('/api/webhook/telegram/:slug', async (req: Request, res: Response) => {
-  const { slug } = req.params;
+  const slug = String(req.params.slug);
   const update = req.body;
 
   try {

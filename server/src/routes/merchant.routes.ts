@@ -2,7 +2,11 @@ import { Router, Response } from 'express';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
 import { db } from '../db/database';
 import { encrypt, decrypt } from '../services/crypto';
-import { fetchLiveWholesaleCatalog, fetchLiveWholesaleCatalogForMerchant } from '../services/wholesale';
+import {
+  fetchLiveWholesaleCatalog,
+  fetchLiveWholesaleCatalogForMerchant,
+  syncLivePricesForTenant,
+} from '../services/wholesale';
 import { verifyMerchantWholesaleTopup } from '../services/binance';
 import { botRegistry } from '../../../bot/src/registry';
 
@@ -272,11 +276,23 @@ merchantRouter.put('/products/:id', (req: AuthenticatedRequest, res: Response) =
   const productId = req.params.id;
   const { name, category, retailPriceUsd, isActive, description, groupId } = req.body;
 
+  const current = db.prepare('SELECT * FROM products WHERE id = ? AND tenant_id = ?').get(productId, tenantId) as any;
+  if (!current) {
+    return res.status(404).json({ error: 'Product not found.' });
+  }
+
+  let markupFixed = current.markup_fixed_usd;
+  if (retailPriceUsd && current.provider !== 'custom') {
+    markupFixed = Number((Number(retailPriceUsd) - Number(current.wholesale_price_usd)).toFixed(2));
+  }
+
   db.prepare(`
     UPDATE products 
     SET name = COALESCE(?, name),
         category = COALESCE(?, category),
         retail_price_usd = COALESCE(?, retail_price_usd),
+        markup_fixed_usd = COALESCE(?, markup_fixed_usd),
+        pricing_mode = 'fixed',
         is_active = COALESCE(?, is_active),
         description = COALESCE(?, description),
         group_id = CASE WHEN ? IS NOT NULL THEN ? ELSE group_id END
@@ -285,6 +301,7 @@ merchantRouter.put('/products/:id', (req: AuthenticatedRequest, res: Response) =
     name ? name.trim() : null,
     category ? category.trim() : null,
     retailPriceUsd ? Number(retailPriceUsd) : null,
+    markupFixed !== undefined ? Number(markupFixed) : null,
     isActive !== undefined ? (isActive ? 1 : 0) : null,
     description,
     groupId !== undefined ? groupId : null,
@@ -300,6 +317,77 @@ merchantRouter.put('/products/:id', (req: AuthenticatedRequest, res: Response) =
     WHERE p.id = ?
   `).get(productId);
   res.json(updated);
+});
+
+// Bulk Clear / Delete Products (all, wholesale only, or custom only)
+merchantRouter.delete('/products/clear-all', (req: AuthenticatedRequest, res: Response) => {
+  const tenantId = req.tenant.id;
+  const type = (req.query.type as string) || 'all'; // 'all' | 'wholesale' | 'custom'
+
+  let deleteSql = 'DELETE FROM products WHERE tenant_id = ?';
+  if (type === 'wholesale') {
+    deleteSql += " AND provider != 'custom'";
+  } else if (type === 'custom') {
+    deleteSql += " AND provider = 'custom'";
+  }
+
+  const result = db.prepare(deleteSql).run(tenantId);
+  res.json({ success: true, count: result.changes, message: `Successfully deleted ${result.changes} products from your store.` });
+});
+
+// Apply Global Profit Margin across all wholesale products
+merchantRouter.post('/products/apply-margin', (req: AuthenticatedRequest, res: Response) => {
+  const tenantId = req.tenant.id;
+  const { marginFixedUsd, marginPct, mode } = req.body;
+  const pricingMode = mode === 'pct' ? 'pct' : 'fixed';
+
+  const wholesaleProducts = db.prepare(`
+    SELECT id, wholesale_price_usd FROM products WHERE tenant_id = ? AND provider != 'custom'
+  `).all(tenantId) as any[];
+
+  const updateTx = db.transaction(() => {
+    for (const p of wholesaleProducts) {
+      let newRetail = 0;
+      if (pricingMode === 'pct') {
+        const pct = Number(marginPct || 20);
+        newRetail = Number((p.wholesale_price_usd * (1 + pct / 100)).toFixed(2));
+        db.prepare(`
+          UPDATE products 
+          SET retail_price_usd = ?, markup_pct = ?, pricing_mode = 'pct'
+          WHERE id = ? AND tenant_id = ?
+        `).run(newRetail, pct, p.id, tenantId);
+      } else {
+        const fixed = Number(marginFixedUsd || 0.20);
+        newRetail = Number((p.wholesale_price_usd + fixed).toFixed(2));
+        db.prepare(`
+          UPDATE products 
+          SET retail_price_usd = ?, markup_fixed_usd = ?, pricing_mode = 'fixed'
+          WHERE id = ? AND tenant_id = ?
+        `).run(newRetail, fixed, p.id, tenantId);
+      }
+    }
+
+    db.prepare(`
+      UPDATE tenants 
+      SET global_markup_fixed_usd = COALESCE(?, global_markup_fixed_usd),
+          global_markup_pct = COALESCE(?, global_markup_pct)
+      WHERE id = ?
+    `).run(marginFixedUsd !== undefined ? Number(marginFixedUsd) : null, marginPct !== undefined ? Number(marginPct) : null, tenantId);
+  });
+
+  updateTx();
+  res.json({ success: true, updatedCount: wholesaleProducts.length, pricingMode });
+});
+
+// Sync live upstream wholesale prices & auto-adjust retail selling prices based on margins
+merchantRouter.post('/products/sync-prices', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const tenantId = req.tenant.id;
+    const result = await syncLivePricesForTenant(tenantId);
+    res.json({ success: true, ...result });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to sync prices: ' + err.message });
+  }
 });
 
 // Delete product
@@ -336,18 +424,20 @@ merchantRouter.post('/wholesale/import', (req: AuthenticatedRequest, res: Respon
     return res.status(400).json({ error: 'Missing product ID or retail price' });
   }
 
+  const markupFixed = Number((Number(retailPriceUsd) - Number(wholesaleCostUsd)).toFixed(2));
+
   // Check if already imported
   const existing = db.prepare(`
     SELECT id FROM products WHERE tenant_id = ? AND provider_product_id = ?
   `).get(tenantId, wholesaleProductId) as any;
 
   if (existing) {
-    // update price, group and reactivate
+    // update price, group, margin and reactivate
     db.prepare(`
       UPDATE products 
-      SET retail_price_usd = ?, wholesale_price_usd = ?, group_id = COALESCE(?, group_id), is_active = 1 
+      SET retail_price_usd = ?, wholesale_price_usd = ?, markup_fixed_usd = ?, pricing_mode = 'fixed', group_id = COALESCE(?, group_id), is_active = 1 
       WHERE tenant_id = ? AND provider_product_id = ?
-    `).run(Number(retailPriceUsd), Number(wholesaleCostUsd), groupId || null, tenantId, wholesaleProductId);
+    `).run(Number(retailPriceUsd), Number(wholesaleCostUsd), markupFixed, groupId || null, tenantId, wholesaleProductId);
     return res.json({ success: true, updated: true, productId: existing.id });
   }
 
@@ -355,8 +445,8 @@ merchantRouter.post('/wholesale/import', (req: AuthenticatedRequest, res: Respon
   db.prepare(`
     INSERT INTO products (
       id, tenant_id, group_id, name, category, provider, provider_product_id,
-      wholesale_price_usd, retail_price_usd, stock, is_active
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 999, 1)
+      wholesale_price_usd, retail_price_usd, markup_fixed_usd, pricing_mode, stock, is_active
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'fixed', 999, 1)
   `).run(
     productId,
     tenantId,
@@ -366,7 +456,8 @@ merchantRouter.post('/wholesale/import', (req: AuthenticatedRequest, res: Respon
     provider || 'digitalcore',
     wholesaleProductId,
     Number(wholesaleCostUsd),
-    Number(retailPriceUsd)
+    Number(retailPriceUsd),
+    markupFixed
   );
 
   res.status(201).json({ success: true, productId });

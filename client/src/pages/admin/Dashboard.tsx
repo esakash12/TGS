@@ -31,6 +31,13 @@ import {
   Eye,
   EyeOff,
   Trash2,
+  Edit3,
+  Sliders,
+  DollarSign,
+  Layers,
+  FolderOpen,
+  ArrowUpDown,
+  Check,
 } from 'lucide-react';
 
 export const Dashboard: React.FC = () => {
@@ -48,7 +55,27 @@ export const Dashboard: React.FC = () => {
   // Filter & Search states
   const [storeFilter, setStoreFilter] = useState<'all' | 'custom' | 'wholesale'>('all');
   const [wholesaleSearch, setWholesaleSearch] = useState('');
+  const [wholesaleProviderFilter, setWholesaleProviderFilter] = useState<'all' | 'digitalcore' | 'canboso'>('all');
   const [wholesaleCategoryFilter, setWholesaleCategoryFilter] = useState('all');
+
+  // Clear Store / Products Modal
+  const [showClearModal, setShowClearModal] = useState(false);
+  const [clearScope, setClearScope] = useState<'all' | 'wholesale' | 'custom'>('all');
+  const [clearLoading, setClearLoading] = useState(false);
+
+  // Margin Management Modal
+  const [showMarginModal, setShowMarginModal] = useState(false);
+  const [marginMode, setMarginMode] = useState<'fixed' | 'pct'>('fixed');
+  const [marginFixedUsd, setMarginFixedUsd] = useState('0.20');
+  const [marginPct, setMarginPct] = useState('20');
+  const [marginLoading, setMarginLoading] = useState(false);
+
+  // Sync Live Prices State
+  const [syncingPrices, setSyncingPrices] = useState(false);
+
+  // Inline Price Edit Modal / State
+  const [editingProduct, setEditingProduct] = useState<any | null>(null);
+  const [newEditPrice, setNewEditPrice] = useState('');
 
   // Wholesale Topup Modal
   const [showTopupModal, setShowTopupModal] = useState(false);
@@ -79,6 +106,8 @@ export const Dashboard: React.FC = () => {
   const [importGroupId, setImportGroupId] = useState('');
   const [importRetailPrice, setImportRetailPrice] = useState('');
   const [importLoading, setImportLoading] = useState(false);
+  const [showNewCatInputInImport, setShowNewCatInputInImport] = useState(false);
+  const [importNewCategoryName, setImportNewCategoryName] = useState('');
 
   // Settings State
   const [settingsData, setSettingsData] = useState<any>({
@@ -302,10 +331,12 @@ export const Dashboard: React.FC = () => {
   // Open Wholesale Import Modal
   const handleOpenImportModal = (item: any) => {
     setImportModalItem(item);
-    // Suggest 30% margin by default
-    const suggestedPrice = (item.cost_with_platform_fee_usd * 1.30).toFixed(2);
-    setImportRetailPrice(suggestedPrice);
-    setImportGroupId('');
+    const defaultMargin = parseFloat(marginFixedUsd) || 0.20;
+    const calculatedPrice = (item.cost_with_platform_fee_usd + defaultMargin).toFixed(2);
+    setImportRetailPrice(calculatedPrice);
+    setImportGroupId(groups.length > 0 ? groups[0].id : '');
+    setShowNewCatInputInImport(false);
+    setImportNewCategoryName('');
   };
 
   // Confirm Wholesale Import
@@ -314,6 +345,18 @@ export const Dashboard: React.FC = () => {
     if (!importModalItem) return;
     setImportLoading(true);
     try {
+      let finalGroupId = importGroupId || null;
+
+      if (showNewCatInputInImport && importNewCategoryName.trim()) {
+        const catRes = await axios.post(
+          '/api/merchant/groups',
+          { name: importNewCategoryName.trim(), icon: '📁', sortOrder: 0 },
+          authHeaders
+        );
+        finalGroupId = catRes.data?.id || null;
+        loadGroups();
+      }
+
       await axios.post(
         '/api/merchant/wholesale/import',
         {
@@ -323,7 +366,7 @@ export const Dashboard: React.FC = () => {
           wholesaleCostUsd: importModalItem.cost_with_platform_fee_usd,
           retailPriceUsd: parseFloat(importRetailPrice),
           provider: importModalItem.provider,
-          groupId: importGroupId || null,
+          groupId: finalGroupId,
         },
         authHeaders
       );
@@ -334,6 +377,103 @@ export const Dashboard: React.FC = () => {
       alert(err.response?.data?.error || 'Failed to import product');
     } finally {
       setImportLoading(false);
+    }
+  };
+
+  // 1-Click Clear All / Partial Store Products
+  const handleClearProducts = async (scope: 'all' | 'wholesale' | 'custom') => {
+    const label =
+      scope === 'all'
+        ? 'ALL products (Wholesale & Custom)'
+        : scope === 'wholesale'
+        ? 'all WHOLESALE products'
+        : 'all CUSTOM accounts';
+
+    if (
+      !confirm(
+        `Are you sure you want to completely remove ${label} from your bot and store? This action will immediately delete them from your bot catalog.`
+      )
+    ) {
+      return;
+    }
+
+    setClearLoading(true);
+    try {
+      const res = await axios.delete(`/api/merchant/products/clear-all?type=${scope}`, authHeaders);
+      alert(res.data?.message || 'Products cleared successfully.');
+      setShowClearModal(false);
+      loadDashboardData();
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to clear products');
+    } finally {
+      setClearLoading(false);
+    }
+  };
+
+  // Apply Global Profit Margin across all wholesale items
+  const handleApplyGlobalMargin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMarginLoading(true);
+    try {
+      const res = await axios.post(
+        '/api/merchant/products/apply-margin',
+        {
+          mode: marginMode,
+          marginFixedUsd: parseFloat(marginFixedUsd) || 0.20,
+          marginPct: parseFloat(marginPct) || 20,
+        },
+        authHeaders
+      );
+      alert(`Applied profit margin to ${res.data.updatedCount} wholesale products in your store!`);
+      setShowMarginModal(false);
+      loadDashboardData();
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to apply profit margin');
+    } finally {
+      setMarginLoading(false);
+    }
+  };
+
+  // Sync Live Upstream Prices with Auto Margin Preservation
+  const handleSyncLivePrices = async () => {
+    setSyncingPrices(true);
+    try {
+      const res = await axios.post('/api/merchant/products/sync-prices', {}, authHeaders);
+      alert(
+        `Sync completed! Upstream prices checked. Updated ${res.data.updatedCount} out of ${res.data.totalWholesale} products while keeping your configured profit margins.`
+      );
+      loadDashboardData();
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to sync upstream prices');
+    } finally {
+      setSyncingPrices(false);
+    }
+  };
+
+  // Quick Edit Individual Product Price
+  const handleOpenEditPrice = (product: any) => {
+    setEditingProduct(product);
+    setNewEditPrice(Number(product.retail_price_usd).toFixed(2));
+  };
+
+  const handleSaveProductPrice = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingProduct) return;
+    const priceNum = parseFloat(newEditPrice);
+    if (isNaN(priceNum) || priceNum <= 0) {
+      alert('Please enter a valid retail price.');
+      return;
+    }
+    try {
+      await axios.put(
+        `/api/merchant/products/${editingProduct.id}`,
+        { retailPriceUsd: priceNum },
+        authHeaders
+      );
+      setEditingProduct(null);
+      loadDashboardData();
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to update price');
     }
   };
 
@@ -407,23 +547,34 @@ export const Dashboard: React.FC = () => {
     return true;
   });
 
-  // Filtered Wholesale Catalog
+  // Filtered Wholesale Catalog with Provider & Upstream Category Folders
   const filteredWholesale = wholesaleCatalog.filter((item) => {
     const matchSearch =
       wholesaleSearch === '' ||
       item.name.toLowerCase().includes(wholesaleSearch.toLowerCase()) ||
       item.category.toLowerCase().includes(wholesaleSearch.toLowerCase()) ||
-      item.provider.toLowerCase().includes(wholesaleSearch.toLowerCase());
+      item.provider.toLowerCase().includes(wholesaleSearch.toLowerCase()) ||
+      item.id.toLowerCase().includes(wholesaleSearch.toLowerCase());
 
     const matchCategory =
       wholesaleCategoryFilter === 'all' ||
       item.category.toLowerCase() === wholesaleCategoryFilter.toLowerCase();
 
-    return matchSearch && matchCategory;
+    const matchProvider =
+      wholesaleProviderFilter === 'all' ||
+      item.provider.toLowerCase() === wholesaleProviderFilter.toLowerCase();
+
+    return matchSearch && matchCategory && matchProvider;
   });
 
-  // Unique wholesale categories for filter chips
-  const wholesaleCategories = Array.from(new Set(wholesaleCatalog.map((i) => i.category))).filter(Boolean);
+  // Unique wholesale categories for filter chips (filtered by active provider)
+  const wholesaleCategories = Array.from(
+    new Set(
+      wholesaleCatalog
+        .filter((i) => wholesaleProviderFilter === 'all' || i.provider.toLowerCase() === wholesaleProviderFilter.toLowerCase())
+        .map((i) => i.category)
+    )
+  ).filter(Boolean);
 
   return (
     <div className="min-h-screen bg-carbon-900 text-zinc-100 flex flex-col">
@@ -894,15 +1045,22 @@ export const Dashboard: React.FC = () => {
                   <Zap className="w-5 h-5 text-crimson-400" /> Upstream Wholesale Products
                 </h3>
                 <p className="text-xs text-zinc-400">
-                  Search live upstream products from DigitalCore & Canboso. Import with 1 click to your bot!
+                  Search live upstream products from DigitalCore & Canboso APIs. Filter by provider and default API folders, then import with 1 click!
                 </p>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <button
+                  onClick={() => setShowMarginModal(true)}
+                  className="px-3.5 py-2 rounded-xl bg-laser-600/20 hover:bg-laser-600/30 border border-laser-500/40 text-laser-300 text-xs font-bold shadow-md flex items-center gap-1.5 transition-all"
+                  title="Configure global profit margin"
+                >
+                  <Sliders className="w-3.5 h-3.5" /> Set Profit Margin
+                </button>
                 <button
                   onClick={handleBulkImport}
-                  className="px-4 py-2 rounded-xl bg-laser-600 hover:bg-laser-500 text-white text-xs font-bold shadow-md flex items-center gap-1.5"
+                  className="px-3.5 py-2 rounded-xl bg-laser-600 hover:bg-laser-500 text-white text-xs font-bold shadow-md flex items-center gap-1.5 transition-all"
                 >
-                  <RefreshCw className="w-3.5 h-3.5" /> Auto-Import All (+20% Margin)
+                  <RefreshCw className="w-3.5 h-3.5" /> Auto-Import All (+Margin)
                 </button>
                 <button
                   onClick={loadWholesaleCatalog}
@@ -914,13 +1072,68 @@ export const Dashboard: React.FC = () => {
               </div>
             </div>
 
+            {/* Upstream Provider Filter Tabs */}
+            <div className="flex items-center gap-2 border-b border-white/10 pb-3 overflow-x-auto">
+              <button
+                onClick={() => {
+                  setWholesaleProviderFilter('all');
+                  setWholesaleCategoryFilter('all');
+                }}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
+                  wholesaleProviderFilter === 'all'
+                    ? 'bg-crimson-500 text-white shadow-md'
+                    : 'bg-carbon-800 text-zinc-400 hover:text-white'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>All Providers</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] bg-black/30 font-mono">
+                  {wholesaleCatalog.length}
+                </span>
+              </button>
+              <button
+                onClick={() => {
+                  setWholesaleProviderFilter('digitalcore');
+                  setWholesaleCategoryFilter('all');
+                }}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
+                  wholesaleProviderFilter === 'digitalcore'
+                    ? 'bg-laser-600 text-white shadow-md'
+                    : 'bg-carbon-800 text-zinc-400 hover:text-white'
+                }`}
+              >
+                <Zap className="w-3.5 h-3.5 text-yellow-400" />
+                <span>DigitalCore API</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] bg-black/30 font-mono">
+                  {wholesaleCatalog.filter((i) => i.provider?.toLowerCase() === 'digitalcore').length}
+                </span>
+              </button>
+              <button
+                onClick={() => {
+                  setWholesaleProviderFilter('canboso');
+                  setWholesaleCategoryFilter('all');
+                }}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
+                  wholesaleProviderFilter === 'canboso'
+                    ? 'bg-purple-600 text-white shadow-md'
+                    : 'bg-carbon-800 text-zinc-400 hover:text-white'
+                }`}
+              >
+                <ShoppingBag className="w-3.5 h-3.5 text-purple-300" />
+                <span>Canboso API</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] bg-black/30 font-mono">
+                  {wholesaleCatalog.filter((i) => i.provider?.toLowerCase() === 'canboso').length}
+                </span>
+              </button>
+            </div>
+
             {/* Search Input & Category Filters */}
             <div className="glass-card rounded-2xl p-4 border border-white/10 space-y-3">
               <div className="relative">
                 <Search className="w-4 h-4 text-zinc-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
-                  placeholder="Instant Search wholesale catalog (e.g. Netflix, Spotify, VPN, Canva, Telegram Premium)..."
+                  placeholder="Instant search by product name, category folder, or ID..."
                   value={wholesaleSearch}
                   onChange={(e) => setWholesaleSearch(e.target.value)}
                   className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-carbon-800 border border-white/10 text-white text-xs focus:outline-none focus:border-crimson-500 transition-colors"
@@ -935,31 +1148,48 @@ export const Dashboard: React.FC = () => {
                 )}
               </div>
 
-              {/* Category Filter Chips */}
-              <div className="flex items-center gap-2 overflow-x-auto pt-1">
-                <button
-                  onClick={() => setWholesaleCategoryFilter('all')}
-                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
-                    wholesaleCategoryFilter === 'all'
-                      ? 'bg-crimson-500 text-white'
-                      : 'bg-carbon-800 text-zinc-400 hover:text-white'
-                  }`}
-                >
-                  All Categories ({wholesaleCatalog.length})
-                </button>
-                {wholesaleCategories.map((cat) => (
+              {/* Category Filter Chips (Default API Folders) */}
+              <div className="space-y-1.5">
+                <div className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <FolderOpen className="w-3.5 h-3.5 text-laser-400" /> Default Upstream API Folders:
+                </div>
+                <div className="flex items-center gap-2 overflow-x-auto pt-0.5 pb-1">
                   <button
-                    key={cat}
-                    onClick={() => setWholesaleCategoryFilter(cat)}
-                    className={`px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
-                      wholesaleCategoryFilter.toLowerCase() === cat.toLowerCase()
-                        ? 'bg-crimson-500 text-white'
-                        : 'bg-carbon-800 text-zinc-400 hover:text-white'
+                    onClick={() => setWholesaleCategoryFilter('all')}
+                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                      wholesaleCategoryFilter === 'all'
+                        ? 'bg-crimson-500 text-white shadow'
+                        : 'bg-carbon-800 text-zinc-400 hover:text-white border border-white/5'
                     }`}
                   >
-                    {cat}
+                    <span>📁 All Folders</span>
+                    <span className="text-[10px] opacity-80">
+                      ({wholesaleCatalog.filter((i) => wholesaleProviderFilter === 'all' || i.provider?.toLowerCase() === wholesaleProviderFilter.toLowerCase()).length})
+                    </span>
                   </button>
-                ))}
+                  {wholesaleCategories.map((cat) => {
+                    const catCount = wholesaleCatalog.filter(
+                      (i) =>
+                        (wholesaleProviderFilter === 'all' || i.provider?.toLowerCase() === wholesaleProviderFilter.toLowerCase()) &&
+                        i.category?.toLowerCase() === cat.toLowerCase()
+                    ).length;
+                    return (
+                      <button
+                        key={cat}
+                        onClick={() => setWholesaleCategoryFilter(cat)}
+                        className={`px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                          wholesaleCategoryFilter.toLowerCase() === cat.toLowerCase()
+                            ? 'bg-crimson-500 text-white shadow'
+                            : 'bg-carbon-800 text-zinc-400 hover:text-white border border-white/5'
+                        }`}
+                      >
+                        <Folder className="w-3 h-3 opacity-60" />
+                        <span>{cat}</span>
+                        <span className="text-[10px] opacity-75 font-mono">({catCount})</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
 
@@ -1018,42 +1248,73 @@ export const Dashboard: React.FC = () => {
            ========================================== */}
         {activeTab === 'store_products' && (
           <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
               <div>
                 <h3 className="text-lg font-bold text-white flex items-center gap-2">
                   <ShoppingBag className="w-5 h-5 text-emerald-400" /> My Active Store & Bot Items
                 </h3>
                 <p className="text-xs text-zinc-400">
-                  Every product currently available in your Telegram bot. Use 1-Click Toggle to turn items ON or OFF instantly.
+                  Every product currently available in your Telegram bot. Use 1-Click Toggle to turn items ON or OFF instantly, adjust selling prices, or sync live upstream wholesale costs.
                 </p>
               </div>
 
-              {/* Sub-Filter Pills */}
-              <div className="flex items-center gap-2 bg-carbon-800 p-1 rounded-xl border border-white/5">
+              {/* Action Buttons & Sub-Filters */}
+              <div className="flex flex-wrap items-center gap-2.5">
                 <button
-                  onClick={() => setStoreFilter('all')}
-                  className={`px-3 py-1 rounded-lg text-xs font-semibold ${
-                    storeFilter === 'all' ? 'bg-crimson-500 text-white' : 'text-zinc-400 hover:text-white'
-                  }`}
+                  onClick={handleSyncLivePrices}
+                  disabled={syncingPrices}
+                  className="px-3.5 py-1.5 rounded-xl bg-carbon-800 hover:bg-carbon-700 border border-white/10 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all"
+                  title="Auto-update wholesale costs and adjust selling prices preserving your margin"
                 >
-                  All ({products.length})
+                  <RefreshCw className={`w-3.5 h-3.5 text-laser-400 ${syncingPrices ? 'animate-spin' : ''}`} />
+                  <span>{syncingPrices ? 'Syncing...' : 'Sync Live Prices'}</span>
                 </button>
+
                 <button
-                  onClick={() => setStoreFilter('custom')}
-                  className={`px-3 py-1 rounded-lg text-xs font-semibold ${
-                    storeFilter === 'custom' ? 'bg-crimson-500 text-white' : 'text-zinc-400 hover:text-white'
-                  }`}
+                  onClick={() => setShowMarginModal(true)}
+                  className="px-3.5 py-1.5 rounded-xl bg-laser-600/20 hover:bg-laser-600/30 border border-laser-500/40 text-laser-300 font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all"
+                  title="Configure global profit margin across wholesale items"
                 >
-                  Custom ({products.filter((p) => p.provider === 'custom').length})
+                  <Sliders className="w-3.5 h-3.5" />
+                  <span>Set Margin</span>
                 </button>
+
                 <button
-                  onClick={() => setStoreFilter('wholesale')}
-                  className={`px-3 py-1 rounded-lg text-xs font-semibold ${
-                    storeFilter === 'wholesale' ? 'bg-crimson-500 text-white' : 'text-zinc-400 hover:text-white'
-                  }`}
+                  onClick={() => setShowClearModal(true)}
+                  className="px-3.5 py-1.5 rounded-xl bg-crimson-600/20 hover:bg-crimson-600/40 border border-crimson-500/40 text-crimson-400 font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all"
+                  title="Bulk clear products from bot and store"
                 >
-                  Wholesale ({products.filter((p) => p.provider !== 'custom').length})
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Clear Products</span>
                 </button>
+
+                {/* Sub-Filter Pills */}
+                <div className="flex items-center gap-1 bg-carbon-800 p-1 rounded-xl border border-white/5">
+                  <button
+                    onClick={() => setStoreFilter('all')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${
+                      storeFilter === 'all' ? 'bg-crimson-500 text-white' : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    All ({products.length})
+                  </button>
+                  <button
+                    onClick={() => setStoreFilter('custom')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${
+                      storeFilter === 'custom' ? 'bg-crimson-500 text-white' : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    Custom ({products.filter((p) => p.provider === 'custom').length})
+                  </button>
+                  <button
+                    onClick={() => setStoreFilter('wholesale')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${
+                      storeFilter === 'wholesale' ? 'bg-crimson-500 text-white' : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    Wholesale ({products.filter((p) => p.provider !== 'custom').length})
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -1066,7 +1327,7 @@ export const Dashboard: React.FC = () => {
                       <th className="p-4">Product Name</th>
                       <th className="p-4">Category / Group</th>
                       <th className="p-4">Source Type</th>
-                      <th className="p-4">Selling Price (USD)</th>
+                      <th className="p-4">Selling Price & Margin</th>
                       <th className="p-4">Stock</th>
                       <th className="p-4">Bot Status (1-Click Toggle)</th>
                       <th className="p-4 text-right">Actions</th>
@@ -1103,8 +1364,28 @@ export const Dashboard: React.FC = () => {
                               {p.provider === 'custom' ? 'Custom Stock' : `Wholesale (${p.provider})`}
                             </span>
                           </td>
-                          <td className="p-4 font-mono font-bold text-emerald-400">
-                            ${Number(p.retail_price_usd).toFixed(2)} USD
+                          <td className="p-4 font-mono">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-bold text-emerald-400 text-sm">
+                                ${Number(p.retail_price_usd).toFixed(2)} USD
+                              </span>
+                              <button
+                                onClick={() => handleOpenEditPrice(p)}
+                                className="p-1 rounded hover:bg-white/10 text-zinc-400 hover:text-white transition-colors"
+                                title="Edit selling price"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                            {p.provider !== 'custom' && (
+                              <div className="text-[10px] text-zinc-400 flex items-center gap-1 mt-0.5">
+                                <span>Cost: ${Number(p.wholesale_price_usd || 0).toFixed(2)}</span>
+                                <span className="text-zinc-600">·</span>
+                                <span className="text-emerald-400 font-semibold">
+                                  Margin: +${(Number(p.retail_price_usd) - Number(p.wholesale_price_usd || 0)).toFixed(2)}
+                                </span>
+                              </div>
+                            )}
                             <span className="block text-[10px] text-zinc-500 font-normal">
                               ~ ৳ {(Number(p.retail_price_usd) * (overview?.usdToBdtRate || 125)).toFixed(0)} BDT
                             </span>
@@ -1136,6 +1417,12 @@ export const Dashboard: React.FC = () => {
                             </button>
                           </td>
                           <td className="p-4 text-right space-x-2">
+                            <button
+                              onClick={() => handleOpenEditPrice(p)}
+                              className="px-2.5 py-1 rounded-lg bg-carbon-700 hover:bg-carbon-600 text-white font-semibold text-[11px]"
+                            >
+                              Edit Price
+                            </button>
                             {p.provider === 'custom' && (
                               <button
                                 onClick={() => setAddStockProdId(p.id)}
@@ -1669,24 +1956,52 @@ export const Dashboard: React.FC = () => {
 
             <form onSubmit={handleConfirmImport} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-zinc-300 mb-1">
-                  Assign to Category / Folder
-                </label>
-                <select
-                  value={importGroupId}
-                  onChange={(e) => setImportGroupId(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl bg-carbon-800 border border-white/10 text-white text-xs focus:outline-none focus:border-crimson-500"
-                >
-                  <option value="">📁 General (No Category Folder)</option>
-                  {groups.map((g) => (
-                    <option key={g.id} value={g.id}>
-                      {g.icon || '📁'} {g.name}
-                    </option>
-                  ))}
-                </select>
-                <span className="text-[10px] text-zinc-500">
-                  Customers will find this product inside this folder in Telegram.
-                </span>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-semibold text-zinc-300">
+                    Assign to Category / Folder
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowNewCatInputInImport(!showNewCatInputInImport)}
+                    className="text-[11px] text-laser-400 hover:underline flex items-center gap-1 font-semibold"
+                  >
+                    {showNewCatInputInImport ? 'Select Existing' : '+ New Category'}
+                  </button>
+                </div>
+
+                {showNewCatInputInImport ? (
+                  <div className="space-y-1">
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. 🎬 OTT & Streaming, 🛡️ VPNs..."
+                      value={importNewCategoryName}
+                      onChange={(e) => setImportNewCategoryName(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-xl bg-carbon-800 border border-laser-500/50 text-white text-xs focus:outline-none focus:border-laser-400"
+                    />
+                    <span className="text-[10px] text-laser-400 block">
+                      This folder will be automatically created and assigned to this product!
+                    </span>
+                  </div>
+                ) : (
+                  <div>
+                    <select
+                      value={importGroupId}
+                      onChange={(e) => setImportGroupId(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-xl bg-carbon-800 border border-white/10 text-white text-xs focus:outline-none focus:border-crimson-500"
+                    >
+                      <option value="">📁 General (No Category Folder)</option>
+                      {groups.map((g) => (
+                        <option key={g.id} value={g.id}>
+                          {g.icon || '📁'} {g.name}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="text-[10px] text-zinc-500">
+                      Customers will find this product inside this folder in Telegram.
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -1723,6 +2038,290 @@ export const Dashboard: React.FC = () => {
                 className="w-full py-3 rounded-xl bg-gradient-to-r from-crimson-600 to-crimson-500 hover:from-crimson-500 text-white font-bold text-xs shadow-md active:scale-98 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
               >
                 {importLoading ? 'Importing...' : 'Confirm & Add to Bot 🚀'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ==========================================
+          MODAL 6: CLEAR STORE CATALOG (1-CLICK CLEAR)
+         ========================================== */}
+      {showClearModal && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="glass-card rounded-3xl p-6 sm:p-8 max-w-md w-full space-y-4 border border-crimson-500/30 relative">
+            <button
+              onClick={() => setShowClearModal(false)}
+              className="absolute top-5 right-5 text-zinc-400 hover:text-white"
+            >
+              <XCircle className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-2 text-crimson-400 font-bold text-base">
+              <Trash2 className="w-5 h-5" /> Bulk Delete / Clear Store Catalog
+            </div>
+
+            <p className="text-xs text-zinc-400">
+              Select which products you would like to purge from your Telegram bot and active store.
+            </p>
+
+            <div className="space-y-2 pt-2">
+              <label
+                className={`flex items-start gap-3 p-3.5 rounded-2xl border cursor-pointer transition-all ${
+                  clearScope === 'all'
+                    ? 'bg-crimson-500/10 border-crimson-500 text-white'
+                    : 'bg-carbon-800/60 border-white/10 text-zinc-400 hover:border-white/20'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="clearScope"
+                  checked={clearScope === 'all'}
+                  onChange={() => setClearScope('all')}
+                  className="mt-1"
+                />
+                <div>
+                  <span className="font-bold text-xs block text-white">Clear ALL Store Products</span>
+                  <span className="text-[11px] text-zinc-400">
+                    Deletes all wholesale synced items and custom key inventory ({products.length} products).
+                  </span>
+                </div>
+              </label>
+
+              <label
+                className={`flex items-start gap-3 p-3.5 rounded-2xl border cursor-pointer transition-all ${
+                  clearScope === 'wholesale'
+                    ? 'bg-crimson-500/10 border-crimson-500 text-white'
+                    : 'bg-carbon-800/60 border-white/10 text-zinc-400 hover:border-white/20'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="clearScope"
+                  checked={clearScope === 'wholesale'}
+                  onChange={() => setClearScope('wholesale')}
+                  className="mt-1"
+                />
+                <div>
+                  <span className="font-bold text-xs block text-white">Clear Wholesale Items Only</span>
+                  <span className="text-[11px] text-zinc-400">
+                    Purges DigitalCore & Canboso items ({products.filter((p) => p.provider !== 'custom').length} products), preserving your custom accounts.
+                  </span>
+                </div>
+              </label>
+
+              <label
+                className={`flex items-start gap-3 p-3.5 rounded-2xl border cursor-pointer transition-all ${
+                  clearScope === 'custom'
+                    ? 'bg-crimson-500/10 border-crimson-500 text-white'
+                    : 'bg-carbon-800/60 border-white/10 text-zinc-400 hover:border-white/20'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="clearScope"
+                  checked={clearScope === 'custom'}
+                  onChange={() => setClearScope('custom')}
+                  className="mt-1"
+                />
+                <div>
+                  <span className="font-bold text-xs block text-white">Clear Custom Accounts Only</span>
+                  <span className="text-[11px] text-zinc-400">
+                    Purges manually created accounts and keys ({products.filter((p) => p.provider === 'custom').length} products).
+                  </span>
+                </div>
+              </label>
+            </div>
+
+            <div className="pt-2">
+              <button
+                type="button"
+                disabled={clearLoading}
+                onClick={() => handleClearProducts(clearScope)}
+                className="w-full py-3 rounded-xl bg-crimson-600 hover:bg-crimson-500 text-white font-bold text-xs shadow-lg shadow-crimson-600/30 transition-all flex items-center justify-center gap-2"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>{clearLoading ? 'Deleting...' : 'Confirm & Delete Selected Products'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==========================================
+          MODAL 7: SET GLOBAL PROFIT MARGIN & AUTO-SYNC
+         ========================================== */}
+      {showMarginModal && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="glass-card rounded-3xl p-6 sm:p-8 max-w-md w-full space-y-4 border border-laser-500/30 relative">
+            <button
+              onClick={() => setShowMarginModal(false)}
+              className="absolute top-5 right-5 text-zinc-400 hover:text-white"
+            >
+              <XCircle className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-2 text-laser-400 font-bold text-base">
+              <Sliders className="w-5 h-5" /> Dynamic Profit Margin Engine
+            </div>
+
+            <p className="text-xs text-zinc-400">
+              Set a unified profit margin for all wholesale products. When upstream providers (DigitalCore/Canboso) change prices, your retail selling prices automatically update to preserve your profit!
+            </p>
+
+            <form onSubmit={handleApplyGlobalMargin} className="space-y-4 pt-2">
+              {/* Margin Mode Selector */}
+              <div className="grid grid-cols-2 gap-2 p-1 bg-carbon-800 rounded-xl border border-white/5">
+                <button
+                  type="button"
+                  onClick={() => setMarginMode('fixed')}
+                  className={`py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                    marginMode === 'fixed'
+                      ? 'bg-laser-600 text-white shadow'
+                      : 'text-zinc-400 hover:text-white'
+                  }`}
+                >
+                  <DollarSign className="w-3.5 h-3.5" /> Fixed Margin ($ USD)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMarginMode('pct')}
+                  className={`py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                    marginMode === 'pct'
+                      ? 'bg-laser-600 text-white shadow'
+                      : 'text-zinc-400 hover:text-white'
+                  }`}
+                >
+                  <span>% Percentage Markup</span>
+                </button>
+              </div>
+
+              {marginMode === 'fixed' ? (
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                    Fixed Profit Margin ($ USD per item)
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-mono text-zinc-400 text-xs">
+                      +$
+                    </span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      required
+                      placeholder="0.20"
+                      value={marginFixedUsd}
+                      onChange={(e) => setMarginFixedUsd(e.target.value)}
+                      className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-laser-500"
+                    />
+                  </div>
+                  <span className="text-[11px] text-zinc-500 mt-1 block">
+                    Example: If upstream cost is $1.00 and you set +$0.20, selling price is $1.20. If upstream becomes $1.50, selling price automatically becomes $1.70.
+                  </span>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                    Percentage Markup (%)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="1"
+                      required
+                      placeholder="20"
+                      value={marginPct}
+                      onChange={(e) => setMarginPct(e.target.value)}
+                      className="w-full pl-4 pr-9 py-2.5 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-laser-500"
+                    />
+                    <span className="absolute right-3.5 top-1/2 -translate-y-1/2 font-mono text-zinc-400 text-xs">
+                      %
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-zinc-500 mt-1 block">
+                    Example: +20% markup on a $1.00 product sets retail to $1.20.
+                  </span>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={marginLoading}
+                className="w-full py-3 rounded-xl bg-gradient-to-r from-laser-600 to-laser-500 hover:from-laser-500 text-white font-bold text-xs shadow-lg shadow-laser-500/25 transition-all flex items-center justify-center gap-2"
+              >
+                {marginLoading ? 'Applying...' : 'Apply Margin Across All Wholesale Products 🚀'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ==========================================
+          MODAL 8: QUICK EDIT INDIVIDUAL PRODUCT PRICE
+         ========================================== */}
+      {editingProduct && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="glass-card rounded-3xl p-6 sm:p-8 max-w-md w-full space-y-4 border border-white/10 relative">
+            <button
+              onClick={() => setEditingProduct(null)}
+              className="absolute top-5 right-5 text-zinc-400 hover:text-white"
+            >
+              <XCircle className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-2 text-emerald-400 font-bold text-base">
+              <Edit3 className="w-5 h-5" /> Adjust Retail Selling Price
+            </div>
+
+            <div className="bg-carbon-800/80 p-4 rounded-2xl border border-white/5 space-y-2">
+              <h4 className="font-bold text-sm text-white">{editingProduct.name}</h4>
+              {editingProduct.provider !== 'custom' ? (
+                <div className="flex items-center justify-between text-xs text-zinc-400">
+                  <span>Upstream Wholesale Cost:</span>
+                  <span className="font-mono font-bold text-white">
+                    ${Number(editingProduct.wholesale_price_usd || 0).toFixed(2)} USD
+                  </span>
+                </div>
+              ) : (
+                <div className="text-xs text-purple-400 font-semibold">Custom Account Product</div>
+              )}
+            </div>
+
+            <form onSubmit={handleSaveProductPrice} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                  Retail Selling Price ($ USD)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  required
+                  placeholder="e.g. 1.50"
+                  value={newEditPrice}
+                  onChange={(e) => setNewEditPrice(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-emerald-500"
+                />
+
+                {editingProduct.provider !== 'custom' && parseFloat(newEditPrice) > 0 && (
+                  <div className="flex justify-between items-center text-[11px] font-mono text-zinc-400 mt-2">
+                    <span>
+                      Preserved Margin:{' '}
+                      <strong className="text-emerald-400 font-bold">
+                        +${(parseFloat(newEditPrice) - Number(editingProduct.wholesale_price_usd || 0)).toFixed(2)} USD
+                      </strong>
+                    </span>
+                    <span>
+                      ~ ৳ {(parseFloat(newEditPrice) * (overview?.usdToBdtRate || 125)).toFixed(0)} BDT
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-1.5"
+              >
+                <Check className="w-4 h-4" /> Save Updated Price
               </button>
             </form>
           </div>

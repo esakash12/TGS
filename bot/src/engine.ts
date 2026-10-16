@@ -76,7 +76,7 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
   // 1. /start command
   bot.command('start', async (ctx) => {
     const tenant = getTenant();
-    if (!tenant) return;
+    if (!tenant || !ctx.from) return;
 
     const customer = getOrCreateCustomer(ctx.from);
     userStates.delete(ctx.from.id);
@@ -96,6 +96,7 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
 
   // 2. Language Toggle
   bot.hears([/🌐 ভাষা/i, /🌐 Language/i], async (ctx) => {
+    if (!ctx.from) return;
     const customer = getOrCreateCustomer(ctx.from);
     const newLang = customer.language === 'bn' ? 'en' : 'bn';
 
@@ -109,6 +110,7 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
 
   // 3. My Wallet
   bot.hears([/💰 আমার ওয়ালেট/i, /💰 My Wallet/i], async (ctx) => {
+    if (!ctx.from) return;
     const customer = getOrCreateCustomer(ctx.from);
     const isBn = customer.language === 'bn';
 
@@ -638,6 +640,7 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
 
   // 6. Orders History
   bot.hears([/📦 অর্ডার হিস্টোরি/i, /📦 My Orders/i], async (ctx) => {
+    if (!ctx.from) return;
     const customer = getOrCreateCustomer(ctx.from);
     const isBn = customer.language === 'bn';
 

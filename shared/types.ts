@@ -75,6 +75,9 @@ export interface Product {
   provider_product_id?: string;
   wholesale_price_usd: number;
   retail_price_usd: number;
+  markup_fixed_usd?: number;
+  markup_pct?: number;
+  pricing_mode?: 'fixed' | 'pct';
   stock: number;
   is_active: number; // 1 or 0
   description?: string;
