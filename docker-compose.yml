@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  mogent-cloud:
+    build: .
+    container_name: mogent-telegram-cloud
+    restart: always
+    ports:
+      - "80:5000"
+    environment:
+      - PORT=5000
+      - NODE_ENV=production
+      - APP_DOMAIN=bot.mogent.tech
+      - APP_URL=https://bot.mogent.tech
+      - BOT_RUNNER_MODE=webhook
+      - APP_ENCRYPTION_KEY=mogent-secure-master-key-2026-production-vault-32char
+      - JWT_SECRET=mogent-jwt-secret-key-2026-production-token
+      - GODMODE_SECRET_TOKEN=hkjhl-sadmin-godmode-2026
+      - SQLITE_DB_PATH=/app/data/mogent.sqlite
+    volumes:
+      - mogent_data:/app/data
+    deploy:
+      resources:
+        limits:
+          memory: 300M
+
+volumes:
+  mogent_data:

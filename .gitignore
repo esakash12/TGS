@@ -1,0 +1,11 @@
+node_modules/
+client/node_modules/
+data/*.sqlite*
+data/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+.env
+.DS_Store
+*.log
+npm-debug.log*

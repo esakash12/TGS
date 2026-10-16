@@ -1,0 +1,167 @@
+// ============================================================================
+// Platform Name: Bot by mogent (bot.mogent.tech)
+// Autonomous Telegram Commerce Cloud - Shared Contracts & Canonical Types
+// Currency Standard: 100% Pure USD ($) with Dynamic Merchant BDT Conversion
+// ============================================================================
+
+export type TenantStatus = 'ACTIVE' | 'SUSPENDED';
+export type UserRole = 'super_admin' | 'merchant_admin';
+export type ProviderType = 'custom' | 'digitalcore' | 'canboso';
+export type InventoryStatus = 'AVAILABLE' | 'DELIVERED';
+export type DepositMethod = 'bKash' | 'Nagad' | 'Rocket' | 'Binance';
+export type DepositStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+export type OrderStatus = 'COMPLETED' | 'FAILED';
+
+export interface TenantPaymentNumbers {
+  bkash?: string;
+  nagad?: string;
+  rocket?: string;
+}
+
+export interface TenantBinanceConfig {
+  uid?: string;
+  apiKey?: string;
+  apiSecret?: string;
+}
+
+export interface Tenant {
+  id: string;
+  name: string;
+  slug: string;
+  owner_email: string;
+  bot_token?: string;
+  bot_username?: string;
+  plan_id: string;
+  status: TenantStatus;
+  wallet_usd: number;
+  usd_to_bdt_rate: number; // e.g. 125.0
+  global_markup_pct: number; // e.g. 20.0%
+  global_markup_fixed_usd: number; // e.g. $0.50
+  auto_markup_enabled: boolean;
+  payment_numbers_json: TenantPaymentNumbers;
+  binance_config_json: TenantBinanceConfig;
+  created_at: string;
+}
+
+export interface AdminUser {
+  id: number;
+  tenant_id: string | null; // NULL for super_admin
+  username: string;
+  email: string;
+  password_hash: string;
+  role: UserRole;
+  created_at: string;
+}
+
+export interface Product {
+  id: string;
+  tenant_id: string;
+  name: string;
+  category: string;
+  provider: ProviderType;
+  provider_product_id?: string;
+  wholesale_price_usd: number;
+  retail_price_usd: number;
+  stock: number;
+  is_active: number; // 1 or 0
+  description?: string;
+  created_at: string;
+}
+
+export interface CustomInventoryItem {
+  id: number;
+  tenant_id: string;
+  product_id: string;
+  item_data: string;
+  status: InventoryStatus;
+  delivered_to_order_id?: string;
+  created_at: string;
+}
+
+export interface Customer {
+  id: number;
+  tenant_id: string;
+  telegram_id: number;
+  username?: string;
+  first_name?: string;
+  balance_usd: number;
+  total_spent_usd: number;
+  orders_count: number;
+  language: 'bn' | 'en';
+  created_at: string;
+}
+
+export interface Deposit {
+  id: number;
+  tenant_id: string;
+  customer_telegram_id: number;
+  customer_username?: string;
+  method: DepositMethod;
+  amount_bdt: number;
+  amount_usd: number;
+  trx_id: string;
+  status: DepositStatus;
+  admin_note?: string;
+  created_at: string;
+  processed_at?: string;
+}
+
+export interface Order {
+  id: number;
+  tenant_id: string;
+  order_number: string;
+  customer_telegram_id: number;
+  product_id: string;
+  product_name: string;
+  quantity: number;
+  total_price_usd: number;
+  wholesale_cost_usd: number;
+  profit_usd: number;
+  delivered_data: string;
+  provider_order_id?: string;
+  status: OrderStatus;
+  created_at: string;
+}
+
+export interface GlobalSystemConfig {
+  wholesale_digitalcore_key?: string;
+  wholesale_canboso_key?: string;
+  platform_fee_fixed_usd: number; // default $0.01
+  platform_fee_pct: number; // default 0.0%
+  owner_binance_uid?: string;
+  owner_binance_api_key?: string;
+  owner_binance_api_secret?: string;
+}
+
+// API DTOs
+export interface AuthResponse {
+  token: string;
+  user: {
+    id: number;
+    username: string;
+    email: string;
+    role: UserRole;
+    tenant_id: string | null;
+  };
+  tenant?: Tenant;
+}
+
+export interface WholesaleProductDTO {
+  id: string;
+  name: string;
+  provider: 'digitalcore' | 'canboso';
+  base_price_usd: number;
+  cost_with_platform_fee_usd: number; // Merchant sees this
+  stock: number;
+  category: string;
+}
+
+export interface BotRuntimeStatus {
+  tenant_id: string;
+  slug: string;
+  bot_username: string | null;
+  is_online: boolean;
+  webhook_set: boolean;
+  last_activity?: string;
+  error?: string;
+}
