@@ -76,8 +76,13 @@ class DynamicBotRegistry {
       this.activeBots.set(tenantId, entry);
       this.slugToTenantId.set(slug, tenantId);
 
-      const appUrl = process.env.APP_URL || (process.env.APP_DOMAIN ? `https://${process.env.APP_DOMAIN}` : '');
-      const isWebhookMode = process.env.BOT_RUNNER_MODE !== 'polling' && Boolean(appUrl) && appUrl.startsWith('https://');
+      const appUrl = process.env.APP_URL || '';
+      // Webhook mode is ONLY activated if explicitly requested AND not using default dummy domain
+      const isWebhookMode = process.env.BOT_RUNNER_MODE === 'webhook' && 
+                            Boolean(appUrl) && 
+                            appUrl.startsWith('https://') && 
+                            !appUrl.includes('bot.mogent.tech') && 
+                            !appUrl.includes('localhost');
 
       bot.catch((err) => {
         console.error(`[@${botInfo.username || slug}] Bot unhandled error:`, err.message || err);
@@ -96,10 +101,12 @@ class DynamicBotRegistry {
           }).catch(err => console.error(`[@${botInfo.username}] Polling error:`, err));
         }
       } else {
-        // Polling mode: always clear any webhook registered on Telegram to prevent 409 Conflict
-        await bot.api.deleteWebhook({ drop_pending_updates: false }).catch(() => {});
+        // Polling mode: ALWAYS delete any existing webhook on Telegram servers to clear conflicts and receive getUpdates
+        await bot.api.deleteWebhook({ drop_pending_updates: false }).catch((e) => {
+          console.warn(`[BotRegistry] Notice clearing webhook for @${botInfo.username}:`, e.message);
+        });
         bot.start({
-          onStart: () => console.log(`🚀 [@${botInfo.username}] Long-polling started for tenant: ${slug}`),
+          onStart: () => console.log(`🚀 [@${botInfo.username}] Long-polling LIVE and listening for updates (${slug})`),
         }).catch(err => console.error(`[@${botInfo.username}] Polling error:`, err));
       }
 

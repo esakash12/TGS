@@ -9,10 +9,7 @@ services:
       - "80:5000"
     environment:
       - PORT=5000
-      - NODE_ENV=production
-      - APP_DOMAIN=bot.mogent.tech
-      - APP_URL=https://bot.mogent.tech
-      - BOT_RUNNER_MODE=webhook
+      - BOT_RUNNER_MODE=polling
       - APP_ENCRYPTION_KEY=mogent-secure-master-key-2026-production-vault-32char
       - JWT_SECRET=mogent-jwt-secret-key-2026-production-token
       - GODMODE_SECRET_TOKEN=hkjhl-sadmin-godmode-2026

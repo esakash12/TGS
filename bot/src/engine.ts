@@ -211,36 +211,49 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
   // 1. /start Command (Matching Screenshot 1)
   // ==========================================
   bot.command('start', async (ctx) => {
-    const tenant = getTenant();
-    if (!tenant || !ctx.from) return;
+    try {
+      console.log(`📥 [Bot Engine] Received /start from user: ${ctx.from?.id} (@${ctx.from?.username || ''})`);
+      const tenant = getTenant();
+      if (!tenant || !ctx.from) {
+        console.warn(`⚠️ [Bot Engine] /start ignored: tenant=${Boolean(tenant)}, from=${Boolean(ctx.from)}`);
+        return;
+      }
 
-    const customer = getOrCreateCustomer(ctx.from);
-    userStates.delete(ctx.from.id);
+      const customer = getOrCreateCustomer(ctx.from);
+      userStates.delete(ctx.from.id);
 
-    const card = buildStartCard(customer, ctx.from, tenant);
-    const keyboard = buildStartInlineKeyboard();
+      const card = buildStartCard(customer, ctx.from, tenant);
+      const keyboard = buildStartInlineKeyboard();
 
-    await ctx.reply(card, {
-      parse_mode: 'HTML',
-      reply_markup: keyboard,
-    });
+      await ctx.reply(card, {
+        parse_mode: 'HTML',
+        reply_markup: keyboard,
+      });
+      console.log(`✅ [Bot Engine] /start menu delivered to ${ctx.from.id}`);
+    } catch (err: any) {
+      console.error(`❌ [Bot Engine] Error replying /start to ${ctx.from?.id}:`, err.message || err);
+    }
   });
 
   // Callback to return to Start Card
   bot.callbackQuery('nav_start', async (ctx) => {
-    const tenant = getTenant();
-    const customer = getOrCreateCustomer(ctx.from);
-    userStates.delete(ctx.from.id);
-
-    const card = buildStartCard(customer, ctx.from, tenant);
-    const keyboard = buildStartInlineKeyboard();
-
     try {
-      await ctx.editMessageText(card, { parse_mode: 'HTML', reply_markup: keyboard });
-    } catch (e) {
-      await ctx.reply(card, { parse_mode: 'HTML', reply_markup: keyboard });
+      const tenant = getTenant();
+      const customer = getOrCreateCustomer(ctx.from);
+      userStates.delete(ctx.from.id);
+
+      const card = buildStartCard(customer, ctx.from, tenant);
+      const keyboard = buildStartInlineKeyboard();
+
+      try {
+        await ctx.editMessageText(card, { parse_mode: 'HTML', reply_markup: keyboard });
+      } catch (e) {
+        await ctx.reply(card, { parse_mode: 'HTML', reply_markup: keyboard });
+      }
+      await ctx.answerCallbackQuery();
+    } catch (err: any) {
+      console.error('❌ [Bot Engine] Error handling nav_start:', err.message || err);
     }
-    await ctx.answerCallbackQuery();
   });
 
   // ==========================================

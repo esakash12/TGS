@@ -73,8 +73,13 @@ export async function verifyBinancePayTransaction(params: {
     }
 
     // 2. Validate transaction status
-    if (matchedTx.status !== 'SUCCESS' && matchedTx.orderStatus !== 'SUCCESS') {
-      return { success: false, error: `Transaction is not completed (Current status: ${matchedTx.status || matchedTx.orderStatus})` };
+    // Note: Items returned by Binance /sapi/v1/pay/transactions are historical completed transactions.
+    // If status or orderStatus is present, verify it is not failed/cancelled.
+    if (matchedTx.status && matchedTx.status !== 'SUCCESS') {
+      return { success: false, error: `Transaction is not completed (Current status: ${matchedTx.status})` };
+    }
+    if (matchedTx.orderStatus && matchedTx.orderStatus !== 'SUCCESS') {
+      return { success: false, error: `Transaction is not completed (Current status: ${matchedTx.orderStatus})` };
     }
 
     // 3. Validate currency
@@ -83,7 +88,12 @@ export async function verifyBinancePayTransaction(params: {
       return { success: false, error: `Invalid currency: ${currency}. Only USDT deposits are accepted.` };
     }
 
-    const actualAmount = Number(matchedTx.amount || matchedTx.fundsDetail?.[0]?.amount || 0);
+    const rawAmount = matchedTx.amount || matchedTx.fundsDetail?.[0]?.amount || 0;
+    const actualAmount = Math.abs(parseFloat(String(rawAmount)));
+
+    if (isNaN(actualAmount) || actualAmount <= 0) {
+      return { success: false, error: 'Could not determine valid transaction amount from Binance' };
+    }
 
     // 4. Validate amount if expected amount is provided
     if (expectedAmountUsd && Math.abs(actualAmount - expectedAmountUsd) > 0.05) {
@@ -96,7 +106,7 @@ export async function verifyBinancePayTransaction(params: {
     return {
       success: true,
       amountUsd: actualAmount,
-      payerId: String(matchedTx.payerId || matchedTx.payerInfo?.name || ''),
+      payerId: String(matchedTx.payerInfo?.binanceId || matchedTx.payerInfo?.name || matchedTx.payerId || ''),
       trxId: String(matchedTx.transactionId || matchedTx.orderId),
     };
   } catch (err: any) {
