@@ -65,6 +65,28 @@ export function initDatabase() {
       db.exec(`ALTER TABLE tenants ADD COLUMN welcome_text TEXT;`);
       console.log('✅ Migrated tenants table: added welcome_text column');
     }
+    if (!tenantTableInfo.some((col: any) => col.name === 'subscription_cycle')) {
+      db.exec(`ALTER TABLE tenants ADD COLUMN subscription_cycle TEXT DEFAULT 'MONTHLY';`);
+      console.log('✅ Migrated tenants table: added subscription_cycle column');
+    }
+    if (!tenantTableInfo.some((col: any) => col.name === 'subscription_status')) {
+      db.exec(`ALTER TABLE tenants ADD COLUMN subscription_status TEXT DEFAULT 'TRIAL';`);
+      console.log('✅ Migrated tenants table: added subscription_status column');
+    }
+    if (!tenantTableInfo.some((col: any) => col.name === 'subscription_started_at')) {
+      db.exec(`ALTER TABLE tenants ADD COLUMN subscription_started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`);
+      console.log('✅ Migrated tenants table: added subscription_started_at column');
+    }
+    if (!tenantTableInfo.some((col: any) => col.name === 'subscription_expires_at')) {
+      db.exec(`ALTER TABLE tenants ADD COLUMN subscription_expires_at TIMESTAMP;`);
+      // Give existing active tenants 30 days active subscription
+      db.exec(`UPDATE tenants SET subscription_expires_at = datetime('now', '+30 days'), subscription_status = 'ACTIVE' WHERE subscription_expires_at IS NULL;`);
+      console.log('✅ Migrated tenants table: added subscription_expires_at column');
+    }
+    if (!tenantTableInfo.some((col: any) => col.name === 'trial_ends_at')) {
+      db.exec(`ALTER TABLE tenants ADD COLUMN trial_ends_at TIMESTAMP;`);
+      console.log('✅ Migrated tenants table: added trial_ends_at column');
+    }
   } catch (err: any) {
     console.warn('Migration notice (columns):', err.message);
   }

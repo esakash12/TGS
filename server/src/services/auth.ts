@@ -51,12 +51,13 @@ export async function registerMerchant(params: {
 
   // Run atomic creation inside transaction
   const createTx = db.transaction(() => {
-    // 1. Create clean tenant
+    // 1. Create clean tenant with 7-day free trial
     db.prepare(`
       INSERT INTO tenants (
         id, name, slug, owner_email, bot_token, plan_id, status,
-        wallet_usd, usd_to_bdt_rate, global_markup_pct, global_markup_fixed_usd, auto_markup_enabled
-      ) VALUES (?, ?, ?, ?, ?, 'starter', 'ACTIVE', 0.0, ?, 20.0, 0.50, 1)
+        wallet_usd, usd_to_bdt_rate, global_markup_pct, global_markup_fixed_usd, auto_markup_enabled,
+        subscription_cycle, subscription_status, subscription_started_at, subscription_expires_at, trial_ends_at
+      ) VALUES (?, ?, ?, ?, ?, 'starter', 'ACTIVE', 0.0, ?, 20.0, 0.50, 1, 'MONTHLY', 'TRIAL', CURRENT_TIMESTAMP, datetime('now', '+7 days'), datetime('now', '+7 days'))
     `).run(tenantId, storeName, slug, ownerEmail, botToken || null, DEFAULT_USD_TO_BDT_RATE);
 
     // 2. Create merchant admin user

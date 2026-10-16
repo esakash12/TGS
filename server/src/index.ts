@@ -2,7 +2,7 @@ import express, { Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
-import { initDatabase } from './db/database';
+import { initDatabase, db } from './db/database';
 import { authRouter } from './routes/auth.routes';
 import { merchantRouter } from './routes/merchant.routes';
 import { godmodeRouter } from './routes/godmode.routes';
@@ -24,6 +24,31 @@ initDatabase();
 app.use('/api/auth', authRouter);
 app.use('/api/merchant', merchantRouter);
 app.use('/api/godmode', godmodeRouter);
+
+// Public Plans Endpoint (for Landing Page & Pricing)
+app.get('/api/public/plans', (_req: Request, res: Response) => {
+  try {
+    const plans = db.prepare('SELECT * FROM subscription_plans WHERE is_active = 1 ORDER BY sort_order ASC').all() as any[];
+    const formatted = plans.map((p) => {
+      let features: string[] = [];
+      try {
+        features = JSON.parse(p.features_json || '[]');
+      } catch (e) {
+        features = [];
+      }
+      return {
+        ...p,
+        features_json: features,
+        price_monthly_usd: Number(p.price_monthly_usd),
+        price_yearly_usd: Number(p.price_yearly_usd),
+        max_products: Number(p.max_products),
+      };
+    });
+    res.json(formatted);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to fetch public plans: ' + err.message });
+  }
+});
 
 // Telegram Webhook Endpoint for Multi-Bot Routing
 app.post('/api/webhook/telegram/:slug', async (req: Request, res: Response) => {

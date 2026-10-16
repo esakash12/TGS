@@ -25,6 +25,12 @@ import {
   Folder,
   FolderOpen,
   Ban,
+  Tag,
+  Plus,
+  Percent,
+  Calendar,
+  Sparkles,
+  Ticket,
 } from 'lucide-react';
 
 export const GodMode: React.FC = () => {
@@ -34,7 +40,7 @@ export const GodMode: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Navigation tab inside GodMode
-  const [godTab, setGodTab] = useState<'merchants' | 'wholesale' | 'config'>('merchants');
+  const [godTab, setGodTab] = useState<'merchants' | 'wholesale' | 'plans' | 'config'>('merchants');
 
   const [overview, setOverview] = useState<any>(null);
   const [merchants, setMerchants] = useState<any[]>([]);
@@ -43,6 +49,43 @@ export const GodMode: React.FC = () => {
   const [wholesaleProviderFilter, setWholesaleProviderFilter] = useState<'all' | 'digitalcore' | 'canboso'>('all');
   const [wholesaleCategoryFilter, setWholesaleCategoryFilter] = useState('all');
   const [wholesaleLoading, setWholesaleLoading] = useState(false);
+
+  // Subscription Plans & Coupons State
+  const [plans, setPlans] = useState<any[]>([]);
+  const [coupons, setCoupons] = useState<any[]>([]);
+  const [subscriptionsHistory, setSubscriptionsHistory] = useState<any[]>([]);
+  const [subTotalRevenue, setSubTotalRevenue] = useState(0);
+
+  // Plan Modal
+  const [showPlanModal, setShowPlanModal] = useState(false);
+  const [editingPlan, setEditingPlan] = useState<any | null>(null);
+  const [planForm, setPlanForm] = useState({
+    id: '',
+    name: '',
+    description: '',
+    priceMonthlyUsd: '',
+    priceYearlyUsd: '',
+    maxProducts: '50',
+    allowWholesale: true,
+    allowBinancePay: true,
+    allowCustomBranding: false,
+    featuresText: '',
+    isPopular: false,
+    isActive: true,
+    sortOrder: '1',
+  });
+
+  // Coupon Modal
+  const [showCouponModal, setShowCouponModal] = useState(false);
+  const [couponForm, setCouponForm] = useState({
+    code: '',
+    discountType: 'PERCENTAGE',
+    discountValue: '',
+    applicablePlanId: 'ALL',
+    applicableCycle: 'ALL',
+    maxUses: '-1',
+    expiresAt: '',
+  });
 
   const [config, setConfig] = useState<any>({
     digitalcoreKey: '',
@@ -78,16 +121,23 @@ export const GodMode: React.FC = () => {
     setLoading(true);
     try {
       const headers = getHeaders();
-      const [overviewRes, merchantsRes, configRes, wholesaleRes] = await Promise.all([
+      const [overviewRes, merchantsRes, configRes, wholesaleRes, plansRes, couponsRes, subsRes] = await Promise.all([
         axios.get('/api/godmode/overview', headers),
         axios.get('/api/godmode/merchants', headers),
         axios.get('/api/godmode/config', headers),
         axios.get('/api/godmode/wholesale-catalog', headers),
+        axios.get('/api/godmode/plans', headers),
+        axios.get('/api/godmode/coupons', headers),
+        axios.get('/api/godmode/subscriptions', headers),
       ]);
       setOverview(overviewRes.data);
       setMerchants(merchantsRes.data);
       setConfig(configRes.data);
       setWholesaleCatalog(wholesaleRes.data);
+      setPlans(plansRes.data);
+      setCoupons(couponsRes.data);
+      setSubscriptionsHistory(subsRes.data.history || []);
+      setSubTotalRevenue(subsRes.data.totalRevenueUsd || 0);
     } catch (err: any) {
       console.error('GodMode fetch error:', err);
       if (err.response?.status === 401 || err.response?.status === 403) {
@@ -273,6 +323,186 @@ export const GodMode: React.FC = () => {
       loadGodModeData();
     } catch (err: any) {
       alert(err.response?.data?.error || 'Failed to save global configuration');
+    }
+  };
+
+  // Plan Handlers
+  const handleOpenCreatePlan = () => {
+    setEditingPlan(null);
+    setPlanForm({
+      id: '',
+      name: '',
+      description: '',
+      priceMonthlyUsd: '',
+      priceYearlyUsd: '',
+      maxProducts: '50',
+      allowWholesale: true,
+      allowBinancePay: true,
+      allowCustomBranding: false,
+      featuresText: '1 Active Telegram Bot\nUp to 50 Products\nInstant Binance Pay\nCommunity Support',
+      isPopular: false,
+      isActive: true,
+      sortOrder: String(plans.length + 1),
+    });
+    setShowPlanModal(true);
+  };
+
+  const handleEditPlan = (plan: any) => {
+    setEditingPlan(plan);
+    setPlanForm({
+      id: plan.id,
+      name: plan.name,
+      description: plan.description || '',
+      priceMonthlyUsd: String(plan.price_monthly_usd),
+      priceYearlyUsd: String(plan.price_yearly_usd),
+      maxProducts: String(plan.max_products),
+      allowWholesale: Boolean(plan.allow_wholesale),
+      allowBinancePay: Boolean(plan.allow_binance_pay),
+      allowCustomBranding: Boolean(plan.allow_custom_branding),
+      featuresText: Array.isArray(plan.features_json) ? plan.features_json.join('\n') : '',
+      isPopular: Boolean(plan.is_popular),
+      isActive: Boolean(plan.is_active),
+      sortOrder: String(plan.sort_order || 0),
+    });
+    setShowPlanModal(true);
+  };
+
+  const handleSavePlan = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const features = planForm.featuresText
+      .split('\n')
+      .map((f) => f.trim())
+      .filter(Boolean);
+
+    try {
+      if (editingPlan) {
+        await axios.put(
+          `/api/godmode/plans/${editingPlan.id}`,
+          {
+            name: planForm.name,
+            description: planForm.description,
+            priceMonthlyUsd: parseFloat(planForm.priceMonthlyUsd) || 0,
+            priceYearlyUsd: parseFloat(planForm.priceYearlyUsd) || 0,
+            maxProducts: parseInt(planForm.maxProducts) || 50,
+            allowWholesale: planForm.allowWholesale,
+            allowBinancePay: planForm.allowBinancePay,
+            allowCustomBranding: planForm.allowCustomBranding,
+            features,
+            isPopular: planForm.isPopular,
+            isActive: planForm.isActive,
+            sortOrder: parseInt(planForm.sortOrder) || 0,
+          },
+          getHeaders()
+        );
+      } else {
+        await axios.post(
+          '/api/godmode/plans',
+          {
+            id: planForm.id,
+            name: planForm.name,
+            description: planForm.description,
+            priceMonthlyUsd: parseFloat(planForm.priceMonthlyUsd) || 0,
+            priceYearlyUsd: parseFloat(planForm.priceYearlyUsd) || 0,
+            maxProducts: parseInt(planForm.maxProducts) || 50,
+            allowWholesale: planForm.allowWholesale,
+            allowBinancePay: planForm.allowBinancePay,
+            allowCustomBranding: planForm.allowCustomBranding,
+            features,
+            isPopular: planForm.isPopular,
+            isActive: planForm.isActive,
+            sortOrder: parseInt(planForm.sortOrder) || 0,
+          },
+          getHeaders()
+        );
+      }
+      setShowPlanModal(false);
+      loadGodModeData();
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to save plan');
+    }
+  };
+
+  const handleTogglePlanActive = async (plan: any) => {
+    try {
+      await axios.put(
+        `/api/godmode/plans/${plan.id}`,
+        { isActive: !plan.is_active },
+        getHeaders()
+      );
+      loadGodModeData();
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to toggle plan status');
+    }
+  };
+
+  const handleDeletePlan = async (planId: string, planName: string) => {
+    if (!confirm(`Delete or deactivate plan "${planName}"?`)) return;
+    try {
+      const res = await axios.delete(`/api/godmode/plans/${planId}`, getHeaders());
+      alert(res.data.message || 'Plan deleted');
+      loadGodModeData();
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to delete plan');
+    }
+  };
+
+  // Coupon Handlers
+  const handleOpenCreateCoupon = () => {
+    setCouponForm({
+      code: '',
+      discountType: 'PERCENTAGE',
+      discountValue: '',
+      applicablePlanId: 'ALL',
+      applicableCycle: 'ALL',
+      maxUses: '-1',
+      expiresAt: '',
+    });
+    setShowCouponModal(true);
+  };
+
+  const handleSaveCoupon = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await axios.post(
+        '/api/godmode/coupons',
+        {
+          code: couponForm.code,
+          discountType: couponForm.discountType,
+          discountValue: parseFloat(couponForm.discountValue) || 0,
+          applicablePlanId: couponForm.applicablePlanId,
+          applicableCycle: couponForm.applicableCycle,
+          maxUses: parseInt(couponForm.maxUses) || -1,
+          expiresAt: couponForm.expiresAt || null,
+        },
+        getHeaders()
+      );
+      setShowCouponModal(false);
+      loadGodModeData();
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to create coupon');
+    }
+  };
+
+  const handleToggleCoupon = async (coupon: any) => {
+    try {
+      await axios.put(
+        `/api/godmode/coupons/${coupon.id}`,
+        { isActive: !coupon.is_active },
+        getHeaders()
+      );
+      loadGodModeData();
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to toggle coupon');
+    }
+  };
+
+  const handleDeleteCoupon = async (couponId: number, code: string) => {
+    if (!confirm(`Delete coupon "${code}"?`)) return;
+    try {
+      await axios.delete(`/api/godmode/coupons/${couponId}`, getHeaders());
+      loadGodModeData();
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to delete coupon');
     }
   };
 
@@ -469,6 +699,20 @@ export const GodMode: React.FC = () => {
               Merchant Wallets: ${overview?.fleet?.totalMerchantWalletsUsd?.toFixed(2) || '0.00'}
             </span>
           </div>
+
+          {/* Card 5: Subscription Revenue */}
+          <div className="glass-card-cyber rounded-2xl p-5 border border-white/10 space-y-2">
+            <div className="flex justify-between items-center text-xs text-zinc-400">
+              <span className="font-mono">SUBSCRIPTION REVENUE</span>
+              <Sparkles className="w-4 h-4 text-emerald-400" />
+            </div>
+            <div className="text-2xl font-mono font-extrabold text-emerald-400">
+              ${subTotalRevenue.toFixed(2)} <span className="text-xs text-zinc-500">USDT</span>
+            </div>
+            <span className="text-[10px] text-zinc-500 font-mono">
+              Total Payments: {subscriptionsHistory.length}
+            </span>
+          </div>
         </div>
 
         {/* Navigation Tabs in GodMode */}
@@ -492,6 +736,16 @@ export const GodMode: React.FC = () => {
             }`}
           >
             Wholesale Governance & Plan Gating ({wholesaleCatalog.length})
+          </button>
+          <button
+            onClick={() => setGodTab('plans')}
+            className={`px-4 py-2 rounded-xl text-xs font-mono font-bold tracking-wider uppercase transition-all ${
+              godTab === 'plans'
+                ? 'bg-crimson-600 text-white shadow-lg shadow-crimson-600/30'
+                : 'text-zinc-400 hover:text-white'
+            }`}
+          >
+            Plans & Coupons Engine ({plans.length})
           </button>
           <button
             onClick={() => setGodTab('config')}
@@ -979,6 +1233,556 @@ export const GodMode: React.FC = () => {
               Deploy & Save System Engine
             </button>
           </form>
+        )}
+
+        {/* ==========================================
+            TAB 4: SUBSCRIPTION PLANS & COUPONS ENGINE
+           ========================================== */}
+        {godTab === 'plans' && (
+          <div className="space-y-10">
+            {/* 1. Plans Section */}
+            <div className="space-y-4">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div>
+                  <h3 className="text-base font-mono font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-crimson-400" />
+                    Subscription Plans Management ({plans.length})
+                  </h3>
+                  <p className="text-xs text-zinc-400">Configure tiers, monthly/yearly pricing, limits, and public features</p>
+                </div>
+                <button
+                  onClick={handleOpenCreatePlan}
+                  className="px-4 py-2 rounded-xl bg-crimson-600 hover:bg-crimson-500 text-white font-mono font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-md shadow-crimson-600/30"
+                >
+                  <Plus className="w-4 h-4" /> Create New Plan
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {plans.map((p) => {
+                  const features = Array.isArray(p.features_json) ? p.features_json : [];
+                  return (
+                    <div
+                      key={p.id}
+                      className={`glass-card-cyber rounded-2xl p-6 border transition-all flex flex-col justify-between ${
+                        p.is_popular ? 'border-crimson-500/50 bg-carbon-900/90' : 'border-white/10'
+                      }`}
+                    >
+                      <div className="space-y-4">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h4 className="text-lg font-bold text-white">{p.name}</h4>
+                              {p.is_popular === 1 && (
+                                <span className="px-2 py-0.5 rounded-full bg-crimson-500/20 text-crimson-400 text-[10px] font-mono font-bold uppercase">
+                                  Popular
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[11px] font-mono text-zinc-400">ID: {p.id}</span>
+                          </div>
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase ${
+                              p.is_active ? 'bg-emerald-500/20 text-emerald-400' : 'bg-zinc-800 text-zinc-500'
+                            }`}
+                          >
+                            {p.is_active ? 'Active' : 'Disabled'}
+                          </span>
+                        </div>
+
+                        {p.description && <p className="text-xs text-zinc-400">{p.description}</p>}
+
+                        <div className="p-3.5 rounded-xl bg-carbon-950 border border-white/5 space-y-1.5 font-mono">
+                          <div className="flex justify-between text-xs">
+                            <span className="text-zinc-400">Monthly:</span>
+                            <span className="text-white font-bold">${p.price_monthly_usd.toFixed(2)} USD</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="text-zinc-400">Yearly:</span>
+                            <span className="text-laser-400 font-bold">${p.price_yearly_usd.toFixed(2)} USD</span>
+                          </div>
+                          <div className="flex justify-between text-xs border-t border-white/5 pt-1 text-[11px]">
+                            <span className="text-zinc-500">Max Products:</span>
+                            <span className="text-zinc-300">{p.max_products === -1 ? 'Unlimited' : p.max_products}</span>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <span className="text-[10px] font-mono font-bold text-zinc-400 uppercase tracking-wider block">
+                            Features List:
+                          </span>
+                          <div className="space-y-1.5">
+                            {features.map((feat: string, i: number) => (
+                              <div key={i} className="flex items-center gap-2 text-xs text-zinc-300">
+                                <CheckCircle className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                                <span>{feat}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="pt-6 border-t border-white/10 mt-6 flex items-center justify-between">
+                        <button
+                          onClick={() => handleTogglePlanActive(p)}
+                          className={`text-xs font-mono font-bold flex items-center gap-1 ${
+                            p.is_active ? 'text-zinc-400 hover:text-amber-400' : 'text-emerald-400'
+                          }`}
+                        >
+                          {p.is_active ? <ToggleRight className="w-4 h-4 text-emerald-400" /> : <ToggleLeft className="w-4 h-4 text-zinc-500" />}
+                          <span>{p.is_active ? 'Active' : 'Enable'}</span>
+                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleEditPlan(p)}
+                            className="p-1.5 rounded-lg bg-carbon-800 hover:bg-carbon-700 text-zinc-300 hover:text-white"
+                            title="Edit Plan"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeletePlan(p.id, p.name)}
+                            className="p-1.5 rounded-lg bg-carbon-800 hover:bg-crimson-500/20 text-zinc-400 hover:text-crimson-400"
+                            title="Delete Plan"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 2. Coupons Section */}
+            <div className="space-y-4 pt-6 border-t border-white/10">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div>
+                  <h3 className="text-base font-mono font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                    <Ticket className="w-4 h-4 text-laser-400" />
+                    Promotional & Discount Coupons ({coupons.length})
+                  </h3>
+                  <p className="text-xs text-zinc-400">Create discount vouchers with percentage or fixed USD amounts</p>
+                </div>
+                <button
+                  onClick={handleOpenCreateCoupon}
+                  className="px-4 py-2 rounded-xl bg-laser-600 hover:bg-laser-500 text-white font-mono font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-md shadow-laser-600/30"
+                >
+                  <Plus className="w-4 h-4" /> Create Coupon
+                </button>
+              </div>
+
+              <div className="glass-card-cyber rounded-2xl border border-white/10 overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-carbon-900 border-b border-white/10 font-mono text-zinc-400 uppercase text-[10px]">
+                      <tr>
+                        <th className="p-3.5">Coupon Code</th>
+                        <th className="p-3.5">Discount</th>
+                        <th className="p-3.5">Applicable Tier</th>
+                        <th className="p-3.5">Cycle</th>
+                        <th className="p-3.5">Usage</th>
+                        <th className="p-3.5">Expires</th>
+                        <th className="p-3.5">Status</th>
+                        <th className="p-3.5 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5 font-mono">
+                      {coupons.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="p-6 text-center text-zinc-500 text-xs font-sans">
+                            No coupons created yet. Click "+ Create Coupon" to add promotional codes.
+                          </td>
+                        </tr>
+                      ) : (
+                        coupons.map((c) => (
+                          <tr key={c.id} className="hover:bg-white/[0.02]">
+                            <td className="p-3.5 font-bold text-white">{c.code}</td>
+                            <td className="p-3.5 text-emerald-400 font-bold">
+                              {c.discount_type === 'PERCENTAGE' ? `${c.discount_value}% OFF` : `$${Number(c.discount_value).toFixed(2)} OFF`}
+                            </td>
+                            <td className="p-3.5 text-zinc-300">{c.applicable_plan_id === 'ALL' ? 'All Plans' : c.applicable_plan_id}</td>
+                            <td className="p-3.5 text-zinc-300">{c.applicable_cycle}</td>
+                            <td className="p-3.5 text-zinc-400">
+                              {c.used_count} / {c.max_uses === -1 ? '∞' : c.max_uses}
+                            </td>
+                            <td className="p-3.5 text-zinc-400">
+                              {c.expires_at ? new Date(c.expires_at).toLocaleDateString() : 'Never'}
+                            </td>
+                            <td className="p-3.5">
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                                  c.is_active ? 'bg-emerald-500/20 text-emerald-400' : 'bg-zinc-800 text-zinc-500'
+                                }`}
+                              >
+                                {c.is_active ? 'Active' : 'Disabled'}
+                              </span>
+                            </td>
+                            <td className="p-3.5 text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  onClick={() => handleToggleCoupon(c)}
+                                  className="p-1 rounded bg-carbon-800 hover:bg-carbon-700 text-zinc-300"
+                                  title="Toggle Status"
+                                >
+                                  {c.is_active ? <ToggleRight className="w-3.5 h-3.5 text-emerald-400" /> : <ToggleLeft className="w-3.5 h-3.5 text-zinc-500" />}
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteCoupon(c.id, c.code)}
+                                  className="p-1 rounded bg-carbon-800 hover:bg-crimson-500/20 text-zinc-400 hover:text-crimson-400"
+                                  title="Delete Coupon"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            {/* 3. Subscription History Audit Ledger */}
+            <div className="space-y-4 pt-6 border-t border-white/10">
+              <div>
+                <h3 className="text-base font-mono font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                  <DollarSign className="w-4 h-4 text-emerald-400" />
+                  Subscription Payment Ledger (Direct to Owner UID)
+                </h3>
+                <p className="text-xs text-zinc-400">Audited Binance Pay subscriptions purchased across all merchants</p>
+              </div>
+
+              <div className="glass-card-cyber rounded-2xl border border-white/10 overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-carbon-900 border-b border-white/10 font-mono text-zinc-400 uppercase text-[10px]">
+                      <tr>
+                        <th className="p-3.5">Store / Merchant</th>
+                        <th className="p-3.5">Plan</th>
+                        <th className="p-3.5">Cycle</th>
+                        <th className="p-3.5">Paid USDT</th>
+                        <th className="p-3.5">Coupon</th>
+                        <th className="p-3.5">Binance Trx ID</th>
+                        <th className="p-3.5">Timestamp</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5 font-mono">
+                      {subscriptionsHistory.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="p-6 text-center text-zinc-500 text-xs font-sans">
+                            No subscription payments recorded yet.
+                          </td>
+                        </tr>
+                      ) : (
+                        subscriptionsHistory.map((s) => (
+                          <tr key={s.id} className="hover:bg-white/[0.02]">
+                            <td className="p-3.5 font-bold text-white">
+                              {s.tenant_name} <span className="text-zinc-500 font-normal">({s.tenant_slug})</span>
+                            </td>
+                            <td className="p-3.5 text-laser-400 font-bold">{s.plan_name}</td>
+                            <td className="p-3.5 text-zinc-300">{s.billing_cycle}</td>
+                            <td className="p-3.5 text-emerald-400 font-bold">${Number(s.final_amount_paid_usd).toFixed(2)}</td>
+                            <td className="p-3.5 text-zinc-400">{s.coupon_code || '-'}</td>
+                            <td className="p-3.5 text-zinc-300 font-mono">{s.trx_id}</td>
+                            <td className="p-3.5 text-zinc-400">{new Date(s.created_at).toLocaleString()}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal: Create / Edit Subscription Plan */}
+        {showPlanModal && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="glass-card rounded-2xl max-w-lg w-full p-6 border border-white/10 space-y-4 max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center border-b border-white/10 pb-3">
+                <h3 className="text-base font-mono font-bold text-white">
+                  {editingPlan ? `Edit Plan "${editingPlan.name}"` : 'Create New Subscription Plan'}
+                </h3>
+                <button onClick={() => setShowPlanModal(false)} className="text-zinc-400 hover:text-white">✕</button>
+              </div>
+
+              <form onSubmit={handleSavePlan} className="space-y-4 text-xs">
+                {!editingPlan && (
+                  <div>
+                    <label className="block font-semibold text-zinc-300 mb-1">Unique Plan ID (slug)</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. starter, pro, vip-scale"
+                      value={planForm.id}
+                      onChange={(e) => setPlanForm({ ...planForm, id: e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, '') })}
+                      className="w-full px-3 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono"
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <label className="block font-semibold text-zinc-300 mb-1">Display Name</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Pro Merchant Cloud"
+                    value={planForm.name}
+                    onChange={(e) => setPlanForm({ ...planForm, name: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-zinc-300 mb-1">Description</label>
+                  <input
+                    type="text"
+                    placeholder="Short summary for pricing card"
+                    value={planForm.description}
+                    onChange={(e) => setPlanForm({ ...planForm, description: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-zinc-300 mb-1">Monthly Price ($ USD)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      required
+                      placeholder="8.00"
+                      value={planForm.priceMonthlyUsd}
+                      onChange={(e) => setPlanForm({ ...planForm, priceMonthlyUsd: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-zinc-300 mb-1">Yearly Price ($ USD)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="80.00"
+                      value={planForm.priceYearlyUsd}
+                      onChange={(e) => setPlanForm({ ...planForm, priceYearlyUsd: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-zinc-300 mb-1">Max Products (-1 for unlimited)</label>
+                    <input
+                      type="number"
+                      value={planForm.maxProducts}
+                      onChange={(e) => setPlanForm({ ...planForm, maxProducts: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-zinc-300 mb-1">Sort Order</label>
+                    <input
+                      type="number"
+                      value={planForm.sortOrder}
+                      onChange={(e) => setPlanForm({ ...planForm, sortOrder: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-zinc-300 mb-1">
+                    Features List (One bullet per line)
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={planForm.featuresText}
+                    onChange={(e) => setPlanForm({ ...planForm, featuresText: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono text-xs"
+                    placeholder="1 Active Telegram Bot&#10;Up to 50 Products&#10;Instant Binance Pay&#10;Priority Support"
+                  ></textarea>
+                </div>
+
+                <div className="space-y-2 pt-2 border-t border-white/10">
+                  <label className="flex items-center gap-2 cursor-pointer text-zinc-300">
+                    <input
+                      type="checkbox"
+                      checked={planForm.allowWholesale}
+                      onChange={(e) => setPlanForm({ ...planForm, allowWholesale: e.target.checked })}
+                      className="rounded bg-carbon-800 border-white/20"
+                    />
+                    <span>Allow Wholesale Reseller Access</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer text-zinc-300">
+                    <input
+                      type="checkbox"
+                      checked={planForm.allowBinancePay}
+                      onChange={(e) => setPlanForm({ ...planForm, allowBinancePay: e.target.checked })}
+                      className="rounded bg-carbon-800 border-white/20"
+                    />
+                    <span>Allow Automated Binance Pay for Customers</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer text-zinc-300">
+                    <input
+                      type="checkbox"
+                      checked={planForm.isPopular}
+                      onChange={(e) => setPlanForm({ ...planForm, isPopular: e.target.checked })}
+                      className="rounded bg-carbon-800 border-white/20"
+                    />
+                    <span>Mark as "Most Popular" Tier</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer text-zinc-300">
+                    <input
+                      type="checkbox"
+                      checked={planForm.isActive}
+                      onChange={(e) => setPlanForm({ ...planForm, isActive: e.target.checked })}
+                      className="rounded bg-carbon-800 border-white/20"
+                    />
+                    <span>Active & Available for Purchase</span>
+                  </label>
+                </div>
+
+                <div className="pt-4 flex justify-end gap-3 border-t border-white/10">
+                  <button
+                    type="button"
+                    onClick={() => setShowPlanModal(false)}
+                    className="px-4 py-2 rounded-xl bg-carbon-800 text-zinc-400 hover:text-white"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 rounded-xl bg-crimson-600 hover:bg-crimson-500 text-white font-bold"
+                  >
+                    Save Plan
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Modal: Create Discount Coupon */}
+        {showCouponModal && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="glass-card rounded-2xl max-w-md w-full p-6 border border-white/10 space-y-4">
+              <div className="flex justify-between items-center border-b border-white/10 pb-3">
+                <h3 className="text-base font-mono font-bold text-white">Create New Discount Coupon</h3>
+                <button onClick={() => setShowCouponModal(false)} className="text-zinc-400 hover:text-white">✕</button>
+              </div>
+
+              <form onSubmit={handleSaveCoupon} className="space-y-4 text-xs">
+                <div>
+                  <label className="block font-semibold text-zinc-300 mb-1">Coupon Code (Uppercase)</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. LAUNCH50, EID2026, SAVE20"
+                    value={couponForm.code}
+                    onChange={(e) => setCouponForm({ ...couponForm, code: e.target.value.toUpperCase().trim() })}
+                    className="w-full px-3 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono font-bold"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-zinc-300 mb-1">Discount Type</label>
+                    <select
+                      value={couponForm.discountType}
+                      onChange={(e) => setCouponForm({ ...couponForm, discountType: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono"
+                    >
+                      <option value="PERCENTAGE">Percentage (%)</option>
+                      <option value="FIXED_USD">Fixed Amount ($ USD)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-zinc-300 mb-1">Discount Value</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      required
+                      placeholder={couponForm.discountType === 'PERCENTAGE' ? '20' : '5.00'}
+                      value={couponForm.discountValue}
+                      onChange={(e) => setCouponForm({ ...couponForm, discountValue: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-zinc-300 mb-1">Applicable Plan</label>
+                    <select
+                      value={couponForm.applicablePlanId}
+                      onChange={(e) => setCouponForm({ ...couponForm, applicablePlanId: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white"
+                    >
+                      <option value="ALL">All Plans</option>
+                      {plans.map((p) => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-zinc-300 mb-1">Billing Cycle</label>
+                    <select
+                      value={couponForm.applicableCycle}
+                      onChange={(e) => setCouponForm({ ...couponForm, applicableCycle: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white"
+                    >
+                      <option value="ALL">Both Monthly & Yearly</option>
+                      <option value="MONTHLY">Monthly Only</option>
+                      <option value="YEARLY">Yearly Only</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-zinc-300 mb-1">Max Uses (-1 for unlimited)</label>
+                    <input
+                      type="number"
+                      value={couponForm.maxUses}
+                      onChange={(e) => setCouponForm({ ...couponForm, maxUses: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-zinc-300 mb-1">Expiration Date (Optional)</label>
+                    <input
+                      type="date"
+                      value={couponForm.expiresAt}
+                      onChange={(e) => setCouponForm({ ...couponForm, expiresAt: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-4 flex justify-end gap-3 border-t border-white/10">
+                  <button
+                    type="button"
+                    onClick={() => setShowCouponModal(false)}
+                    className="px-4 py-2 rounded-xl bg-carbon-800 text-zinc-400 hover:text-white"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 rounded-xl bg-laser-600 hover:bg-laser-500 text-white font-bold"
+                  >
+                    Create Coupon
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
         )}
       </div>
     </div>

@@ -38,6 +38,11 @@ CREATE TABLE IF NOT EXISTS tenants (
     about_text TEXT,
     support_text TEXT,
     welcome_text TEXT,
+    subscription_cycle TEXT DEFAULT 'MONTHLY', -- MONTHLY, YEARLY, TRIAL
+    subscription_status TEXT DEFAULT 'TRIAL', -- TRIAL, ACTIVE, GRACE, EXPIRED, SUSPENDED
+    subscription_started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    subscription_expires_at TIMESTAMP,
+    trial_ends_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -170,7 +175,78 @@ CREATE TABLE IF NOT EXISTS platform_wholesale_rules (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 11. Subscription Plans (God-Mode Managed)
+CREATE TABLE IF NOT EXISTS subscription_plans (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT,
+    price_monthly_usd NUMERIC NOT NULL,
+    price_yearly_usd NUMERIC NOT NULL,
+    max_products INTEGER DEFAULT 50,           -- -1 for unlimited
+    allow_wholesale INTEGER DEFAULT 1,
+    allow_binance_pay INTEGER DEFAULT 1,
+    allow_custom_branding INTEGER DEFAULT 0,
+    features_json TEXT DEFAULT '[]',
+    is_popular INTEGER DEFAULT 0,
+    is_active INTEGER DEFAULT 1,
+    sort_order INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 12. Discount Coupons
+CREATE TABLE IF NOT EXISTS coupons (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT UNIQUE NOT NULL,
+    discount_type TEXT NOT NULL,               -- 'PERCENTAGE' or 'FIXED_USD'
+    discount_value NUMERIC NOT NULL,
+    applicable_plan_id TEXT DEFAULT 'ALL',
+    applicable_cycle TEXT DEFAULT 'ALL',       -- 'ALL', 'MONTHLY', 'YEARLY'
+    min_spend_usd NUMERIC DEFAULT 0.0,
+    max_uses INTEGER DEFAULT -1,               -- -1 for unlimited
+    used_count INTEGER DEFAULT 0,
+    expires_at TIMESTAMP,
+    is_active INTEGER DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 13. Subscription Payment Ledger
+CREATE TABLE IF NOT EXISTS subscription_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    plan_id TEXT NOT NULL REFERENCES subscription_plans(id),
+    billing_cycle TEXT NOT NULL,               -- 'MONTHLY' or 'YEARLY'
+    original_price_usd NUMERIC NOT NULL,
+    discount_amount_usd NUMERIC DEFAULT 0.0,
+    final_amount_paid_usd NUMERIC NOT NULL,
+    coupon_id INTEGER REFERENCES coupons(id),
+    payment_method TEXT NOT NULL DEFAULT 'BINANCE_PAY',
+    trx_id TEXT NOT NULL,
+    period_start TIMESTAMP NOT NULL,
+    period_end TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Seed initial default global config if empty
 INSERT OR IGNORE INTO global_system_config (id, platform_fee_fixed_usd, platform_fee_pct)
 VALUES (1, 0.01, 0.0);
+
+-- Seed default initial plans if not present
+INSERT OR IGNORE INTO subscription_plans (
+    id, name, description, price_monthly_usd, price_yearly_usd, max_products,
+    allow_wholesale, allow_binance_pay, allow_custom_branding, features_json, is_popular, is_active, sort_order
+) VALUES 
+(
+    'starter', 'Starter Cloud', 'Perfect for newly launched digital stores', 8.00, 80.00, 50,
+    1, 1, 0, '["1 Active Telegram Bot", "Up to 50 Products", "bKash / Nagad Auto-Convert", "Instant Binance Pay SAPI", "Community Support"]', 0, 1, 1
+),
+(
+    'pro', 'Pro Merchant', 'Most popular choice for growing businesses', 20.00, 200.00, 250,
+    1, 1, 0, '["3 Active Telegram Bots", "Up to 250 Products", "Instant Binance Pay Auto-Deposit", "Wholesale Reseller Access", "Auto Margin Engine", "Priority Telegram Support"]', 1, 1, 2
+),
+(
+    'enterprise', 'Enterprise VIP', 'Unlimited power for high-volume automated sellers', 48.00, 480.00, -1,
+    1, 1, 1, '["Unlimited Telegram Bots", "Unlimited Products", "Zero Platform Wholesale Fees", "Custom Domain & Branding", "Dedicated Account Manager", "Custom API Integrations"]', 0, 1, 3
+);
+
 

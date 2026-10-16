@@ -219,6 +219,10 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
         return;
       }
 
+      if (tenant.status === 'SUSPENDED' || tenant.subscription_status === 'EXPIRED' || (tenant.subscription_expires_at && new Date(tenant.subscription_expires_at) < new Date())) {
+        return ctx.reply('⚠️ <b>Store Maintenance</b>\n\nThis store is currently undergoing maintenance. Please check back shortly.', { parse_mode: 'HTML' });
+      }
+
       const customer = getOrCreateCustomer(ctx.from);
       userStates.delete(ctx.from.id);
 

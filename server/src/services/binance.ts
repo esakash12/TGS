@@ -234,3 +234,160 @@ export async function verifyCustomerRetailBinanceDeposit(params: {
   depositTx();
   return result;
 }
+
+/**
+ * Tier 3: Merchant Subscription Payment directly to Platform Owner via Binance Pay
+ */
+export async function verifyMerchantSubscriptionPayment(params: {
+  tenantId: string;
+  planId: string;
+  cycle: 'MONTHLY' | 'YEARLY';
+  couponCode?: string;
+  trxId: string;
+}): Promise<{
+  success: boolean;
+  error?: string;
+  planName?: string;
+  expiresAt?: string;
+  amountPaidUsd?: number;
+}> {
+  const { tenantId, planId, cycle, couponCode, trxId } = params;
+
+  // 1. Validate Plan
+  const plan = db.prepare('SELECT * FROM subscription_plans WHERE id = ? AND is_active = 1').get(planId) as any;
+  if (!plan) {
+    return { success: false, error: 'Selected subscription plan does not exist or is inactive' };
+  }
+
+  const originalPrice = cycle === 'YEARLY' ? Number(plan.price_yearly_usd) : Number(plan.price_monthly_usd);
+  let discountAmount = 0.0;
+  let couponRecord: any = null;
+
+  // 2. Validate Coupon if provided
+  if (couponCode && couponCode.trim()) {
+    const cleanCode = couponCode.trim().toUpperCase();
+    const coupon = db.prepare('SELECT * FROM coupons WHERE code = ? AND is_active = 1').get(cleanCode) as any;
+    if (!coupon) {
+      return { success: false, error: `Coupon "${cleanCode}" is invalid or inactive` };
+    }
+
+    if (coupon.expires_at && new Date(coupon.expires_at) < new Date()) {
+      return { success: false, error: `Coupon "${cleanCode}" has expired` };
+    }
+
+    if (coupon.max_uses !== -1 && coupon.used_count >= coupon.max_uses) {
+      return { success: false, error: `Coupon "${cleanCode}" has reached its maximum redemptions` };
+    }
+
+    if (coupon.applicable_plan_id !== 'ALL' && coupon.applicable_plan_id !== planId) {
+      return { success: false, error: `Coupon "${cleanCode}" is not valid for the ${plan.name} plan` };
+    }
+
+    if (coupon.applicable_cycle !== 'ALL' && coupon.applicable_cycle !== cycle) {
+      return { success: false, error: `Coupon "${cleanCode}" is only valid for ${coupon.applicable_cycle} billing` };
+    }
+
+    if (coupon.discount_type === 'PERCENTAGE') {
+      discountAmount = originalPrice * (Number(coupon.discount_value) / 100);
+    } else {
+      discountAmount = Math.min(originalPrice, Number(coupon.discount_value));
+    }
+
+    couponRecord = coupon;
+  }
+
+  const finalPayableUsd = Math.max(0.01, Number((originalPrice - discountAmount).toFixed(2)));
+
+  // 3. Platform Owner Binance Config
+  const config = db.prepare('SELECT * FROM global_system_config WHERE id = 1').get() as any;
+  if (!config) {
+    return { success: false, error: 'Platform Binance Pay configuration not found' };
+  }
+
+  const apiKey = decrypt(config.owner_binance_api_key_enc);
+  const apiSecret = decrypt(config.owner_binance_api_secret_enc);
+  const ownerUid = config.owner_binance_uid;
+
+  if (!apiKey || !apiSecret || !ownerUid) {
+    return { success: false, error: 'Platform Owner has not configured Binance Pay credentials in God-Mode yet.' };
+  }
+
+  // 4. Verify transaction with Binance SAPI
+  const result = await verifyBinancePayTransaction({
+    apiKey,
+    apiSecret,
+    expectedReceiverUid: ownerUid,
+    trxId,
+    expectedAmountUsd: finalPayableUsd,
+  });
+
+  if (!result.success || !result.amountUsd) {
+    return { success: false, error: result.error || 'Binance Pay verification failed' };
+  }
+
+  // 5. Calculate new expiration date
+  const tenant = db.prepare('SELECT * FROM tenants WHERE id = ?').get(tenantId) as any;
+  let baseDate = new Date();
+  if (tenant.subscription_expires_at && new Date(tenant.subscription_expires_at) > baseDate) {
+    baseDate = new Date(tenant.subscription_expires_at);
+  }
+
+  if (cycle === 'YEARLY') {
+    baseDate.setFullYear(baseDate.getFullYear() + 1);
+  } else {
+    baseDate.setDate(baseDate.getDate() + 30);
+  }
+  const newExpiresAt = baseDate.toISOString();
+
+  // 6. Atomic DB Commit
+  const subTx = db.transaction(() => {
+    // A. Replay attack record
+    db.prepare(`
+      INSERT INTO crypto_verified_transactions (trx_id, payer_id, receiver_uid, amount_usd, purpose, tenant_id)
+      VALUES (?, ?, ?, ?, 'subscription_payment', ?)
+    `).run(trxId, result.payerId || '', ownerUid, result.amountUsd, tenantId);
+
+    // B. Record subscription history
+    db.prepare(`
+      INSERT INTO subscription_history (
+        tenant_id, plan_id, billing_cycle, original_price_usd, discount_amount_usd,
+        final_amount_paid_usd, coupon_id, payment_method, trx_id, period_start, period_end
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'BINANCE_PAY', ?, CURRENT_TIMESTAMP, ?)
+    `).run(
+      tenantId,
+      planId,
+      cycle,
+      originalPrice,
+      discountAmount,
+      result.amountUsd,
+      couponRecord ? couponRecord.id : null,
+      trxId,
+      newExpiresAt
+    );
+
+    // C. Increment coupon count if used
+    if (couponRecord) {
+      db.prepare(`UPDATE coupons SET used_count = used_count + 1 WHERE id = ?`).run(couponRecord.id);
+    }
+
+    // D. Update tenant subscription
+    db.prepare(`
+      UPDATE tenants
+      SET plan_id = ?,
+          subscription_cycle = ?,
+          subscription_status = 'ACTIVE',
+          subscription_expires_at = ?
+      WHERE id = ?
+    `).run(planId, cycle, newExpiresAt, tenantId);
+  });
+
+  subTx();
+
+  return {
+    success: true,
+    planName: plan.name,
+    expiresAt: newExpiresAt,
+    amountPaidUsd: result.amountUsd,
+  };
+}
+

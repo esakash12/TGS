@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import axios from 'axios';
 import { Navbar } from '../components/Navbar';
 import { PhoneSimulator } from '../components/PhoneSimulator';
 import { RoiCalculator } from '../components/RoiCalculator';
@@ -19,6 +20,19 @@ import {
 import { PRICING_TIERS } from '../../../shared/constants';
 
 export const Landing: React.FC = () => {
+  const [plans, setPlans] = useState<any[]>(PRICING_TIERS);
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
+
+  useEffect(() => {
+    axios
+      .get('/api/public/plans')
+      .then((res) => {
+        if (Array.isArray(res.data) && res.data.length > 0) {
+          setPlans(res.data);
+        }
+      })
+      .catch((err) => console.warn('Using default pricing tiers:', err.message));
+  }, []);
   return (
     <div className="min-h-screen bg-carbon-900 text-zinc-100 relative overflow-hidden">
       <Navbar />
@@ -187,7 +201,7 @@ export const Landing: React.FC = () => {
           PRICING TIERS
          ========================================== */}
       <section id="pricing" className="py-24 px-4 sm:px-8 max-w-7xl mx-auto border-t border-white/5">
-        <div className="text-center max-w-3xl mx-auto mb-16 space-y-4">
+        <div className="text-center max-w-3xl mx-auto mb-12 space-y-4">
           <span className="text-xs font-mono font-bold uppercase tracking-widest text-laser-400">
             Transparent Pricing
           </span>
@@ -197,58 +211,103 @@ export const Landing: React.FC = () => {
           <p className="text-sm text-zinc-400">
             কোনো লুকায়িত ফি নেই। আপনার বিজনেসের আকার অনুযায়ী সেরা প্ল্যানটি বেছে নিন।
           </p>
+
+          {/* Billing Cycle Toggle */}
+          <div className="inline-flex items-center gap-1.5 p-1 rounded-2xl bg-carbon-800 border border-white/10 mt-4">
+            <button
+              onClick={() => setBillingCycle('monthly')}
+              className={`px-5 py-2 rounded-xl text-xs font-bold transition-all ${
+                billingCycle === 'monthly'
+                  ? 'bg-crimson-600 text-white shadow-md'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              মাসিক (Monthly)
+            </button>
+            <button
+              onClick={() => setBillingCycle('yearly')}
+              className={`px-5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                billingCycle === 'yearly'
+                  ? 'bg-gradient-to-r from-crimson-600 to-laser-600 text-white shadow-md'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              <span>বাৎসরিক (Yearly)</span>
+              <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-extrabold uppercase">
+                Save 20% 🎉
+              </span>
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {PRICING_TIERS.map((tier) => (
-            <div
-              key={tier.id}
-              className={`rounded-3xl p-8 transition-all relative flex flex-col justify-between ${
-                tier.popular
-                  ? 'bg-gradient-to-b from-carbon-800 to-carbon-850 border-2 border-crimson-500 shadow-2xl shadow-crimson-500/15 scale-105 z-10'
-                  : 'glass-card border border-white/10'
-              }`}
-            >
-              {tier.popular && (
-                <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-crimson-500 text-white text-[11px] font-extrabold uppercase tracking-wider shadow-md">
-                  Most Popular
-                </div>
-              )}
+          {plans.map((tier) => {
+            const isPopular = Boolean(tier.is_popular || tier.popular);
+            const priceUsd = billingCycle === 'yearly'
+              ? Number(tier.price_yearly_usd || (Number(tier.price_monthly_usd || tier.price_usd || 10) * 10))
+              : Number(tier.price_monthly_usd || tier.price_usd || 10);
+            const priceBdt = tier.price_bdt && billingCycle === 'monthly'
+              ? tier.price_bdt
+              : Math.round(priceUsd * 125);
+            const features = Array.isArray(tier.features_json)
+              ? tier.features_json
+              : Array.isArray(tier.features)
+              ? tier.features
+              : [];
 
-              <div className="space-y-6">
-                <div>
-                  <h3 className="text-xl font-bold text-white">{tier.name}</h3>
-                  <div className="mt-4 flex items-baseline gap-1">
-                    <span className="text-4xl font-extrabold text-white font-mono">৳{tier.price_bdt}</span>
-                    <span className="text-xs text-zinc-400">/ মাস</span>
+            return (
+              <div
+                key={tier.id}
+                className={`rounded-3xl p-8 transition-all relative flex flex-col justify-between ${
+                  isPopular
+                    ? 'bg-gradient-to-b from-carbon-800 to-carbon-850 border-2 border-crimson-500 shadow-2xl shadow-crimson-500/15 scale-105 z-10'
+                    : 'glass-card border border-white/10'
+                }`}
+              >
+                {isPopular && (
+                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-crimson-500 text-white text-[11px] font-extrabold uppercase tracking-wider shadow-md">
+                    Most Popular
                   </div>
-                  <span className="text-xs text-zinc-500 font-mono">~ ${tier.price_usd} USD/month</span>
-                </div>
+                )}
 
-                <div className="border-t border-white/10 pt-6 space-y-3">
-                  {tier.features.map((f, i) => (
-                    <div key={i} className="flex items-center gap-2.5 text-xs text-zinc-300">
-                      <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                      <span>{f}</span>
+                <div className="space-y-6">
+                  <div>
+                    <h3 className="text-xl font-bold text-white">{tier.name}</h3>
+                    <p className="text-xs text-zinc-400 mt-1">{tier.description || 'Complete cloud telegram store'}</p>
+                    <div className="mt-4 flex items-baseline gap-1">
+                      <span className="text-4xl font-extrabold text-white font-mono">৳{priceBdt.toLocaleString()}</span>
+                      <span className="text-xs text-zinc-400">/ {billingCycle === 'yearly' ? 'বছর' : 'মাস'}</span>
                     </div>
-                  ))}
+                    <span className="text-xs text-zinc-500 font-mono">
+                      ~ ${priceUsd} USD / {billingCycle === 'yearly' ? 'year' : 'month'}
+                    </span>
+                  </div>
+
+                  <div className="border-t border-white/10 pt-6 space-y-3">
+                    {features.map((f: string, i: number) => (
+                      <div key={i} className="flex items-center gap-2.5 text-xs text-zinc-300">
+                        <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                        <span>{f}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="pt-8">
+                  <Link
+                    to={`/register?plan=${tier.id}&cycle=${billingCycle}`}
+                    className={`block w-full py-3.5 rounded-xl text-center text-xs font-bold transition-all ${
+                      isPopular
+                        ? 'bg-gradient-to-r from-crimson-600 to-crimson-500 hover:from-crimson-500 hover:to-crimson-400 text-white shadow-lg shadow-crimson-500/30'
+                        : 'bg-carbon-700 hover:bg-carbon-600 text-white border border-white/10'
+                    }`}
+                  >
+                    Get Started with {tier.name}
+                  </Link>
                 </div>
               </div>
-
-              <div className="pt-8">
-                <Link
-                  to="/register"
-                  className={`block w-full py-3.5 rounded-xl text-center text-xs font-bold transition-all ${
-                    tier.popular
-                      ? 'bg-gradient-to-r from-crimson-600 to-crimson-500 hover:from-crimson-500 hover:to-crimson-400 text-white shadow-lg shadow-crimson-500/30'
-                      : 'bg-carbon-700 hover:bg-carbon-600 text-white border border-white/10'
-                  }`}
-                >
-                  Get Started with {tier.name}
-                </Link>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </section>
 

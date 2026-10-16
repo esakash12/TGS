@@ -7,7 +7,7 @@ import {
   fetchLiveWholesaleCatalogForMerchant,
   syncLivePricesForTenant,
 } from '../services/wholesale';
-import { verifyMerchantWholesaleTopup } from '../services/binance';
+import { verifyMerchantWholesaleTopup, verifyMerchantSubscriptionPayment } from '../services/binance';
 import { botRegistry } from '../../../bot/src/registry';
 
 export const merchantRouter = Router();
@@ -786,3 +786,186 @@ merchantRouter.get('/customers', (req: AuthenticatedRequest, res: Response) => {
 
   res.json(customers);
 });
+
+// ==========================================
+// 9. Merchant Subscription & Billing
+// ==========================================
+merchantRouter.get('/subscription/current', (req: AuthenticatedRequest, res: Response) => {
+  const tenantId = req.tenant.id;
+  const tenant = db.prepare('SELECT * FROM tenants WHERE id = ?').get(tenantId) as any;
+  if (!tenant) {
+    return res.status(404).json({ error: 'Tenant not found' });
+  }
+
+  // Check if active subscription expired
+  let subStatus = tenant.subscription_status || 'TRIAL';
+  if (tenant.subscription_expires_at && new Date(tenant.subscription_expires_at) < new Date()) {
+    subStatus = 'EXPIRED';
+    db.prepare(`UPDATE tenants SET subscription_status = 'EXPIRED' WHERE id = ?`).run(tenantId);
+  }
+
+  // Current Plan
+  const plan = db.prepare('SELECT * FROM subscription_plans WHERE id = ?').get(tenant.plan_id || 'starter') as any;
+  let features: string[] = [];
+  if (plan) {
+    try {
+      features = JSON.parse(plan.features_json || '[]');
+    } catch {
+      features = [];
+    }
+  }
+
+  // Product Usage
+  const productCountResult = db.prepare('SELECT COUNT(id) as count FROM products WHERE tenant_id = ?').get(tenantId) as any;
+  const productCount = Number(productCountResult?.count || 0);
+
+  // Platform Owner Binance UID
+  const globalConfig = db.prepare('SELECT owner_binance_uid FROM global_system_config WHERE id = 1').get() as any;
+
+  // Active Plans List for Upgrade Grid
+  const allPlans = db.prepare('SELECT * FROM subscription_plans WHERE is_active = 1 ORDER BY sort_order ASC').all() as any[];
+  const formattedPlans = allPlans.map(p => {
+    let pFeatures: string[] = [];
+    try {
+      pFeatures = JSON.parse(p.features_json || '[]');
+    } catch {
+      pFeatures = [];
+    }
+    return {
+      ...p,
+      features_json: pFeatures,
+      price_monthly_usd: Number(p.price_monthly_usd),
+      price_yearly_usd: Number(p.price_yearly_usd),
+      max_products: Number(p.max_products),
+    };
+  });
+
+  const expiresAt = tenant.subscription_expires_at || tenant.trial_ends_at;
+  const daysRemaining = expiresAt ? Math.max(0, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24))) : 0;
+
+  res.json({
+    subscription: {
+      planId: tenant.plan_id || 'starter',
+      planName: plan?.name || 'Starter Cloud',
+      cycle: tenant.subscription_cycle || 'MONTHLY',
+      status: subStatus,
+      expiresAt,
+      trialEndsAt: tenant.trial_ends_at,
+      daysRemaining,
+      maxProducts: plan ? Number(plan.max_products) : 50,
+      productCount,
+      features,
+    },
+    ownerBinanceUid: globalConfig?.owner_binance_uid || '',
+    plans: formattedPlans,
+  });
+});
+
+merchantRouter.post('/subscription/validate-coupon', (req: AuthenticatedRequest, res: Response) => {
+  const { code, planId, cycle } = req.body;
+
+  if (!code || !planId || !cycle) {
+    return res.status(400).json({ error: 'code, planId, and cycle are required' });
+  }
+
+  const cleanCode = String(code).trim().toUpperCase();
+  const coupon = db.prepare('SELECT * FROM coupons WHERE code = ? AND is_active = 1').get(cleanCode) as any;
+  if (!coupon) {
+    return res.status(400).json({ error: `Coupon "${cleanCode}" is invalid or inactive` });
+  }
+
+  if (coupon.expires_at && new Date(coupon.expires_at) < new Date()) {
+    return res.status(400).json({ error: `Coupon "${cleanCode}" has expired` });
+  }
+
+  if (coupon.max_uses !== -1 && coupon.used_count >= coupon.max_uses) {
+    return res.status(400).json({ error: `Coupon "${cleanCode}" has reached maximum usage limit` });
+  }
+
+  if (coupon.applicable_plan_id !== 'ALL' && coupon.applicable_plan_id !== planId) {
+    return res.status(400).json({ error: `Coupon "${cleanCode}" is not applicable to this plan` });
+  }
+
+  if (coupon.applicable_cycle !== 'ALL' && coupon.applicable_cycle !== cycle) {
+    return res.status(400).json({ error: `Coupon "${cleanCode}" is only applicable to ${coupon.applicable_cycle} billing` });
+  }
+
+  const plan = db.prepare('SELECT * FROM subscription_plans WHERE id = ?').get(planId) as any;
+  if (!plan) {
+    return res.status(400).json({ error: 'Plan not found' });
+  }
+
+  const originalPrice = cycle === 'YEARLY' ? Number(plan.price_yearly_usd) : Number(plan.price_monthly_usd);
+  let discountAmount = 0.0;
+
+  if (coupon.discount_type === 'PERCENTAGE') {
+    discountAmount = originalPrice * (Number(coupon.discount_value) / 100);
+  } else {
+    discountAmount = Math.min(originalPrice, Number(coupon.discount_value));
+  }
+
+  const finalPriceUsd = Math.max(0.01, Number((originalPrice - discountAmount).toFixed(2)));
+
+  res.json({
+    valid: true,
+    code: cleanCode,
+    discountType: coupon.discount_type,
+    discountValue: Number(coupon.discount_value),
+    originalPriceUsd: originalPrice,
+    discountAmountUsd: Number(discountAmount.toFixed(2)),
+    finalPriceUsd,
+  });
+});
+
+merchantRouter.post('/subscription/verify-binance', async (req: AuthenticatedRequest, res: Response) => {
+  const tenantId = req.tenant.id;
+  const { planId, cycle, couponCode, trxId } = req.body;
+
+  if (!planId || !cycle || !trxId) {
+    return res.status(400).json({ error: 'planId, cycle, and trxId are required' });
+  }
+
+  try {
+    const result = await verifyMerchantSubscriptionPayment({
+      tenantId,
+      planId,
+      cycle,
+      couponCode,
+      trxId: String(trxId).trim(),
+    });
+
+    if (!result.success) {
+      return res.status(400).json({ error: result.error });
+    }
+
+    // Auto-reload the merchant bot so if it was paused it immediately resumes
+    await botRegistry.reloadBot(tenantId);
+
+    res.json({
+      success: true,
+      message: `Your ${result.planName} subscription has been successfully activated!`,
+      expiresAt: result.expiresAt,
+      amountPaidUsd: result.amountPaidUsd,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Subscription verification failed: ' + err.message });
+  }
+});
+
+merchantRouter.get('/subscription/history', (req: AuthenticatedRequest, res: Response) => {
+  const tenantId = req.tenant.id;
+  const history = db.prepare(`
+    SELECT 
+      sh.*,
+      sp.name as plan_name,
+      c.code as coupon_code
+    FROM subscription_history sh
+    JOIN subscription_plans sp ON sh.plan_id = sp.id
+    LEFT JOIN coupons c ON sh.coupon_id = c.id
+    WHERE sh.tenant_id = ?
+    ORDER BY sh.created_at DESC
+  `).all(tenantId);
+
+  res.json(history);
+});
+

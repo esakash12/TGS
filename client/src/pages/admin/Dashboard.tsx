@@ -38,13 +38,14 @@ import {
   FolderOpen,
   ArrowUpDown,
   Check,
+  Sparkles,
 } from 'lucide-react';
 
 export const Dashboard: React.FC = () => {
   const { user, tenant, token, logout, refreshSession } = useAuth();
   const navigate = useNavigate();
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'groups' | 'custom_products' | 'wholesale' | 'store_products' | 'deposits' | 'customers' | 'settings'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'groups' | 'custom_products' | 'wholesale' | 'store_products' | 'deposits' | 'customers' | 'subscription' | 'settings'>('overview');
   const [overview, setOverview] = useState<any>(null);
   const [products, setProducts] = useState<any[]>([]);
   const [groups, setGroups] = useState<any[]>([]);
@@ -55,6 +56,23 @@ export const Dashboard: React.FC = () => {
   const [botRestartLoading, setBotRestartLoading] = useState(false);
   const [botRestartFeedback, setBotRestartFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Subscription State
+  const [subData, setSubData] = useState<any | null>(null);
+  const [subHistory, setSubHistory] = useState<any[]>([]);
+  const [subCycleView, setSubCycleView] = useState<'MONTHLY' | 'YEARLY'>('MONTHLY');
+
+  // Subscription Checkout Modal State
+  const [showSubModal, setShowSubModal] = useState(false);
+  const [subSelectedPlan, setSubSelectedPlan] = useState<any | null>(null);
+  const [subSelectedCycle, setSubSelectedCycle] = useState<'MONTHLY' | 'YEARLY'>('MONTHLY');
+  const [subCouponCode, setSubCouponCode] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState<any | null>(null);
+  const [couponLoading, setCouponLoading] = useState(false);
+  const [couponFeedback, setCouponFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [subTrxId, setSubTrxId] = useState('');
+  const [subVerifying, setSubVerifying] = useState(false);
+  const [subFeedback, setSubFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Filter & Search states
   const [storeFilter, setStoreFilter] = useState<'all' | 'custom' | 'wholesale'>('all');
@@ -216,11 +234,26 @@ export const Dashboard: React.FC = () => {
     }
   };
 
+  // Load Subscription Data
+  const loadSubscriptionData = async () => {
+    try {
+      const [currRes, histRes] = await Promise.all([
+        axios.get('/api/merchant/subscription/current', authHeaders),
+        axios.get('/api/merchant/subscription/history', authHeaders),
+      ]);
+      setSubData(currRes.data);
+      setSubHistory(histRes.data);
+    } catch (err) {
+      console.error('Failed to load subscription data:', err);
+    }
+  };
+
   useEffect(() => {
     if (activeTab === 'wholesale') loadWholesaleCatalog();
     if (activeTab === 'groups') loadGroups();
     if (activeTab === 'settings') loadSettings();
     if (activeTab === 'customers') loadCustomers();
+    if (activeTab === 'subscription' || activeTab === 'overview') loadSubscriptionData();
   }, [activeTab]);
 
   // Open Topup Modal
@@ -255,6 +288,83 @@ export const Dashboard: React.FC = () => {
       setTopupMsg({ text: err.response?.data?.error || 'Verification failed', type: 'error' });
     } finally {
       setTopupLoading(false);
+    }
+  };
+
+  // Subscription Checkout Handlers
+  const handleOpenUpgradeModal = (plan: any, cycle: 'MONTHLY' | 'YEARLY' = 'MONTHLY') => {
+    setSubSelectedPlan(plan);
+    setSubSelectedCycle(cycle);
+    setSubCouponCode('');
+    setAppliedCoupon(null);
+    setCouponFeedback(null);
+    setSubTrxId('');
+    setSubFeedback(null);
+    setShowSubModal(true);
+  };
+
+  const handleApplyCoupon = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!subCouponCode.trim() || !subSelectedPlan) return;
+    setCouponLoading(true);
+    setCouponFeedback(null);
+    try {
+      const res = await axios.post(
+        '/api/merchant/subscription/validate-coupon',
+        {
+          code: subCouponCode.trim(),
+          planId: subSelectedPlan.id,
+          cycle: subSelectedCycle,
+        },
+        authHeaders
+      );
+      setAppliedCoupon(res.data);
+      setCouponFeedback({
+        type: 'success',
+        message: `Coupon "${res.data.code}" applied! You save $${res.data.discountAmountUsd} USD.`,
+      });
+    } catch (err: any) {
+      setAppliedCoupon(null);
+      setCouponFeedback({
+        type: 'error',
+        message: err.response?.data?.error || 'Invalid or ineligible coupon code',
+      });
+    } finally {
+      setCouponLoading(false);
+    }
+  };
+
+  const handleVerifySubPayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!subTrxId.trim() || !subSelectedPlan) return;
+    setSubVerifying(true);
+    setSubFeedback(null);
+    try {
+      const res = await axios.post(
+        '/api/merchant/subscription/verify-binance',
+        {
+          planId: subSelectedPlan.id,
+          cycle: subSelectedCycle,
+          couponCode: appliedCoupon?.code || undefined,
+          trxId: subTrxId.trim(),
+        },
+        authHeaders
+      );
+      setSubFeedback({
+        type: 'success',
+        message: res.data.message || 'Subscription successfully activated!',
+      });
+      setSubTrxId('');
+      loadSubscriptionData();
+      loadDashboardData();
+      refreshSession();
+    } catch (err: any) {
+      setSubFeedback({
+        type: 'error',
+        message: err.response?.data?.error || 'Verification failed. Please ensure the TrxID and sent amount match.',
+      });
+    } finally {
+      setSubVerifying(false);
     }
   };
 
@@ -757,7 +867,62 @@ export const Dashboard: React.FC = () => {
           >
             <Settings className="w-4 h-4" /> Settings & Bot Token
           </button>
+
+          <button
+            onClick={() => setActiveTab('subscription')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+              activeTab === 'subscription'
+                ? 'bg-crimson-500/20 text-crimson-400 border border-crimson-500/30'
+                : 'text-zinc-400 hover:text-white'
+            }`}
+          >
+            <Shield className="w-4 h-4" /> Subscription & Plan
+            {subData?.subscription?.status === 'TRIAL' && (
+              <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 text-[10px] font-bold">
+                Trial
+              </span>
+            )}
+            {subData?.subscription?.status === 'EXPIRED' && (
+              <span className="px-1.5 py-0.5 rounded bg-crimson-500/20 text-crimson-400 text-[10px] font-bold animate-pulse">
+                Expired
+              </span>
+            )}
+          </button>
         </div>
+
+        {/* Subscription Expiry / Warning Banner */}
+        {subData?.subscription && (subData.subscription.status === 'EXPIRED' || (subData.subscription.daysRemaining !== undefined && subData.subscription.daysRemaining <= 3)) && (
+          <div className={`p-4 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border ${
+            subData.subscription.status === 'EXPIRED'
+              ? 'bg-crimson-950/40 border-crimson-500/40 text-crimson-200'
+              : 'bg-amber-950/40 border-amber-500/40 text-amber-200'
+          }`}>
+            <div className="flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 flex-shrink-0" />
+              <div>
+                <span className="font-bold text-xs sm:text-sm block">
+                  {subData.subscription.status === 'EXPIRED'
+                    ? 'Store Subscription Expired!'
+                    : `Subscription Expiring in ${subData.subscription.daysRemaining} days!`}
+                </span>
+                <span className="text-xs opacity-80">
+                  {subData.subscription.status === 'EXPIRED'
+                    ? 'Your Telegram store bot is paused. Renew your subscription to immediately resume automated sales.'
+                    : 'Renew your subscription before it expires to prevent service interruption.'}
+                </span>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                const targetPlan = subData.plans?.find((p: any) => p.id === subData.subscription.planId) || subData.plans?.[0];
+                if (targetPlan) handleOpenUpgradeModal(targetPlan, subData.subscription.cycle || 'MONTHLY');
+              }}
+              className="px-4 py-2 rounded-xl bg-crimson-600 hover:bg-crimson-500 text-white font-bold text-xs whitespace-nowrap shadow-md shadow-crimson-600/30"
+            >
+              Renew / Upgrade Now ⚡
+            </button>
+          </div>
+        )}
 
         {/* ==========================================
             TAB 1: OVERVIEW METRIC CARDS
@@ -1925,7 +2090,436 @@ export const Dashboard: React.FC = () => {
             </button>
           </form>
         )}
+
+        {/* ==========================================
+            TAB 9: SUBSCRIPTION & PLAN MANAGEMENT
+           ========================================== */}
+        {activeTab === 'subscription' && (
+          <div className="space-y-10">
+            {/* 1. Current Plan Status Hero */}
+            <div className="glass-card rounded-3xl p-6 sm:p-8 border border-white/10 relative overflow-hidden space-y-6">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div>
+                  <div className="flex items-center gap-3">
+                    <h3 className="text-xl sm:text-2xl font-black text-white">
+                      {subData?.subscription?.planName || 'Starter Cloud'}
+                    </h3>
+                    <span
+                      className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
+                        subData?.subscription?.status === 'ACTIVE'
+                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                          : subData?.subscription?.status === 'TRIAL'
+                          ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                          : 'bg-crimson-500/20 text-crimson-400 border border-crimson-500/30 animate-pulse'
+                      }`}
+                    >
+                      {subData?.subscription?.status || 'TRIAL'}
+                    </span>
+                    <span className="px-2.5 py-1 rounded-full bg-carbon-800 text-zinc-400 text-xs font-mono">
+                      {subData?.subscription?.cycle || 'MONTHLY'} BILLING
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-400 mt-1">
+                    Manage your merchant subscription tier, billing period, and quotas
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => {
+                    const plan = subData?.plans?.find((p: any) => p.id === subData?.subscription?.planId) || subData?.plans?.[0];
+                    if (plan) handleOpenUpgradeModal(plan, subData?.subscription?.cycle || 'MONTHLY');
+                  }}
+                  className="px-6 py-3 rounded-2xl bg-gradient-to-r from-crimson-600 to-crimson-500 hover:from-crimson-500 text-white font-bold text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-crimson-600/30 active:scale-95"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  <span>Renew / Upgrade Subscription</span>
+                </button>
+              </div>
+
+              {/* 3 Metric Mini-Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 border-t border-white/10 pt-6">
+                <div className="p-4 rounded-2xl bg-carbon-900/60 border border-white/5 space-y-1">
+                  <span className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider block">
+                    Access Expiration
+                  </span>
+                  <div className="text-lg font-bold text-white flex items-center gap-2">
+                    <span>
+                      {subData?.subscription?.status === 'EXPIRED'
+                        ? 'Expired'
+                        : `⏳ ${subData?.subscription?.daysRemaining ?? 7} Days Remaining`}
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-zinc-500 font-mono block">
+                    {subData?.subscription?.expiresAt
+                      ? `Valid until ${new Date(subData.subscription.expiresAt).toLocaleDateString()}`
+                      : 'Free Trial Period'}
+                  </span>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-carbon-900/60 border border-white/5 space-y-1">
+                  <span className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider block">
+                    Product Catalog Quota
+                  </span>
+                  <div className="text-lg font-bold text-white">
+                    {subData?.subscription?.productCount ?? products.length} /{' '}
+                    {subData?.subscription?.maxProducts === -1 ? 'Unlimited' : subData?.subscription?.maxProducts ?? 50}
+                  </div>
+                  <div className="w-full bg-carbon-800 rounded-full h-1.5 overflow-hidden mt-1">
+                    <div
+                      className="bg-laser-500 h-full rounded-full transition-all"
+                      style={{
+                        width: `${
+                          subData?.subscription?.maxProducts === -1
+                            ? 20
+                            : Math.min(100, (((subData?.subscription?.productCount ?? products.length) / (subData?.subscription?.maxProducts || 50)) * 100))
+                        }%`,
+                      }}
+                    ></div>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-carbon-900/60 border border-white/5 space-y-1">
+                  <span className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider block">
+                    Telegram Bot Engine
+                  </span>
+                  <div className="text-lg font-bold text-emerald-400 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span>{subData?.subscription?.status === 'EXPIRED' ? 'Paused' : 'Active & Running'}</span>
+                  </div>
+                  <span className="text-[11px] text-zinc-500 font-mono block">
+                    @{tenant?.bot_username || 'Telegram Bot'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* 2. Choose or Upgrade Plan Grid */}
+            <div className="space-y-6">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div>
+                  <h3 className="text-lg font-bold text-white">Available Subscription Tiers</h3>
+                  <p className="text-xs text-zinc-400">
+                    Switch between monthly or annual billing. Upgrades take effect instantly.
+                  </p>
+                </div>
+
+                {/* Monthly / Yearly Toggle */}
+                <div className="inline-flex items-center gap-1.5 p-1 rounded-2xl bg-carbon-800 border border-white/10">
+                  <button
+                    onClick={() => setSubCycleView('MONTHLY')}
+                    className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                      subCycleView === 'MONTHLY'
+                        ? 'bg-crimson-600 text-white shadow-md'
+                        : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    Monthly Billing
+                  </button>
+                  <button
+                    onClick={() => setSubCycleView('YEARLY')}
+                    className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                      subCycleView === 'YEARLY'
+                        ? 'bg-gradient-to-r from-crimson-600 to-laser-600 text-white shadow-md'
+                        : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    <span>Yearly Billing</span>
+                    <span className="px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-extrabold uppercase">
+                      Save 20% 🎉
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {(subData?.plans || []).map((p: any) => {
+                  const isCurrent = subData?.subscription?.planId === p.id;
+                  const priceUsd = subCycleView === 'YEARLY' ? p.price_yearly_usd : p.price_monthly_usd;
+                  const features = Array.isArray(p.features_json) ? p.features_json : [];
+
+                  return (
+                    <div
+                      key={p.id}
+                      className={`glass-card rounded-3xl p-6 border transition-all flex flex-col justify-between ${
+                        p.is_popular
+                          ? 'border-crimson-500/50 bg-gradient-to-b from-carbon-800 to-carbon-850 shadow-xl'
+                          : 'border-white/10'
+                      }`}
+                    >
+                      <div className="space-y-4">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h4 className="text-lg font-bold text-white">{p.name}</h4>
+                              {p.is_popular === 1 && (
+                                <span className="px-2 py-0.5 rounded-full bg-crimson-500/20 text-crimson-400 text-[10px] font-bold uppercase">
+                                  Popular
+                                </span>
+                              )}
+                            </div>
+                            {p.description && <p className="text-xs text-zinc-400 mt-1">{p.description}</p>}
+                          </div>
+                        </div>
+
+                        <div className="pt-2">
+                          <div className="flex items-baseline gap-1">
+                            <span className="text-3xl font-extrabold text-white font-mono">
+                              ${priceUsd.toFixed(2)}
+                            </span>
+                            <span className="text-xs text-zinc-400">
+                              / {subCycleView === 'YEARLY' ? 'year' : 'month'}
+                            </span>
+                          </div>
+                          <span className="text-[11px] text-zinc-500 font-mono block">
+                            ~ ৳{Math.round(priceUsd * (tenant?.usd_to_bdt_rate || 125)).toLocaleString()} BDT
+                          </span>
+                        </div>
+
+                        <div className="border-t border-white/10 pt-4 space-y-2.5">
+                          <span className="text-[10px] font-mono font-bold text-zinc-400 uppercase tracking-wider block">
+                            Included Capabilities:
+                          </span>
+                          {features.map((feat: string, idx: number) => (
+                            <div key={idx} className="flex items-center gap-2 text-xs text-zinc-300">
+                              <CheckCircle className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                              <span>{feat}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="pt-6 border-t border-white/10 mt-6">
+                        <button
+                          onClick={() => handleOpenUpgradeModal(p, subCycleView)}
+                          className={`w-full py-3 rounded-xl text-xs font-bold transition-all shadow-md ${
+                            isCurrent
+                              ? 'bg-carbon-700 hover:bg-carbon-600 text-white border border-white/10'
+                              : 'bg-gradient-to-r from-crimson-600 to-crimson-500 hover:from-crimson-500 text-white shadow-crimson-500/30'
+                          }`}
+                        >
+                          {isCurrent ? 'Renew Current Plan' : `Upgrade to ${p.name}`}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 3. Subscription History & Invoices */}
+            <div className="space-y-4 pt-6 border-t border-white/10">
+              <div>
+                <h3 className="text-lg font-bold text-white">Subscription Payment History</h3>
+                <p className="text-xs text-zinc-400">Receipts and verified Binance Pay transactions</p>
+              </div>
+
+              <div className="glass-card rounded-2xl border border-white/10 overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-carbon-900 border-b border-white/10 font-mono text-zinc-400 uppercase text-[10px]">
+                      <tr>
+                        <th className="p-3.5">Plan</th>
+                        <th className="p-3.5">Billing Cycle</th>
+                        <th className="p-3.5">Amount Paid</th>
+                        <th className="p-3.5">Coupon</th>
+                        <th className="p-3.5">Binance Trx ID</th>
+                        <th className="p-3.5">Date</th>
+                        <th className="p-3.5 text-right">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5 font-mono">
+                      {subHistory.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="p-6 text-center text-zinc-500 text-xs font-sans">
+                            No subscription payment history found yet.
+                          </td>
+                        </tr>
+                      ) : (
+                        subHistory.map((h) => (
+                          <tr key={h.id} className="hover:bg-white/[0.02]">
+                            <td className="p-3.5 font-bold text-white">{h.plan_name}</td>
+                            <td className="p-3.5 text-zinc-300">{h.billing_cycle}</td>
+                            <td className="p-3.5 text-emerald-400 font-bold">${Number(h.final_amount_paid_usd).toFixed(2)} USDT</td>
+                            <td className="p-3.5 text-zinc-400">{h.coupon_code || '-'}</td>
+                            <td className="p-3.5 text-zinc-300">{h.trx_id}</td>
+                            <td className="p-3.5 text-zinc-400">{new Date(h.created_at).toLocaleDateString()}</td>
+                            <td className="p-3.5 text-right">
+                              <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold uppercase">
+                                Verified
+                              </span>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* ==========================================
+          MODAL: BINANCE PAY SUBSCRIPTION CHECKOUT
+         ========================================== */}
+      {showSubModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="glass-card rounded-3xl p-6 sm:p-8 max-w-lg w-full space-y-5 border border-white/10 relative max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => setShowSubModal(false)}
+              className="absolute top-5 right-5 text-zinc-400 hover:text-white"
+            >
+              <XCircle className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-2 text-crimson-400 font-bold text-base">
+              <Shield className="w-5 h-5" />
+              <span>Purchase Subscription with Binance Pay</span>
+            </div>
+
+            {/* Selected Plan Summary Banner */}
+            <div className="p-4 rounded-2xl bg-carbon-900 border border-white/10 space-y-2">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h4 className="font-bold text-white text-sm">{subSelectedPlan?.name}</h4>
+                  <span className="text-xs text-zinc-400">{subSelectedCycle} Billing</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-base font-extrabold text-white font-mono">
+                    ${subSelectedCycle === 'YEARLY' ? subSelectedPlan?.price_yearly_usd?.toFixed(2) : subSelectedPlan?.price_monthly_usd?.toFixed(2)} USD
+                  </span>
+                </div>
+              </div>
+
+              {/* Coupon Applied Details */}
+              {appliedCoupon && (
+                <div className="pt-2 border-t border-white/5 flex justify-between items-center text-xs">
+                  <span className="text-emerald-400 font-bold flex items-center gap-1">
+                    <CheckCircle className="w-3.5 h-3.5" /> Coupon "{appliedCoupon.code}" (-${appliedCoupon.discountAmountUsd} USD)
+                  </span>
+                  <span className="text-emerald-400 font-mono font-black text-sm">
+                    ${appliedCoupon.finalPriceUsd.toFixed(2)} USDT Payable
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Step 1: Coupon Code Application */}
+            <form onSubmit={handleApplyCoupon} className="space-y-2">
+              <label className="block text-xs font-semibold text-zinc-300">Have a Promo Coupon?</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="e.g. LAUNCH50, EID2026"
+                  value={subCouponCode}
+                  onChange={(e) => setSubCouponCode(e.target.value.toUpperCase())}
+                  className="flex-1 px-4 py-2.5 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-crimson-500"
+                />
+                <button
+                  type="submit"
+                  disabled={couponLoading || !subCouponCode.trim()}
+                  className="px-4 py-2.5 rounded-xl bg-carbon-700 hover:bg-carbon-600 disabled:opacity-50 text-white font-bold text-xs"
+                >
+                  {couponLoading ? 'Checking...' : 'Apply Coupon'}
+                </button>
+              </div>
+              {couponFeedback && (
+                <p className={`text-xs ${couponFeedback.type === 'success' ? 'text-emerald-400' : 'text-crimson-400'}`}>
+                  {couponFeedback.message}
+                </p>
+              )}
+            </form>
+
+            {/* Step 2: Binance Transfer Instructions */}
+            <div className="p-4 rounded-2xl bg-carbon-900 border border-laser-500/20 space-y-3">
+              <span className="text-xs font-mono font-bold text-laser-400 uppercase tracking-wider block">
+                Transfer Instructions (Binance Pay)
+              </span>
+
+              <div className="space-y-1 text-xs text-zinc-300">
+                <p>1. Open your <b>Binance App</b> → Tap <b>Pay</b> → Tap <b>Send</b>.</p>
+                <p>2. Select <b>Binance ID (UID)</b> and enter the Platform Owner UID below:</p>
+              </div>
+
+              <div className="p-3 rounded-xl bg-carbon-950 border border-white/10 flex justify-between items-center">
+                <div>
+                  <span className="text-[10px] text-zinc-500 block uppercase font-mono">Platform Owner UID</span>
+                  <span className="font-mono font-bold text-base text-white tracking-widest">
+                    {subData?.ownerBinanceUid || '1147094108'}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(subData?.ownerBinanceUid || '1147094108');
+                    alert('Owner Binance UID copied to clipboard!');
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-carbon-800 hover:bg-carbon-700 text-xs font-mono text-zinc-300"
+                >
+                  Copy UID
+                </button>
+              </div>
+
+              <div className="text-xs text-zinc-300">
+                <span>Amount to send: </span>
+                <span className="font-mono font-bold text-emerald-400 text-sm">
+                  ${appliedCoupon
+                    ? appliedCoupon.finalPriceUsd.toFixed(2)
+                    : (subSelectedCycle === 'YEARLY' ? subSelectedPlan?.price_yearly_usd?.toFixed(2) : subSelectedPlan?.price_monthly_usd?.toFixed(2))} USDT
+                </span>
+              </div>
+            </div>
+
+            {/* Step 3: Transaction ID Verification Form */}
+            <form onSubmit={handleVerifySubPayment} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                  Binance Pay Transaction ID / Order ID (17+ digits)
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. 459917465708191744"
+                  value={subTrxId}
+                  onChange={(e) => setSubTrxId(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-crimson-500"
+                />
+              </div>
+
+              {subFeedback && (
+                <div
+                  className={`p-3 rounded-xl text-xs ${
+                    subFeedback.type === 'success'
+                      ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                      : 'bg-crimson-500/10 text-crimson-400 border border-crimson-500/30'
+                  }`}
+                >
+                  {subFeedback.message}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={subVerifying || !subTrxId.trim()}
+                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 disabled:opacity-50 text-white font-bold text-xs uppercase tracking-wider shadow-lg shadow-emerald-500/30 flex items-center justify-center gap-2"
+              >
+                {subVerifying ? (
+                  <>
+                    <div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin"></div>
+                    <span>Verifying with Binance SAPI...</span>
+                  </>
+                ) : (
+                  <>
+                    <Zap className="w-4 h-4" />
+                    <span>Verify & Activate Subscription Instant ⚡</span>
+                  </>
+                )}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* ==========================================
           MODAL 1: WHOLESALE TOPUP (WALLET)

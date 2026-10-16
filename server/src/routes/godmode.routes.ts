@@ -345,4 +345,279 @@ godmodeRouter.post('/wholesale-rules/bulk', async (req: Request, res: Response) 
   }
 });
 
+// ==========================================
+// 6. Subscription Plans Management (God-Mode)
+// ==========================================
+godmodeRouter.get('/plans', (_req: Request, res: Response) => {
+  try {
+    const plans = db.prepare('SELECT * FROM subscription_plans ORDER BY sort_order ASC, created_at ASC').all() as any[];
+    const formatted = plans.map(p => {
+      let features: string[] = [];
+      try {
+        features = JSON.parse(p.features_json || '[]');
+      } catch {
+        features = [];
+      }
+      return {
+        ...p,
+        features_json: features,
+        price_monthly_usd: Number(p.price_monthly_usd),
+        price_yearly_usd: Number(p.price_yearly_usd),
+        max_products: Number(p.max_products),
+      };
+    });
+    res.json(formatted);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to fetch plans: ' + err.message });
+  }
+});
+
+godmodeRouter.post('/plans', (req: Request, res: Response) => {
+  const {
+    id,
+    name,
+    description,
+    priceMonthlyUsd,
+    priceYearlyUsd,
+    maxProducts,
+    allowWholesale,
+    allowBinancePay,
+    allowCustomBranding,
+    features,
+    isPopular,
+    isActive,
+    sortOrder,
+  } = req.body;
+
+  if (!id || !name || priceMonthlyUsd === undefined) {
+    return res.status(400).json({ error: 'id, name, and priceMonthlyUsd are required' });
+  }
+
+  const planId = String(id).toLowerCase().trim().replace(/[^a-z0-9_-]/g, '');
+  const existing = db.prepare('SELECT id FROM subscription_plans WHERE id = ?').get(planId);
+  if (existing) {
+    return res.status(400).json({ error: 'Plan with this ID already exists' });
+  }
+
+  const featuresJson = JSON.stringify(Array.isArray(features) ? features : []);
+
+  db.prepare(`
+    INSERT INTO subscription_plans (
+      id, name, description, price_monthly_usd, price_yearly_usd, max_products,
+      allow_wholesale, allow_binance_pay, allow_custom_branding, features_json, is_popular, is_active, sort_order
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    planId,
+    name,
+    description || '',
+    Number(priceMonthlyUsd) || 0,
+    priceYearlyUsd !== undefined ? Number(priceYearlyUsd) : (Number(priceMonthlyUsd) * 10),
+    maxProducts !== undefined ? Number(maxProducts) : 50,
+    allowWholesale ? 1 : 0,
+    allowBinancePay ? 1 : 0,
+    allowCustomBranding ? 1 : 0,
+    featuresJson,
+    isPopular ? 1 : 0,
+    isActive !== undefined ? (isActive ? 1 : 0) : 1,
+    Number(sortOrder) || 0
+  );
+
+  res.json({ success: true, message: `Plan "${name}" created successfully.` });
+});
+
+godmodeRouter.put('/plans/:id', (req: Request, res: Response) => {
+  const planId = req.params.id;
+  const {
+    name,
+    description,
+    priceMonthlyUsd,
+    priceYearlyUsd,
+    maxProducts,
+    allowWholesale,
+    allowBinancePay,
+    allowCustomBranding,
+    features,
+    isPopular,
+    isActive,
+    sortOrder,
+  } = req.body;
+
+  const current = db.prepare('SELECT * FROM subscription_plans WHERE id = ?').get(planId) as any;
+  if (!current) {
+    return res.status(404).json({ error: 'Plan not found' });
+  }
+
+  const featuresJson = features !== undefined ? JSON.stringify(Array.isArray(features) ? features : []) : current.features_json;
+
+  db.prepare(`
+    UPDATE subscription_plans
+    SET name = COALESCE(?, name),
+        description = COALESCE(?, description),
+        price_monthly_usd = COALESCE(?, price_monthly_usd),
+        price_yearly_usd = COALESCE(?, price_yearly_usd),
+        max_products = COALESCE(?, max_products),
+        allow_wholesale = COALESCE(?, allow_wholesale),
+        allow_binance_pay = COALESCE(?, allow_binance_pay),
+        allow_custom_branding = COALESCE(?, allow_custom_branding),
+        features_json = ?,
+        is_popular = COALESCE(?, is_popular),
+        is_active = COALESCE(?, is_active),
+        sort_order = COALESCE(?, sort_order),
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `).run(
+    name ?? null,
+    description ?? null,
+    priceMonthlyUsd !== undefined ? Number(priceMonthlyUsd) : null,
+    priceYearlyUsd !== undefined ? Number(priceYearlyUsd) : null,
+    maxProducts !== undefined ? Number(maxProducts) : null,
+    allowWholesale !== undefined ? (allowWholesale ? 1 : 0) : null,
+    allowBinancePay !== undefined ? (allowBinancePay ? 1 : 0) : null,
+    allowCustomBranding !== undefined ? (allowCustomBranding ? 1 : 0) : null,
+    featuresJson,
+    isPopular !== undefined ? (isPopular ? 1 : 0) : null,
+    isActive !== undefined ? (isActive ? 1 : 0) : null,
+    sortOrder !== undefined ? Number(sortOrder) : null,
+    planId
+  );
+
+  res.json({ success: true, message: 'Plan updated successfully' });
+});
+
+godmodeRouter.delete('/plans/:id', (req: Request, res: Response) => {
+  const planId = req.params.id;
+  const inUse = db.prepare('SELECT COUNT(id) as count FROM tenants WHERE plan_id = ?').get(planId) as any;
+  if (inUse && inUse.count > 0) {
+    db.prepare('UPDATE subscription_plans SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(planId);
+    return res.json({ success: true, message: `Plan is currently used by ${inUse.count} merchants, so it was deactivated instead of deleted.` });
+  }
+
+  db.prepare('DELETE FROM subscription_plans WHERE id = ?').run(planId);
+  res.json({ success: true, message: 'Plan deleted successfully' });
+});
+
+// ==========================================
+// 7. Coupons Management (God-Mode)
+// ==========================================
+godmodeRouter.get('/coupons', (_req: Request, res: Response) => {
+  try {
+    const coupons = db.prepare('SELECT * FROM coupons ORDER BY created_at DESC').all() as any[];
+    res.json(coupons);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to fetch coupons: ' + err.message });
+  }
+});
+
+godmodeRouter.post('/coupons', (req: Request, res: Response) => {
+  const {
+    code,
+    discountType,
+    discountValue,
+    applicablePlanId,
+    applicableCycle,
+    minSpendUsd,
+    maxUses,
+    expiresAt,
+  } = req.body;
+
+  if (!code || !discountType || discountValue === undefined) {
+    return res.status(400).json({ error: 'code, discountType, and discountValue are required' });
+  }
+
+  const cleanCode = String(code).toUpperCase().trim();
+  const existing = db.prepare('SELECT id FROM coupons WHERE code = ?').get(cleanCode);
+  if (existing) {
+    return res.status(400).json({ error: 'A coupon with this code already exists' });
+  }
+
+  db.prepare(`
+    INSERT INTO coupons (
+      code, discount_type, discount_value, applicable_plan_id, applicable_cycle,
+      min_spend_usd, max_uses, expires_at, is_active
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+  `).run(
+    cleanCode,
+    discountType === 'FIXED_USD' ? 'FIXED_USD' : 'PERCENTAGE',
+    Number(discountValue),
+    applicablePlanId || 'ALL',
+    applicableCycle || 'ALL',
+    Number(minSpendUsd) || 0.0,
+    maxUses !== undefined ? Number(maxUses) : -1,
+    expiresAt || null
+  );
+
+  res.json({ success: true, message: `Coupon "${cleanCode}" created successfully.` });
+});
+
+godmodeRouter.put('/coupons/:id', (req: Request, res: Response) => {
+  const couponId = req.params.id;
+  const { isActive, discountValue, maxUses, expiresAt } = req.body;
+
+  const current = db.prepare('SELECT * FROM coupons WHERE id = ?').get(couponId);
+  if (!current) {
+    return res.status(404).json({ error: 'Coupon not found' });
+  }
+
+  db.prepare(`
+    UPDATE coupons
+    SET is_active = COALESCE(?, is_active),
+        discount_value = COALESCE(?, discount_value),
+        max_uses = COALESCE(?, max_uses),
+        expires_at = COALESCE(?, expires_at)
+    WHERE id = ?
+  `).run(
+    isActive !== undefined ? (isActive ? 1 : 0) : null,
+    discountValue !== undefined ? Number(discountValue) : null,
+    maxUses !== undefined ? Number(maxUses) : null,
+    expiresAt !== undefined ? expiresAt : null,
+    couponId
+  );
+
+  res.json({ success: true, message: 'Coupon updated successfully' });
+});
+
+godmodeRouter.delete('/coupons/:id', (req: Request, res: Response) => {
+  const couponId = req.params.id;
+  db.prepare('DELETE FROM coupons WHERE id = ?').run(couponId);
+  res.json({ success: true, message: 'Coupon deleted successfully' });
+});
+
+// ==========================================
+// 8. Subscription Invoices & Ledger (God-Mode)
+// ==========================================
+godmodeRouter.get('/subscriptions', (_req: Request, res: Response) => {
+  try {
+    const history = db.prepare(`
+      SELECT 
+        sh.*,
+        t.name as tenant_name,
+        t.slug as tenant_slug,
+        sp.name as plan_name,
+        c.code as coupon_code
+      FROM subscription_history sh
+      JOIN tenants t ON sh.tenant_id = t.id
+      JOIN subscription_plans sp ON sh.plan_id = sp.id
+      LEFT JOIN coupons c ON sh.coupon_id = c.id
+      ORDER BY sh.created_at DESC
+      LIMIT 100
+    `).all() as any[];
+
+    const stats = db.prepare(`
+      SELECT 
+        COUNT(id) as total_subscriptions_count,
+        COALESCE(SUM(final_amount_paid_usd), 0) as total_revenue_usd
+      FROM subscription_history
+    `).get() as any;
+
+    res.json({
+      history,
+      totalRevenueUsd: Number(stats.total_revenue_usd || 0),
+      totalSubscriptionsCount: Number(stats.total_subscriptions_count || 0),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to fetch subscription history: ' + err.message });
+  }
+});
+
+
 

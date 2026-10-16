@@ -43,6 +43,11 @@ export interface Tenant {
   about_text?: string;
   support_text?: string;
   welcome_text?: string;
+  subscription_cycle?: 'MONTHLY' | 'YEARLY' | 'TRIAL';
+  subscription_status?: 'TRIAL' | 'ACTIVE' | 'GRACE' | 'EXPIRED' | 'SUSPENDED';
+  subscription_started_at?: string;
+  subscription_expires_at?: string;
+  trial_ends_at?: string;
   created_at: string;
 }
 
@@ -197,3 +202,54 @@ export interface BotRuntimeStatus {
   last_activity?: string;
   error?: string;
 }
+
+export interface SubscriptionPlan {
+  id: string;
+  name: string;
+  description?: string;
+  price_monthly_usd: number;
+  price_yearly_usd: number;
+  max_products: number;
+  allow_wholesale: number;
+  allow_binance_pay: number;
+  allow_custom_branding: number;
+  features_json: string[];
+  is_popular: number;
+  is_active: number;
+  sort_order: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface Coupon {
+  id: number;
+  code: string;
+  discount_type: 'PERCENTAGE' | 'FIXED_USD';
+  discount_value: number;
+  applicable_plan_id: string;
+  applicable_cycle: 'ALL' | 'MONTHLY' | 'YEARLY';
+  min_spend_usd: number;
+  max_uses: number;
+  used_count: number;
+  expires_at?: string | null;
+  is_active: number;
+  created_at: string;
+}
+
+export interface SubscriptionHistory {
+  id: number;
+  tenant_id: string;
+  plan_id: string;
+  plan_name?: string;
+  billing_cycle: 'MONTHLY' | 'YEARLY';
+  original_price_usd: number;
+  discount_amount_usd: number;
+  final_amount_paid_usd: number;
+  coupon_id?: number | null;
+  payment_method: string;
+  trx_id: string;
+  period_start: string;
+  period_end: string;
+  created_at: string;
+}
+
