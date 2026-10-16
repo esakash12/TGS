@@ -1,14 +1,35 @@
 import { Router, Request, Response } from 'express';
 import os from 'os';
 import { requireSuperAdmin } from '../middleware/auth';
+import { signToken } from '../services/auth';
 import { db } from '../db/database';
 import { encrypt, decrypt } from '../services/crypto';
 import { getDigitalCoreBalance, getCanbosoBalance } from '../services/wholesale';
 import { botRegistry } from '../../../bot/src/registry';
+import { GODMODE_SECRET_TOKEN } from '../../../shared/constants';
 
 export const godmodeRouter = Router();
 
-// Enforce God-Mode Secret Guard across all endpoints in this router
+// Dedicated God-Mode Login Endpoint
+godmodeRouter.post('/login', (req: Request, res: Response) => {
+  const { token } = req.body;
+  const expectedToken = process.env.GODMODE_SECRET_TOKEN || GODMODE_SECRET_TOKEN;
+
+  if (!token || token.trim() !== expectedToken) {
+    return res.status(401).json({ error: 'Access denied: Invalid God-Mode Secret Token' });
+  }
+
+  const sessionToken = signToken({
+    userId: 0,
+    tenantId: null,
+    username: 'super_admin',
+    role: 'super_admin',
+  });
+
+  res.json({ success: true, token: sessionToken });
+});
+
+// Enforce God-Mode Secret Guard across all subsequent endpoints in this router
 godmodeRouter.use(requireSuperAdmin);
 
 // ==========================================

@@ -37,9 +37,9 @@ export function requireAuth(req: AuthenticatedRequest, res: Response, next: Next
 }
 
 export function requireSuperAdmin(req: AuthenticatedRequest, res: Response, next: NextFunction) {
-  // Check secret token header or query parameter
-  const secretHeader = req.headers['x-godmode-token'] || req.query.token;
-  if (secretHeader === GODMODE_SECRET_TOKEN) {
+  // Check secret token header (strictly from header, NOT from URL query parameters)
+  const secretHeader = req.headers['x-godmode-token'];
+  if (secretHeader && secretHeader === GODMODE_SECRET_TOKEN) {
     return next();
   }
 

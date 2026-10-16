@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { GODMODE_SECRET_TOKEN } from '../../../../shared/constants';
 import {
   ShieldAlert,
   Server,
@@ -21,6 +20,7 @@ export const GodMode: React.FC = () => {
   const [tokenInput, setTokenInput] = useState('');
   const [authenticated, setAuthenticated] = useState(false);
   const [authError, setAuthError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [overview, setOverview] = useState<any>(null);
   const [merchants, setMerchants] = useState<any[]>([]);
@@ -37,38 +37,40 @@ export const GodMode: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [configSaved, setConfigSaved] = useState(false);
 
-  // Read token from URL query if present (e.g. ?token=hkjhl-sadmin-godmode-2026)
+  // Check existing session token on mount (strictly from memory, NO auto-login via URL)
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const queryToken = params.get('token');
-    const storedToken = sessionStorage.getItem('godmode_token');
-
-    if (queryToken === GODMODE_SECRET_TOKEN || storedToken === GODMODE_SECRET_TOKEN) {
-      sessionStorage.setItem('godmode_token', GODMODE_SECRET_TOKEN);
+    const storedJwt = sessionStorage.getItem('godmode_jwt');
+    if (storedJwt) {
       setAuthenticated(true);
     }
   }, []);
 
-  const godmodeHeaders = {
-    headers: { 'x-godmode-token': GODMODE_SECRET_TOKEN },
+  const getHeaders = () => {
+    const jwt = sessionStorage.getItem('godmode_jwt');
+    return {
+      headers: {
+        Authorization: `Bearer ${jwt}`,
+      },
+    };
   };
 
   const loadGodModeData = async () => {
     setLoading(true);
     try {
+      const headers = getHeaders();
       const [overviewRes, merchantsRes, configRes] = await Promise.all([
-        axios.get('/api/godmode/overview', godmodeHeaders),
-        axios.get('/api/godmode/merchants', godmodeHeaders),
-        axios.get('/api/godmode/config', godmodeHeaders),
+        axios.get('/api/godmode/overview', headers),
+        axios.get('/api/godmode/merchants', headers),
+        axios.get('/api/godmode/config', headers),
       ]);
       setOverview(overviewRes.data);
       setMerchants(merchantsRes.data);
       setConfig(configRes.data);
     } catch (err: any) {
       console.error('GodMode fetch error:', err);
-      if (err.response?.status === 403) {
+      if (err.response?.status === 401 || err.response?.status === 403) {
         setAuthenticated(false);
-        sessionStorage.removeItem('godmode_token');
+        sessionStorage.removeItem('godmode_jwt');
       }
     } finally {
       setLoading(false);
@@ -81,14 +83,27 @@ export const GodMode: React.FC = () => {
     }
   }, [authenticated]);
 
-  const handleAuthSubmit = (e: React.FormEvent) => {
+  const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (tokenInput.trim() === GODMODE_SECRET_TOKEN) {
-      sessionStorage.setItem('godmode_token', GODMODE_SECRET_TOKEN);
-      setAuthenticated(true);
-      setAuthError('');
-    } else {
-      setAuthError('INVALID ACCESS TOKEN. TERMINAL LOCKED.');
+    setAuthError('');
+    setIsSubmitting(true);
+
+    try {
+      const res = await axios.post('/api/godmode/login', {
+        token: tokenInput.trim(),
+      });
+
+      if (res.data?.token) {
+        sessionStorage.setItem('godmode_jwt', res.data.token);
+        setAuthenticated(true);
+        setTokenInput('');
+      } else {
+        setAuthError('INVALID MASTER TOKEN. ACCESS DENIED.');
+      }
+    } catch (err: any) {
+      setAuthError(err.response?.data?.error || 'INVALID MASTER TOKEN. ACCESS DENIED.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -103,7 +118,7 @@ export const GodMode: React.FC = () => {
       await axios.post(
         `/api/godmode/merchants/${merchantId}/status`,
         { status: newStatus },
-        godmodeHeaders
+        getHeaders()
       );
       loadGodModeData();
     } catch (err: any) {
@@ -122,7 +137,7 @@ export const GodMode: React.FC = () => {
       await axios.post(
         `/api/godmode/merchants/${merchantId}/adjust-wallet`,
         { amountDeltaUsd: parseFloat(delta), note },
-        godmodeHeaders
+        getHeaders()
       );
       alert('Wallet balance updated successfully.');
       loadGodModeData();
@@ -135,7 +150,7 @@ export const GodMode: React.FC = () => {
   const handleSaveConfig = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await axios.put('/api/godmode/config', config, godmodeHeaders);
+      await axios.put('/api/godmode/config', config, getHeaders());
       setConfigSaved(true);
       setTimeout(() => setConfigSaved(false), 3000);
       loadGodModeData();
@@ -220,7 +235,7 @@ export const GodMode: React.FC = () => {
           </button>
           <button
             onClick={() => {
-              sessionStorage.removeItem('godmode_token');
+              sessionStorage.removeItem('godmode_jwt');
               setAuthenticated(false);
             }}
             className="px-3 py-1.5 rounded-xl bg-carbon-800 hover:bg-crimson-500/20 text-zinc-400 hover:text-crimson-400 text-xs font-mono border border-white/10"
