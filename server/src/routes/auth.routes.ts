@@ -3,6 +3,7 @@ import { registerMerchant, loginMerchant } from '../services/auth';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
 import { db } from '../db/database';
 import { decrypt } from '../services/crypto';
+import { botRegistry } from '../../../bot/src/registry';
 
 export const authRouter = Router();
 
@@ -27,6 +28,13 @@ authRouter.post('/register', async (req: Request, res: Response) => {
       password,
       botToken: botToken ? botToken.trim() : undefined,
     });
+
+    // If bot token is supplied during registration, start it immediately
+    if (botToken && botToken.trim() && result.tenant?.id) {
+      botRegistry.loadBot(result.tenant.id, botToken.trim(), cleanSlug).catch(err => {
+        console.error(`[Register] Failed to launch bot for new tenant ${cleanSlug}:`, err.message);
+      });
+    }
 
     res.status(201).json(result);
   } catch (err: any) {

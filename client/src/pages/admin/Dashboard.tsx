@@ -44,12 +44,16 @@ export const Dashboard: React.FC = () => {
   const { user, tenant, token, logout, refreshSession } = useAuth();
   const navigate = useNavigate();
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'groups' | 'custom_products' | 'wholesale' | 'store_products' | 'deposits' | 'settings'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'groups' | 'custom_products' | 'wholesale' | 'store_products' | 'deposits' | 'customers' | 'settings'>('overview');
   const [overview, setOverview] = useState<any>(null);
   const [products, setProducts] = useState<any[]>([]);
   const [groups, setGroups] = useState<any[]>([]);
   const [wholesaleCatalog, setWholesaleCatalog] = useState<any[]>([]);
   const [deposits, setDeposits] = useState<any[]>([]);
+  const [customers, setCustomers] = useState<any[]>([]);
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [botRestartLoading, setBotRestartLoading] = useState(false);
+  const [botRestartFeedback, setBotRestartFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Filter & Search states
@@ -117,6 +121,9 @@ export const Dashboard: React.FC = () => {
     paymentNumbers: { bkash: '', nagad: '', rocket: '' },
     binanceConfig: { uid: '', apiKey: '', hasSecret: false },
     autoMarkup: { enabled: true, pct: 20, fixedUsd: 0.50 },
+    welcomeText: '',
+    aboutText: '',
+    supportText: '',
   });
   const [settingsSaved, setSettingsSaved] = useState(false);
 
@@ -126,16 +133,18 @@ export const Dashboard: React.FC = () => {
   const loadDashboardData = async () => {
     try {
       setLoading(true);
-      const [overviewRes, productsRes, groupsRes, depositsRes] = await Promise.all([
+      const [overviewRes, productsRes, groupsRes, depositsRes, customersRes] = await Promise.all([
         axios.get('/api/merchant/overview', authHeaders),
         axios.get('/api/merchant/products', authHeaders),
         axios.get('/api/merchant/groups', authHeaders),
         axios.get('/api/merchant/deposits', authHeaders),
+        axios.get('/api/merchant/customers', authHeaders),
       ]);
       setOverview(overviewRes.data);
       setProducts(productsRes.data);
       setGroups(groupsRes.data);
       setDeposits(depositsRes.data);
+      setCustomers(customersRes.data);
     } catch (err: any) {
       console.error('Failed to load dashboard:', err);
       if (err.response?.status === 401 || err.response?.status === 403) {
@@ -153,6 +162,29 @@ export const Dashboard: React.FC = () => {
       setGroups(res.data);
     } catch (err) {
       console.error('Failed to load groups:', err);
+    }
+  };
+
+  const loadCustomers = async () => {
+    try {
+      const res = await axios.get('/api/merchant/customers', authHeaders);
+      setCustomers(res.data);
+    } catch (err) {
+      console.error('Failed to load customers:', err);
+    }
+  };
+
+  const handleRestartBot = async () => {
+    setBotRestartLoading(true);
+    setBotRestartFeedback(null);
+    try {
+      const res = await axios.post('/api/merchant/bot/restart', {}, authHeaders);
+      setBotRestartFeedback({ type: 'success', message: res.data.message || 'Bot connected successfully!' });
+      loadDashboardData();
+    } catch (err: any) {
+      setBotRestartFeedback({ type: 'error', message: err.response?.data?.error || 'Failed to connect bot' });
+    } finally {
+      setBotRestartLoading(false);
     }
   };
 
@@ -188,6 +220,7 @@ export const Dashboard: React.FC = () => {
     if (activeTab === 'wholesale') loadWholesaleCatalog();
     if (activeTab === 'groups') loadGroups();
     if (activeTab === 'settings') loadSettings();
+    if (activeTab === 'customers') loadCustomers();
   }, [activeTab]);
 
   // Open Topup Modal
@@ -515,7 +548,7 @@ export const Dashboard: React.FC = () => {
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await axios.put(
+      const res = await axios.put(
         '/api/merchant/settings',
         {
           storeName: settingsData.name,
@@ -524,11 +557,21 @@ export const Dashboard: React.FC = () => {
           paymentNumbers: settingsData.paymentNumbers,
           binanceConfig: settingsData.binanceConfig,
           autoMarkup: settingsData.autoMarkup,
+          welcomeText: settingsData.welcomeText,
+          aboutText: settingsData.aboutText,
+          supportText: settingsData.supportText,
         },
         authHeaders
       );
       setSettingsSaved(true);
       setTimeout(() => setSettingsSaved(false), 3000);
+      if (res.data?.botStatus) {
+        if (res.data.botStatus.success) {
+          setBotRestartFeedback({ type: 'success', message: `Bot @${res.data.botStatus.username} connected and active!` });
+        } else {
+          setBotRestartFeedback({ type: 'error', message: res.data.botStatus.error || 'Bot failed to launch' });
+        }
+      }
       loadDashboardData();
       refreshSession();
     } catch (err: any) {
@@ -691,6 +734,17 @@ export const Dashboard: React.FC = () => {
                 {overview.pendingDepositsCount}
               </span>
             )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab('customers')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+              activeTab === 'customers'
+                ? 'bg-crimson-500/20 text-crimson-400 border border-crimson-500/30'
+                : 'text-zinc-400 hover:text-white'
+            }`}
+          >
+            <Users className="w-4 h-4" /> Customers ({overview?.totalCustomers ?? customers.length})
           </button>
 
           <button
@@ -1480,6 +1534,120 @@ export const Dashboard: React.FC = () => {
         )}
 
         {/* ==========================================
+            TAB: CUSTOMERS & BOT USERS DIRECTORY
+           ========================================== */}
+        {activeTab === 'customers' && (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div>
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <Users className="w-5 h-5 text-crimson-400" />
+                  Bot Customers Directory
+                </h3>
+                <p className="text-xs text-zinc-400">
+                  Real-time list of all users and buyers interacting with your Telegram bot.
+                </p>
+              </div>
+
+              {/* Search Bar */}
+              <div className="relative w-full sm:w-72">
+                <Search className="w-4 h-4 text-zinc-400 absolute left-3 top-3" />
+                <input
+                  type="text"
+                  placeholder="Search by username, name, ID..."
+                  value={customerSearch}
+                  onChange={(e) => setCustomerSearch(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white text-xs placeholder:text-zinc-500 focus:outline-none focus:border-crimson-500"
+                />
+              </div>
+            </div>
+
+            <div className="glass-card rounded-2xl border border-white/10 overflow-hidden shadow-xl">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-white/10 bg-carbon-800/60 text-zinc-400 font-mono text-[11px] uppercase tracking-wider">
+                      <th className="p-4">Customer</th>
+                      <th className="p-4">Telegram ID</th>
+                      <th className="p-4">Wallet Balance</th>
+                      <th className="p-4">Total Spent</th>
+                      <th className="p-4">Orders</th>
+                      <th className="p-4">Language</th>
+                      <th className="p-4">Registered Date</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5 font-mono">
+                    {customers.filter((c) => {
+                      if (!customerSearch.trim()) return true;
+                      const q = customerSearch.toLowerCase();
+                      const name = (c.first_name || '').toLowerCase();
+                      const username = (c.username || '').toLowerCase();
+                      const tgId = String(c.telegram_id);
+                      return name.includes(q) || username.includes(q) || tgId.includes(q);
+                    }).length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="p-8 text-center text-zinc-500 font-sans text-xs">
+                          {customerSearch ? 'No customers matching search criteria.' : 'No customers have started your Telegram bot yet.'}
+                        </td>
+                      </tr>
+                    ) : (
+                      customers
+                        .filter((c) => {
+                          if (!customerSearch.trim()) return true;
+                          const q = customerSearch.toLowerCase();
+                          const name = (c.first_name || '').toLowerCase();
+                          const username = (c.username || '').toLowerCase();
+                          const tgId = String(c.telegram_id);
+                          return name.includes(q) || username.includes(q) || tgId.includes(q);
+                        })
+                        .map((c) => (
+                          <tr key={c.id} className="hover:bg-white/[0.02] transition-colors">
+                            <td className="p-4 font-sans">
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-crimson-600 to-laser-600 flex items-center justify-center font-bold text-white text-xs">
+                                  {(c.first_name || 'U').charAt(0).toUpperCase()}
+                                </div>
+                                <div>
+                                  <span className="font-bold text-white block text-xs">{c.first_name || 'Anonymous User'}</span>
+                                  {c.username ? (
+                                    <span className="text-[11px] text-laser-400 font-mono">@{c.username}</span>
+                                  ) : (
+                                    <span className="text-[11px] text-zinc-500 font-mono">No @username</span>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="p-4 font-mono text-zinc-300">
+                              <code>{c.telegram_id}</code>
+                            </td>
+                            <td className="p-4 font-bold text-emerald-400">
+                              ${Number(c.balance_usd || 0).toFixed(2)} USD
+                            </td>
+                            <td className="p-4 font-bold text-zinc-200">
+                              ${Number(c.total_spent_usd || 0).toFixed(2)} USD
+                            </td>
+                            <td className="p-4">
+                              <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-carbon-800 border border-white/10 text-zinc-300">
+                                {c.orders_count || 0} orders
+                              </span>
+                            </td>
+                            <td className="p-4 uppercase text-zinc-400">
+                              {c.language || 'en'}
+                            </td>
+                            <td className="p-4 text-zinc-400 text-[11px]">
+                              {new Date(c.created_at).toLocaleDateString()}
+                            </td>
+                          </tr>
+                        ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ==========================================
             TAB 7: STORE SETTINGS & BOT TOKEN
            ========================================== */}
         {activeTab === 'settings' && (
@@ -1496,12 +1664,47 @@ export const Dashboard: React.FC = () => {
               )}
             </div>
 
-            {/* Telegram Bot Token Card */}
+            {/* Telegram Bot Token & Status Card */}
             <div className="glass-card rounded-2xl p-6 border border-white/10 space-y-4">
-              <h4 className="text-xs font-mono font-bold text-laser-400 uppercase">1. Telegram Bot Token Setup</h4>
-              <p className="text-xs text-zinc-400">
-                Create a bot using @BotFather in Telegram and paste your HTTP API token below.
-              </p>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h4 className="text-xs font-mono font-bold text-laser-400 uppercase">1. Telegram Bot Token Setup</h4>
+                  <p className="text-xs text-zinc-400 mt-0.5">
+                    Create a bot using @BotFather in Telegram and paste your HTTP API token below.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold border flex items-center gap-1.5 ${
+                    botOnline
+                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                      : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                  }`}>
+                    <span className={`w-2 h-2 rounded-full ${botOnline ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`}></span>
+                    {botOnline ? `@${botUsername || 'StoreBot'} (Live)` : 'Bot Offline'}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={botRestartLoading}
+                    onClick={handleRestartBot}
+                    className="px-3 py-1 rounded-xl bg-laser-600 hover:bg-laser-500 text-white font-bold text-xs shadow-md transition-all flex items-center gap-1.5 active:scale-95 disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${botRestartLoading ? 'animate-spin' : ''}`} />
+                    <span>{botRestartLoading ? 'Connecting...' : 'Test & Connect Bot'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {botRestartFeedback && (
+                <div className={`p-3 rounded-xl text-xs font-semibold flex items-center gap-2 ${
+                  botRestartFeedback.type === 'success'
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                    : 'bg-crimson-500/20 text-crimson-400 border border-crimson-500/30'
+                }`}>
+                  {botRestartFeedback.type === 'success' ? <CheckCircle className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
+                  <span>{botRestartFeedback.message}</span>
+                </div>
+              )}
+
               <div>
                 <label className="block text-xs font-semibold text-zinc-300 mb-1">Bot Token</label>
                 <input
@@ -1514,9 +1717,63 @@ export const Dashboard: React.FC = () => {
               </div>
             </div>
 
+            {/* Bot Content & Branding Customization Card */}
+            <div className="glass-card rounded-2xl p-6 border border-white/10 space-y-4">
+              <div>
+                <h4 className="text-xs font-mono font-bold text-purple-400 uppercase">2. Bot Content & Branding Customization</h4>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  Customize the messages and information your customers see inside your Telegram bot.
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                    Welcome Banner Note (Shown on /start)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 🔥 Welcome to our store! Enjoy 24/7 instant deliveries and best prices."
+                    value={settingsData.welcomeText || ''}
+                    onChange={(e) => setSettingsData({ ...settingsData, welcomeText: e.target.value })}
+                    className="w-full px-4 py-2.5 rounded-xl bg-carbon-800 border border-white/10 text-white text-xs focus:outline-none focus:border-purple-500"
+                  />
+                  <span className="text-[10px] text-zinc-500 mt-1 block">Displayed directly beneath customer wallet balance on the /start menu card.</span>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                    About Us Information (Shown on [ 🌐 About ])
+                  </label>
+                  <textarea
+                    rows={3}
+                    placeholder="e.g. We provide 100% verified digital subscriptions, software keys, and developer accounts with instant automated delivery and replacement guarantee."
+                    value={settingsData.aboutText || ''}
+                    onChange={(e) => setSettingsData({ ...settingsData, aboutText: e.target.value })}
+                    className="w-full px-4 py-2.5 rounded-xl bg-carbon-800 border border-white/10 text-white text-xs focus:outline-none focus:border-purple-500 resize-none"
+                  />
+                  <span className="text-[10px] text-zinc-500 mt-0.5 block">Custom message displayed when customer taps the "🌐 About" button in your bot.</span>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                    Customer Support Channels & Instructions (Shown on [ 🗣️ Support ])
+                  </label>
+                  <textarea
+                    rows={3}
+                    placeholder="e.g. For instant 24/7 order assistance, contact our official support on Telegram: @MyStoreAdmin or WhatsApp: +8801XXXXXXXXX"
+                    value={settingsData.supportText || ''}
+                    onChange={(e) => setSettingsData({ ...settingsData, supportText: e.target.value })}
+                    className="w-full px-4 py-2.5 rounded-xl bg-carbon-800 border border-white/10 text-white text-xs focus:outline-none focus:border-purple-500 resize-none"
+                  />
+                  <span className="text-[10px] text-zinc-500 mt-0.5 block">Custom contact information displayed when customer taps the "🗣️ Support" button in your bot.</span>
+                </div>
+              </div>
+            </div>
+
             {/* Currency & Exchange Rate Card */}
             <div className="glass-card rounded-2xl p-6 border border-white/10 space-y-4">
-              <h4 className="text-xs font-mono font-bold text-emerald-400 uppercase">2. BDT / USD Exchange Rate</h4>
+              <h4 className="text-xs font-mono font-bold text-emerald-400 uppercase">3. BDT / USD Exchange Rate</h4>
               <p className="text-xs text-zinc-400">
                 Base ledger is 100% USD ($). Customers paying via bKash/Nagad see conversions using this rate.
               </p>
@@ -1534,7 +1791,7 @@ export const Dashboard: React.FC = () => {
 
             {/* Local Mobile Banking Numbers (bKash/Nagad/Rocket) */}
             <div className="glass-card rounded-2xl p-6 border border-white/10 space-y-4">
-              <h4 className="text-xs font-mono font-bold text-crimson-400 uppercase">3. Local Payment Numbers (Manual Verify)</h4>
+              <h4 className="text-xs font-mono font-bold text-crimson-400 uppercase">4. Local Payment Numbers (Manual Verify)</h4>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-zinc-300 mb-1">bKash Personal</label>
@@ -1589,7 +1846,7 @@ export const Dashboard: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <h4 className="text-xs font-mono font-bold text-yellow-400 uppercase flex items-center gap-1.5">
-                    <span>🟡</span> 4. Your Merchant Binance Pay (Automated Instant Deposits)
+                    <span>🟡</span> 5. Your Merchant Binance Pay (Automated Instant Deposits)
                   </h4>
                   <p className="text-xs text-zinc-400 mt-1">
                     Allow your Telegram bot customers to deposit USDT directly to your personal Binance account with instant, zero-touch verification via Binance SAPI.

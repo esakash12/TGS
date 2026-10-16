@@ -50,8 +50,23 @@ export function initDatabase() {
       db.exec(`ALTER TABLE products ADD COLUMN pricing_mode TEXT DEFAULT 'fixed';`);
       console.log('✅ Migrated products table: added pricing_mode column');
     }
+
+    // Tenant customization columns
+    const tenantTableInfo = db.prepare(`PRAGMA table_info(tenants)`).all() as any[];
+    if (!tenantTableInfo.some((col: any) => col.name === 'about_text')) {
+      db.exec(`ALTER TABLE tenants ADD COLUMN about_text TEXT;`);
+      console.log('✅ Migrated tenants table: added about_text column');
+    }
+    if (!tenantTableInfo.some((col: any) => col.name === 'support_text')) {
+      db.exec(`ALTER TABLE tenants ADD COLUMN support_text TEXT;`);
+      console.log('✅ Migrated tenants table: added support_text column');
+    }
+    if (!tenantTableInfo.some((col: any) => col.name === 'welcome_text')) {
+      db.exec(`ALTER TABLE tenants ADD COLUMN welcome_text TEXT;`);
+      console.log('✅ Migrated tenants table: added welcome_text column');
+    }
   } catch (err: any) {
-    console.warn('Migration notice (products columns):', err.message);
+    console.warn('Migration notice (columns):', err.message);
   }
 
   console.log('✅ SQLite WAL Database initialized successfully at:', DB_PATH);

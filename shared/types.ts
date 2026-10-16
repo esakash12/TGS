@@ -40,6 +40,9 @@ export interface Tenant {
   auto_markup_enabled: boolean;
   payment_numbers_json: TenantPaymentNumbers;
   binance_config_json: TenantBinanceConfig;
+  about_text?: string;
+  support_text?: string;
+  welcome_text?: string;
   created_at: string;
 }
 

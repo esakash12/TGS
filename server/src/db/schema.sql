@@ -35,6 +35,9 @@ CREATE TABLE IF NOT EXISTS tenants (
     auto_markup_enabled INTEGER DEFAULT 1,
     payment_numbers_json TEXT DEFAULT '{}', -- { bkash: "", nagad: "", rocket: "" }
     binance_config_json_enc TEXT DEFAULT '{}',  -- Encrypted { uid, apiKey, apiSecret }
+    about_text TEXT,
+    support_text TEXT,
+    welcome_text TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

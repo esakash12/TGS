@@ -657,12 +657,25 @@ merchantRouter.get('/settings', (req: AuthenticatedRequest, res: Response) => {
       pct: Number(tenant.global_markup_pct || 20),
       fixedUsd: Number(tenant.global_markup_fixed_usd || 0.50),
     },
+    aboutText: tenant.about_text || '',
+    supportText: tenant.support_text || '',
+    welcomeText: tenant.welcome_text || '',
   });
 });
 
 merchantRouter.put('/settings', async (req: AuthenticatedRequest, res: Response) => {
   const tenantId = req.tenant.id;
-  const { storeName, botToken, usdToBdtRate, paymentNumbers, binanceConfig, autoMarkup } = req.body;
+  const {
+    storeName,
+    botToken,
+    usdToBdtRate,
+    paymentNumbers,
+    binanceConfig,
+    autoMarkup,
+    aboutText,
+    supportText,
+    welcomeText,
+  } = req.body;
 
   const current = db.prepare('SELECT * FROM tenants WHERE id = ?').get(tenantId) as any;
 
@@ -688,7 +701,10 @@ merchantRouter.put('/settings', async (req: AuthenticatedRequest, res: Response)
         binance_config_json_enc = COALESCE(?, binance_config_json_enc),
         auto_markup_enabled = COALESCE(?, auto_markup_enabled),
         global_markup_pct = COALESCE(?, global_markup_pct),
-        global_markup_fixed_usd = COALESCE(?, global_markup_fixed_usd)
+        global_markup_fixed_usd = COALESCE(?, global_markup_fixed_usd),
+        about_text = COALESCE(?, about_text),
+        support_text = COALESCE(?, support_text),
+        welcome_text = COALESCE(?, welcome_text)
     WHERE id = ?
   `).run(
     storeName,
@@ -699,13 +715,61 @@ merchantRouter.put('/settings', async (req: AuthenticatedRequest, res: Response)
     autoMarkup?.enabled !== undefined ? (autoMarkup.enabled ? 1 : 0) : null,
     autoMarkup?.pct ? Number(autoMarkup.pct) : null,
     autoMarkup?.fixedUsd ? Number(autoMarkup.fixedUsd) : null,
+    aboutText !== undefined ? String(aboutText) : null,
+    supportText !== undefined ? String(supportText) : null,
+    welcomeText !== undefined ? String(welcomeText) : null,
     tenantId
   );
 
   // If botToken was changed or updated, dynamically reload in BotRegistry
+  let botLaunchStatus = undefined;
   if (botToken !== undefined) {
-    await botRegistry.reloadBot(tenantId);
+    botLaunchStatus = await botRegistry.reloadBot(tenantId);
   }
 
-  res.json({ success: true, message: 'Settings saved successfully' });
+  res.json({
+    success: true,
+    message: 'Settings saved successfully',
+    botStatus: botLaunchStatus,
+  });
+});
+
+// ==========================================
+// 7. Bot Connection & Restart Control
+// ==========================================
+merchantRouter.post('/bot/restart', async (req: AuthenticatedRequest, res: Response) => {
+  const tenantId = req.tenant.id;
+  const result = await botRegistry.reloadBot(tenantId);
+  if (!result.success) {
+    return res.status(400).json({ error: result.error || 'Failed to connect bot' });
+  }
+  res.json({
+    success: true,
+    username: result.username,
+    message: `Bot @${result.username} is connected and running!`,
+  });
+});
+
+// ==========================================
+// 8. Customers & Bot Users Directory
+// ==========================================
+merchantRouter.get('/customers', (req: AuthenticatedRequest, res: Response) => {
+  const tenantId = req.tenant.id;
+  const customers = db.prepare(`
+    SELECT 
+      c.id,
+      c.telegram_id,
+      c.username,
+      c.first_name,
+      c.balance_usd,
+      c.total_spent_usd,
+      c.orders_count,
+      c.language,
+      c.created_at
+    FROM customers c
+    WHERE c.tenant_id = ?
+    ORDER BY c.created_at DESC
+  `).all(tenantId);
+
+  res.json(customers);
 });

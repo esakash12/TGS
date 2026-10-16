@@ -67,38 +67,30 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
     return customer;
   };
 
-  // Build /start User Profile Card (Matching Screenshot 1)
-  const buildStartCard = (customer: any, from: any) => {
+  // Build /start User Profile Card
+  const buildStartCard = (customer: any, from: any, tenant: any) => {
     const name = from.first_name ? `${from.first_name} ${from.last_name || ''}`.trim() : 'Customer';
     const balance = Number(customer?.balance_usd || 0).toFixed(2);
-    return `🥷 <b>Name:</b> ${name}\n` +
+    let card = `🥷 <b>Name:</b> ${name}\n` +
            `🆔 <b>ID:</b> <code>${from.id}</code>\n` +
-           `💶 <b>Wallet Balance:</b> $${balance}\n` +
-           `🎁 <b>Referral Earnings:</b> $0.00\n\n` +
-           `Choose an option below 👇`;
+           `💶 <b>Wallet Balance:</b> $${balance} USD\n`;
+    if (tenant?.welcome_text && tenant.welcome_text.trim()) {
+      card += `\n💬 ${tenant.welcome_text.trim()}\n`;
+    }
+    card += `\nChoose an option below 👇`;
+    return card;
   };
 
-  // Build /start 2-Column Inline Keyboard (Matching Screenshot 1)
-  const buildStartInlineKeyboard = (tenant: any) => {
-    const keyboard = new InlineKeyboard()
+  // Build /start 2-Column Inline Keyboard
+  const buildStartInlineKeyboard = () => {
+    return new InlineKeyboard()
       .text('🛍️ Products', 'nav_products')
       .text('💰 Deposit', 'nav_deposit')
       .row()
-      .text('🎁 Referrals', 'nav_referrals')
       .text('📦 My Orders', 'nav_orders')
-      .row()
       .text('🗣️ Support', 'nav_support')
-      .text('🌐 About', 'nav_about')
       .row()
-      .text('🔑 API', 'nav_api')
-      .row();
-
-    if (tenant?.channel_link && tenant.channel_link.startsWith('http')) {
-      keyboard.url('📢 Join Our Channel ↗', tenant.channel_link);
-    } else {
-      keyboard.text('📢 Join Our Channel ↗', 'nav_channel');
-    }
-    return keyboard;
+      .text('🌐 About', 'nav_about');
   };
 
   // Persistent bottom Quick Menu Keyboard
@@ -225,8 +217,8 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
     const customer = getOrCreateCustomer(ctx.from);
     userStates.delete(ctx.from.id);
 
-    const card = buildStartCard(customer, ctx.from);
-    const keyboard = buildStartInlineKeyboard(tenant);
+    const card = buildStartCard(customer, ctx.from, tenant);
+    const keyboard = buildStartInlineKeyboard();
 
     await ctx.reply(card, {
       parse_mode: 'HTML',
@@ -240,8 +232,8 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
     const customer = getOrCreateCustomer(ctx.from);
     userStates.delete(ctx.from.id);
 
-    const card = buildStartCard(customer, ctx.from);
-    const keyboard = buildStartInlineKeyboard(tenant);
+    const card = buildStartCard(customer, ctx.from, tenant);
+    const keyboard = buildStartInlineKeyboard();
 
     try {
       await ctx.editMessageText(card, { parse_mode: 'HTML', reply_markup: keyboard });
@@ -532,18 +524,14 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
   const showDepositMenu = async (ctx: any) => {
     const tenant = getTenant();
     const customer = getOrCreateCustomer(ctx.from);
-    const numbers = tenant?.payment_numbers_json || {};
-    const binance = tenant?.binance_config_json || {};
     const rate = Number(tenant?.usd_to_bdt_rate || 125.0);
 
-    const keyboard = new InlineKeyboard();
-    if (binance.uid) {
-      keyboard.text('🟡 Binance Pay (Instant Auto)', 'dep_binance').row();
-    }
-    if (numbers.bkash) keyboard.text('📱 bKash (বিকাশ)', 'dep_bkash').row();
-    if (numbers.nagad) keyboard.text('📱 Nagad (নগদ)', 'dep_nagad').row();
-    if (numbers.rocket) keyboard.text('📱 Rocket (রকেট)', 'dep_rocket').row();
-    keyboard.text('⬅️ Back', 'nav_start');
+    const keyboard = new InlineKeyboard()
+      .text('🟡 Binance Pay (USDT Auto)', 'dep_binance').row()
+      .text('📱 bKash (বিকাশ)', 'dep_bkash')
+      .text('📱 Nagad (নগদ)', 'dep_nagad').row()
+      .text('📱 Rocket (রকেট)', 'dep_rocket').row()
+      .text('⬅️ Back', 'nav_start');
 
     const text =
       `💰 <b>Deposit & Recharge Wallet:</b>\n` +
@@ -551,7 +539,12 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
       `👛 Your Balance: <b>$${Number(customer.balance_usd || 0).toFixed(2)} USD</b>\n` +
       `💱 Exchange Rate: <b>$1.00 USD = ${rate.toFixed(0)} BDT</b>\n` +
       `━━━━━━━━━━━━━━━━━━\n` +
-      `Select your preferred deposit method:`;
+      `<b>Available Payment Methods:</b>\n` +
+      `• 🟡 <b>Binance Pay:</b> Instant 0% fee auto-credit (USDT)\n` +
+      `• 📱 <b>bKash:</b> Personal Send Money\n` +
+      `• 📱 <b>Nagad:</b> Personal Send Money\n` +
+      `• 📱 <b>Rocket:</b> Personal Send Money\n\n` +
+      `Select your payment method below:`;
 
     if (ctx.callbackQuery) {
       try {
@@ -579,7 +572,7 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
       const binance = tenant?.binance_config_json || {};
       if (!binance.uid) {
         return ctx.answerCallbackQuery({
-          text: 'Automated Binance Pay is currently being set up by merchant.',
+          text: '⚠️ Binance Pay is not yet configured by the store owner. Please try bKash or Nagad, or contact support.',
           show_alert: true,
         });
       }
@@ -615,7 +608,10 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
     const targetNumber = numbers[methodKey];
 
     if (!targetNumber) {
-      return ctx.answerCallbackQuery({ text: `${methodName} number is not configured.`, show_alert: true });
+      return ctx.answerCallbackQuery({
+        text: `⚠️ ${methodName} is not yet configured by the store owner. Please try another method or contact support.`,
+        show_alert: true,
+      });
     }
 
     userStates.set(ctx.from.id, {
@@ -803,36 +799,19 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
   bot.hears([/📦 My Orders/i, /📦 অর্ডার হিস্টোরি/i], showOrdersHistory);
 
   // ==========================================
-  // 10. Referrals (nav_referrals)
-  // ==========================================
-  bot.callbackQuery('nav_referrals', async (ctx) => {
-    const botInfo = await bot.api.getMe();
-    const refLink = `https://t.me/${botInfo.username}?start=ref_${ctx.from.id}`;
-
-    const text =
-      `🎁 <b>Referral Rewards Program:</b>\n\n` +
-      `Invite your friends and earn commissions on their purchases!\n\n` +
-      `🔗 <b>Your Referral Link:</b>\n<code>${refLink}</code>\n\n` +
-      `👥 <b>Total Invited:</b> 0\n` +
-      `💰 <b>Referral Earnings:</b> $0.00 USD`;
-
-    const kb = new InlineKeyboard().text('⬅️ Back', 'nav_start');
-    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
-    await ctx.answerCallbackQuery();
-  });
-
-  // ==========================================
-  // 11. Support (nav_support)
+  // 10. Support (nav_support)
   // ==========================================
   const showSupport = async (ctx: any) => {
     const tenant = getTenant();
-    const contact = tenant?.owner_email ? `Email: ${tenant.owner_email}` : 'Contact store administrator on Telegram.';
+    const defaultContact = tenant?.owner_email ? `Email: ${tenant.owner_email}` : 'Contact store administrator on Telegram.';
+    const customSupport = tenant?.support_text ? tenant.support_text.trim() : null;
 
-    const text =
-      `🗣️ <b>Customer Support:</b>\n\n` +
-      `Have a question about an account or deposit?\n\n` +
-      `Our team is available 24/7 to assist you.\n` +
-      `📩 <b>Support Channel:</b> ${contact}`;
+    const text = customSupport
+      ? `🗣️ <b>Customer Support:</b>\n\n${customSupport}`
+      : `🗣️ <b>Customer Support:</b>\n\n` +
+        `Have a question about an account or deposit?\n\n` +
+        `Our team is available to assist you.\n` +
+        `📩 <b>Support Channel:</b> ${defaultContact}`;
 
     const kb = new InlineKeyboard().text('⬅️ Back', 'nav_start');
     if (ctx.callbackQuery) {
@@ -847,49 +826,20 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
   bot.hears([/🗣️ Support/i, /📞 হেল্পলাইন/i, /📞 Live Support/i], showSupport);
 
   // ==========================================
-  // 12. About (nav_about)
+  // 11. About (nav_about)
   // ==========================================
   bot.callbackQuery('nav_about', async (ctx) => {
     const tenant = getTenant();
-    const storeName = tenant?.name || 'Bot by mogent';
+    const storeName = tenant?.name || 'Store';
+    const customAbout = tenant?.about_text ? tenant.about_text.trim() : null;
 
-    const text =
-      `🌐 <b>About ${storeName}:</b>\n\n` +
-      `Autonomous digital accounts and subscriptions cloud platform.\n\n` +
-      `⚡ 100% Instant Automated Delivery\n` +
-      `🛡️ Full Warranty on all accounts\n` +
-      `💳 Automated Binance Pay and Local Payments`;
-
-    const kb = new InlineKeyboard().text('⬅️ Back', 'nav_start');
-    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
-    await ctx.answerCallbackQuery();
-  });
-
-  // ==========================================
-  // 13. API (nav_api)
-  // ==========================================
-  bot.callbackQuery('nav_api', async (ctx) => {
-    const customer = getOrCreateCustomer(ctx.from);
-
-    const text =
-      `🔑 <b>Developer Reseller API:</b>\n\n` +
-      `Integrate our digital accounts catalog directly into your own website, application, or Telegram bot!\n\n` +
-      `🆔 <b>Client ID:</b> <code>${ctx.from.id}</code>\n` +
-      `💰 <b>API Balance:</b> <b>$${Number(customer.balance_usd || 0).toFixed(2)} USD</b>\n\n` +
-      `Contact support to obtain an API key.`;
-
-    const kb = new InlineKeyboard().text('⬅️ Back', 'nav_start');
-    await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
-    await ctx.answerCallbackQuery();
-  });
-
-  // ==========================================
-  // 14. Channel (nav_channel)
-  // ==========================================
-  bot.callbackQuery('nav_channel', async (ctx) => {
-    const text =
-      `📢 <b>Official Channel:</b>\n\n` +
-      `Stay tuned for daily account restocks, promo codes, and special discounts!`;
+    const text = customAbout
+      ? `🌐 <b>About ${storeName}:</b>\n\n${customAbout}`
+      : `🌐 <b>About ${storeName}:</b>\n\n` +
+        `Autonomous digital accounts and subscriptions cloud platform.\n\n` +
+        `⚡ 100% Instant Automated Delivery\n` +
+        `🛡️ Full Warranty on all accounts\n` +
+        `💳 Automated Binance Pay and Local Payments`;
 
     const kb = new InlineKeyboard().text('⬅️ Back', 'nav_start');
     await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });

@@ -10,6 +10,12 @@ export interface ActiveBotEntry {
   startedAt: number;
 }
 
+export interface BotLaunchResult {
+  success: boolean;
+  username?: string;
+  error?: string;
+}
+
 class DynamicBotRegistry {
   private activeBots = new Map<string, ActiveBotEntry>(); // keyed by tenantId
   private slugToTenantId = new Map<string, string>(); // for fast webhook routing
@@ -26,7 +32,12 @@ class DynamicBotRegistry {
 
     for (const t of tenants) {
       try {
-        await this.loadBot(t.id, t.bot_token, t.slug);
+        const res = await this.loadBot(t.id, t.bot_token, t.slug);
+        if (res.success) {
+          console.log(`✅ [BotRegistry] Successfully launched bot @${res.username} for "${t.name}" (${t.slug})`);
+        } else {
+          console.warn(`⚠️ [BotRegistry] Could not launch bot for "${t.name}" (${t.slug}): ${res.error}`);
+        }
       } catch (err: any) {
         console.error(`Failed to load bot for store "${t.name}" (${t.slug}):`, err.message);
       }
@@ -38,16 +49,17 @@ class DynamicBotRegistry {
   /**
    * Load or replace a bot for a specific tenant
    */
-  public async loadBot(tenantId: string, botToken: string, slug: string): Promise<boolean> {
+  public async loadBot(tenantId: string, botToken: string, slug: string): Promise<BotLaunchResult> {
     // If bot already exists, stop it first
     await this.stopBot(tenantId);
 
     if (!botToken || botToken.trim() === '') {
-      return false;
+      return { success: false, error: 'Bot token is empty' };
     }
 
     try {
-      const bot = createBotEngine(tenantId, botToken.trim());
+      const cleanToken = botToken.trim();
+      const bot = createBotEngine(tenantId, cleanToken);
       const botInfo = await bot.api.getMe();
 
       // Save bot username in DB if not set
@@ -91,21 +103,25 @@ class DynamicBotRegistry {
         }).catch(err => console.error(`[@${botInfo.username}] Polling error:`, err));
       }
 
-      return true;
+      return { success: true, username: botInfo.username };
     } catch (err: any) {
       console.error(`[BotRegistry] Error registering bot token for tenant ${tenantId}:`, err.message);
-      return false;
+      return { success: false, error: err.message || 'Failed to authenticate with Telegram' };
     }
   }
 
   /**
    * Reload bot when merchant updates token or settings
    */
-  public async reloadBot(tenantId: string): Promise<boolean> {
+  public async reloadBot(tenantId: string): Promise<BotLaunchResult> {
     const tenant = db.prepare('SELECT id, slug, bot_token, status FROM tenants WHERE id = ?').get(tenantId) as any;
-    if (!tenant || tenant.status === 'SUSPENDED' || !tenant.bot_token) {
+    if (!tenant || tenant.status === 'SUSPENDED') {
       await this.stopBot(tenantId);
-      return false;
+      return { success: false, error: 'Store is inactive or suspended' };
+    }
+    if (!tenant.bot_token || tenant.bot_token.trim() === '') {
+      await this.stopBot(tenantId);
+      return { success: false, error: 'No bot token configured yet' };
     }
     return this.loadBot(tenant.id, tenant.bot_token, tenant.slug);
   }
