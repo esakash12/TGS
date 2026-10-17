@@ -721,11 +721,11 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
     const promptMsg =
       `📱 <b>${methodName} Deposit</b>\n` +
       `━━━━━━━━━━━━━━━━━━\n` +
-      `${methodName} Personal Number:\n` +
+      `${methodName} Personal Number:\n\n` +
       `<code>${targetNumber}</code>\n\n` +
-      `Send Money\n\n` +
+      `(Send Money)\n\n` +
       `💱 <b>Rate:</b> $1.00 USD = ${rate.toFixed(0)} BDT\n\n` +
-      `👉 <b>How much BDT did you send?</b>\nEnter BDT amount (e.g. 250 or 500):`;
+      `👉 <b>How much BDT did you send?</b>`;
 
     await ctx.editMessageText(promptMsg, {
       parse_mode: 'HTML',
