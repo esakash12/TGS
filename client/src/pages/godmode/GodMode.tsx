@@ -116,6 +116,8 @@ export const GodMode: React.FC = () => {
     ownerBinanceUid: '',
     ownerBinanceApiKey: '',
     ownerBinanceApiSecret: '',
+    godmodeTelegramId: '',
+    godmodeBotToken: '',
   });
 
   const [loading, setLoading] = useState(false);
@@ -1364,6 +1366,36 @@ export const GodMode: React.FC = () => {
                     onChange={(e) => setConfig({ ...config, ownerBinanceApiSecret: e.target.value })}
                     className="w-full px-4 py-2 rounded-xl bg-carbon-900 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-laser-500"
                   />
+                </div>
+              </div>
+
+              {/* God-Mode Telegram Alerts */}
+              <div className="space-y-4 md:col-span-2 pt-4 border-t border-white/5">
+                <h4 className="text-xs font-mono font-bold text-laser-400 uppercase">3. God-Mode Telegram Notifications (Wholesale Topups & Critical Alerts)</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-zinc-300 mb-1">Your Telegram User ID (God Admin)</label>
+                    <input
+                      type="number"
+                      placeholder="e.g. 6301160440"
+                      value={config.godmodeTelegramId || ''}
+                      onChange={(e) => setConfig({ ...config, godmodeTelegramId: e.target.value })}
+                      className="w-full px-4 py-2 rounded-xl bg-carbon-900 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-laser-500"
+                    />
+                    <span className="text-[10px] text-zinc-500">Get this from @userinfobot on Telegram. You will receive real-time alerts whenever a merchant tops up API wallet.</span>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-zinc-300 mb-1">Dedicated Platform Bot Token (Optional)</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 7123456789:AAH..."
+                      value={config.godmodeBotToken || ''}
+                      onChange={(e) => setConfig({ ...config, godmodeBotToken: e.target.value })}
+                      className="w-full px-4 py-2 rounded-xl bg-carbon-900 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-laser-500"
+                    />
+                    <span className="text-[10px] text-zinc-500">Leave blank to automatically use the merchant's bot token to deliver the notification.</span>
+                  </div>
                 </div>
               </div>
             </div>

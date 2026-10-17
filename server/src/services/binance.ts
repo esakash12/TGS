@@ -167,6 +167,48 @@ export async function verifyMerchantWholesaleTopup(params: {
   });
 
   topupTx();
+
+  // Send real-time Telegram notification to God Admin (Platform Owner)
+  try {
+    const godTelegramId = config.godmode_telegram_id;
+    if (godTelegramId) {
+      const tenant = db.prepare('SELECT name, slug, wallet_usd, bot_token FROM tenants WHERE id = ?').get(tenantId) as any;
+      const merchantName = tenant?.name || 'Unknown Store';
+      const merchantSlug = tenant?.slug || tenantId;
+      const newWalletBal = Number(tenant?.wallet_usd || 0).toFixed(2);
+      const creditedAmount = Number(result.amountUsd).toFixed(2);
+      const payerId = result.payerId || 'N/A';
+
+      const alertMessage =
+        `💎 <b>Wholesale API Wallet Top-Up Alert!</b>\n` +
+        `━━━━━━━━━━━━━━━━━━\n` +
+        `🏪 <b>Merchant:</b> ${merchantName} (@${merchantSlug})\n` +
+        `💵 <b>Amount Credited:</b> $${creditedAmount} USDT\n` +
+        `👛 <b>New Wallet Balance:</b> $${newWalletBal} USD\n` +
+        `🧾 <b>Binance TxID:</b> <code>${trxId}</code>\n` +
+        `👤 <b>Payer ID:</b> <code>${payerId}</code>\n` +
+        `━━━━━━━━━━━━━━━━━━\n` +
+        `<i>⚡ Verified automatically via Binance SAPI</i>`;
+
+      // Determine which bot token to dispatch from
+      const targetBotToken = (config.godmode_bot_token && config.godmode_bot_token.trim())
+        ? config.godmode_bot_token.trim()
+        : tenant?.bot_token;
+
+      if (targetBotToken) {
+        axios.post(`https://api.telegram.org/bot${targetBotToken}/sendMessage`, {
+          chat_id: godTelegramId,
+          text: alertMessage,
+          parse_mode: 'HTML'
+        }).catch((err: any) => {
+          console.warn('[Wholesale Topup Alert] Failed to dispatch Telegram notification:', err.response?.data?.description || err.message);
+        });
+      }
+    }
+  } catch (notifErr: any) {
+    console.warn('[Wholesale Topup Alert] Notification error:', notifErr.message);
+  }
+
   return result;
 }
 

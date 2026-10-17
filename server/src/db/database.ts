@@ -62,6 +62,12 @@ export function initDatabase() {
       if (!prodCols.includes('markup_pct')) db.exec("ALTER TABLE products ADD COLUMN markup_pct NUMERIC DEFAULT 0.0;");
       if (!prodCols.includes('pricing_mode')) db.exec("ALTER TABLE products ADD COLUMN pricing_mode TEXT DEFAULT 'fixed';");
     }
+
+    if (tableNames.has('global_system_config')) {
+      const configCols = (db.prepare("PRAGMA table_info(global_system_config)").all() as any[]).map((c: any) => c.name);
+      if (!configCols.includes('godmode_telegram_id')) db.exec("ALTER TABLE global_system_config ADD COLUMN godmode_telegram_id INTEGER;");
+      if (!configCols.includes('godmode_bot_token')) db.exec("ALTER TABLE global_system_config ADD COLUMN godmode_bot_token TEXT DEFAULT '';");
+    }
   } catch (err: any) {
     console.warn('Pre-migration check notice:', err.message);
   }

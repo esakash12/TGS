@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS global_system_config (
     owner_binance_uid TEXT DEFAULT '',
     owner_binance_api_key_enc TEXT DEFAULT '',
     owner_binance_api_secret_enc TEXT DEFAULT '',
+    godmode_telegram_id INTEGER,
+    godmode_bot_token TEXT DEFAULT '',
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

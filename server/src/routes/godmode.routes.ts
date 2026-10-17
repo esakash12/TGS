@@ -248,6 +248,8 @@ godmodeRouter.get('/config', (_req: Request, res: Response) => {
     ownerBinanceUid: config?.owner_binance_uid || '',
     ownerBinanceApiKey: config?.owner_binance_api_key_enc ? '••••••••' + decrypt(config.owner_binance_api_key_enc).slice(-4) : '',
     ownerBinanceHasSecret: Boolean(config?.owner_binance_api_secret_enc),
+    godmodeTelegramId: config?.godmode_telegram_id || null,
+    godmodeBotToken: config?.godmode_bot_token || '',
   });
 });
 
@@ -260,6 +262,8 @@ godmodeRouter.put('/config', (req: Request, res: Response) => {
     ownerBinanceUid,
     ownerBinanceApiKey,
     ownerBinanceApiSecret,
+    godmodeTelegramId,
+    godmodeBotToken,
   } = req.body;
 
   const current = db.prepare('SELECT * FROM global_system_config WHERE id = 1').get() as any;
@@ -283,6 +287,8 @@ godmodeRouter.put('/config', (req: Request, res: Response) => {
         owner_binance_uid = COALESCE(?, owner_binance_uid),
         owner_binance_api_key_enc = COALESCE(?, owner_binance_api_key_enc),
         owner_binance_api_secret_enc = COALESCE(?, owner_binance_api_secret_enc),
+        godmode_telegram_id = CASE WHEN ? IS NOT NULL THEN ? ELSE godmode_telegram_id END,
+        godmode_bot_token = COALESCE(?, godmode_bot_token),
         updated_at = CURRENT_TIMESTAMP
     WHERE id = 1
   `).run(
@@ -292,7 +298,10 @@ godmodeRouter.put('/config', (req: Request, res: Response) => {
     platformFeePct !== undefined ? Number(platformFeePct) : null,
     ownerBinanceUid !== undefined ? ownerBinanceUid.trim() : null,
     newApiKeyEnc,
-    newApiSecretEnc
+    newApiSecretEnc,
+    godmodeTelegramId !== undefined ? 1 : null,
+    godmodeTelegramId !== undefined ? (godmodeTelegramId ? Number(godmodeTelegramId) : null) : null,
+    godmodeBotToken !== undefined ? godmodeBotToken.trim() : null
   );
 
   res.json({ success: true, message: 'Global system configuration updated.' });
