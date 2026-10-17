@@ -755,6 +755,7 @@ merchantRouter.get('/settings', (req: AuthenticatedRequest, res: Response) => {
     supportText: tenant.support_text || '',
     welcomeText: tenant.welcome_text || '',
     categoriesEnabled: tenant.categories_enabled !== undefined && tenant.categories_enabled !== null ? Boolean(tenant.categories_enabled) : true,
+    adminTelegramId: tenant.admin_telegram_id || '',
   });
 });
 
@@ -771,6 +772,7 @@ merchantRouter.put('/settings', async (req: AuthenticatedRequest, res: Response)
     supportText,
     welcomeText,
     categoriesEnabled,
+    adminTelegramId,
   } = req.body;
 
   const current = db.prepare('SELECT * FROM tenants WHERE id = ?').get(tenantId) as any;
@@ -806,7 +808,8 @@ merchantRouter.put('/settings', async (req: AuthenticatedRequest, res: Response)
         about_text = COALESCE(?, about_text),
         support_text = COALESCE(?, support_text),
         welcome_text = COALESCE(?, welcome_text),
-        categories_enabled = COALESCE(?, categories_enabled)
+        categories_enabled = COALESCE(?, categories_enabled),
+        admin_telegram_id = COALESCE(?, admin_telegram_id)
     WHERE id = ?
   `).run(
     storeName,
@@ -821,6 +824,7 @@ merchantRouter.put('/settings', async (req: AuthenticatedRequest, res: Response)
     supportText !== undefined ? String(supportText) : null,
     welcomeText !== undefined ? String(welcomeText) : null,
     categoriesEnabled !== undefined ? (categoriesEnabled ? 1 : 0) : null,
+    adminTelegramId !== undefined ? (adminTelegramId ? Number(adminTelegramId) : null) : null,
     tenantId
   );
 

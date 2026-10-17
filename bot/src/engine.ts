@@ -701,11 +701,14 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
       });
 
       const binanceMsg =
-        `🟡 <b>Binance Pay (Instant Auto-Deposit)</b>\n\n` +
-        `Merchant Binance Pay UID:\n<code>${binance.uid}</code>\n\n` +
+        `🟡 <b>Binance Pay (Instant Auto-Deposit)</b>\n` +
+        `━━━━━━━━━━━━━━━━━━\n` +
+        `Merchant Binance Pay UID:\n\n` +
+        `<code>${binance.uid}</code>\n\n` +
         `1. Open Binance App &rarr; Pay &rarr; Send &rarr; Enter UID above.\n` +
-        `2. Transfer USDT.\n` +
-        `3. Enter the exact USD amount sent (e.g. 5 or 10):`;
+        `2. Transfer USDT.\n\n` +
+        `👉 <b>How much USD (USDT) did you send?</b>\n` +
+        `Enter the exact USD amount sent (e.g. 5 or 10):`;
 
       await ctx.editMessageText(binanceMsg, {
         parse_mode: 'HTML',
@@ -809,12 +812,13 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
         return ctx.reply('⚠️ This TrxID is already registered or approved. Please use a unique TrxID:');
       }
 
-      db.prepare(`
+      const insertResult = db.prepare(`
         INSERT INTO deposits (
           tenant_id, customer_telegram_id, customer_username, method, amount_bdt, amount_usd, trx_id, status
         ) VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDING')
       `).run(tenantId, ctx.from.id, ctx.from.username || null, state.method || 'bKash', state.amountBdt, state.amountUsd, trxId);
 
+      const depositId = insertResult.lastInsertRowid;
       userStates.delete(ctx.from.id);
 
       const confirmMsg =
@@ -827,7 +831,35 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
         `━━━━━━━━━━━━━━━━━━\n` +
         `<i>Your balance will be credited as soon as store administration verifies the transaction.</i>`;
 
-      return ctx.reply(confirmMsg, { parse_mode: 'HTML' });
+      await ctx.reply(confirmMsg, { parse_mode: 'HTML' });
+
+      // Notify Store Admin via Telegram with 1-click [Approve] & [Reject] buttons
+      if (tenant?.admin_telegram_id) {
+        const customerName = ctx.from.first_name || 'Customer';
+        const customerHandle = ctx.from.username ? `@${ctx.from.username}` : `ID: ${ctx.from.id}`;
+        const adminAlert =
+          `🔔 <b>New Manual Deposit Alert!</b>\n` +
+          `━━━━━━━━━━━━━━━━━━\n` +
+          `👤 Customer: <b>${customerName}</b> (${customerHandle})\n` +
+          `💳 Method: <b>${state.method}</b>\n` +
+          `💵 Amount BDT: <b>${state.amountBdt} BDT</b>\n` +
+          `💶 Equivalent USD: <b>$${state.amountUsd?.toFixed(2)} USD</b>\n` +
+          `🧾 TrxID: <code>${trxId}</code>\n` +
+          `━━━━━━━━━━━━━━━━━━\n` +
+          `Please verify the transaction in your mobile app and click an action below:`;
+
+        const adminKeyboard = new InlineKeyboard()
+          .text('✅ Approve & Credit', `adm_app_${depositId}`)
+          .text('❌ Reject', `adm_rej_${depositId}`);
+
+        bot.api.sendMessage(tenant.admin_telegram_id, adminAlert, {
+          parse_mode: 'HTML',
+          reply_markup: adminKeyboard,
+        }).catch((err: any) => {
+          console.warn(`[Bot Engine] Could not deliver deposit notification to admin ${tenant.admin_telegram_id}:`, err.message);
+        });
+      }
+      return;
     }
 
     // STEP D: Binance Amount
@@ -963,6 +995,90 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
     const kb = new InlineKeyboard().text('⬅️ Back', 'nav_start');
     await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
     await ctx.answerCallbackQuery();
+  });
+
+  // ==========================================
+  // 12. Admin 1-Click Approve & Reject Callback Handlers
+  // ==========================================
+  bot.callbackQuery(/^adm_app_(\d+)$/, async (ctx) => {
+    const depositId = ctx.match[1];
+    const tenant = getTenant();
+    if (!tenant?.admin_telegram_id || ctx.from.id !== tenant.admin_telegram_id) {
+      return ctx.answerCallbackQuery({
+        text: '❌ Unauthorized. Only the store owner can approve this deposit.',
+        show_alert: true,
+      });
+    }
+
+    const deposit = db.prepare('SELECT * FROM deposits WHERE id = ? AND tenant_id = ?').get(depositId, tenantId) as any;
+    if (!deposit) {
+      return ctx.answerCallbackQuery({ text: 'Deposit record not found.', show_alert: true });
+    }
+
+    if (deposit.status === 'APPROVED') {
+      return ctx.answerCallbackQuery({ text: 'Already approved!', show_alert: true });
+    }
+
+    const approveTx = db.transaction(() => {
+      db.prepare(`UPDATE deposits SET status = 'APPROVED', processed_at = CURRENT_TIMESTAMP WHERE id = ?`).run(depositId);
+      db.prepare(`UPDATE customers SET balance_usd = balance_usd + ? WHERE tenant_id = ? AND telegram_id = ?`)
+        .run(deposit.amount_usd, tenantId, deposit.customer_telegram_id);
+    });
+
+    approveTx();
+
+    await ctx.editMessageText(
+      ctx.callbackQuery.message?.text + `\n\n✅ <b>APPROVED & CREDITED by Admin</b> (${new Date().toLocaleTimeString()})`,
+      { parse_mode: 'HTML' }
+    ).catch(() => {});
+
+    await ctx.answerCallbackQuery({ text: '✅ Approved! Customer wallet credited.' });
+
+    // Notify customer
+    bot.api.sendMessage(
+      deposit.customer_telegram_id,
+      `🎉 <b>Deposit Approved!</b>\n\n` +
+      `Amount: <b>$${deposit.amount_usd.toFixed(2)} USD</b> (${deposit.amount_bdt} BDT)\n` +
+      `Method: <b>${deposit.method}</b>\n` +
+      `TrxID: <code>${deposit.trx_id}</code>\n\n` +
+      `Your wallet balance has been updated. Happy shopping! 🛍️`,
+      { parse_mode: 'HTML' }
+    ).catch(() => {});
+  });
+
+  bot.callbackQuery(/^adm_rej_(\d+)$/, async (ctx) => {
+    const depositId = ctx.match[1];
+    const tenant = getTenant();
+    if (!tenant?.admin_telegram_id || ctx.from.id !== tenant.admin_telegram_id) {
+      return ctx.answerCallbackQuery({
+        text: '❌ Unauthorized. Only the store owner can reject this deposit.',
+        show_alert: true,
+      });
+    }
+
+    const deposit = db.prepare('SELECT * FROM deposits WHERE id = ? AND tenant_id = ?').get(depositId, tenantId) as any;
+    if (!deposit) {
+      return ctx.answerCallbackQuery({ text: 'Deposit record not found.', show_alert: true });
+    }
+
+    db.prepare(`UPDATE deposits SET status = 'REJECTED', processed_at = CURRENT_TIMESTAMP WHERE id = ?`).run(depositId);
+
+    await ctx.editMessageText(
+      ctx.callbackQuery.message?.text + `\n\n❌ <b>REJECTED by Admin</b> (${new Date().toLocaleTimeString()})`,
+      { parse_mode: 'HTML' }
+    ).catch(() => {});
+
+    await ctx.answerCallbackQuery({ text: '❌ Deposit Rejected.' });
+
+    // Notify customer
+    bot.api.sendMessage(
+      deposit.customer_telegram_id,
+      `❌ <b>Deposit Verification Failed</b>\n\n` +
+      `Method: <b>${deposit.method}</b>\n` +
+      `TrxID: <code>${deposit.trx_id}</code>\n\n` +
+      `The store administration could not verify this transaction. Please double check your TrxID or contact support.`,
+      { parse_mode: 'HTML' }
+    ).catch(() => {});
   });
 
   return bot;

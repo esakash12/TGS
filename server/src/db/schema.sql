@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS tenants (
     support_text TEXT,
     welcome_text TEXT,
     categories_enabled INTEGER DEFAULT 1, -- 1 = Categories active (folders), 0 = Flat product list (no categories)
+    admin_telegram_id INTEGER, -- Merchant's personal Telegram ID for instant deposit approval & notifications
     subscription_cycle TEXT DEFAULT 'MONTHLY', -- MONTHLY, YEARLY, TRIAL
     subscription_status TEXT DEFAULT 'TRIAL', -- TRIAL, ACTIVE, GRACE, EXPIRED, SUSPENDED
     subscription_started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

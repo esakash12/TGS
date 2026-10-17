@@ -40,6 +40,8 @@ import {
   Check,
   Sparkles,
   Tag,
+  Menu,
+  X,
 } from 'lucide-react';
 import { CyberDialog, CyberDialogOptions } from '../../components/CyberDialog';
 
@@ -63,6 +65,7 @@ export const Dashboard: React.FC = () => {
   };
 
   const [activeTab, setActiveTab] = useState<'overview' | 'groups' | 'custom_products' | 'wholesale' | 'store_products' | 'deposits' | 'customers' | 'bot_editor' | 'subscription' | 'settings'>('overview');
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [overview, setOverview] = useState<any>(null);
   const [products, setProducts] = useState<any[]>([]);
   const [groups, setGroups] = useState<any[]>([]);
@@ -179,6 +182,7 @@ export const Dashboard: React.FC = () => {
     welcomeText: '',
     aboutText: '',
     supportText: '',
+    adminTelegramId: '',
   });
   const [settingsSaved, setSettingsSaved] = useState(false);
 
@@ -814,6 +818,7 @@ export const Dashboard: React.FC = () => {
           aboutText: settingsData.aboutText,
           supportText: settingsData.supportText,
           categoriesEnabled: settingsData.categoriesEnabled,
+          adminTelegramId: settingsData.adminTelegramId,
         },
         authHeaders
       );
@@ -869,8 +874,17 @@ export const Dashboard: React.FC = () => {
       {/* ==========================================
           TOP NAVIGATION BAR
          ========================================== */}
-      <header className="bg-carbon-900/90 backdrop-blur-xl border-b border-white/10 px-6 py-3.5 sticky top-0 z-40 flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      <header className="bg-carbon-900/90 backdrop-blur-xl border-b border-white/10 px-4 sm:px-6 py-3.5 sticky top-0 z-40 flex items-center justify-between">
+        <div className="flex items-center gap-3 sm:gap-4">
+          {/* Mobile Hamburger Menu Toggle Button */}
+          <button
+            onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}
+            className="md:hidden p-2 rounded-xl bg-carbon-800 border border-white/10 text-zinc-300 hover:text-white"
+            aria-label="Toggle Navigation Menu"
+          >
+            {mobileSidebarOpen ? <X className="w-5 h-5 text-crimson-400" /> : <Menu className="w-5 h-5 text-white" />}
+          </button>
+
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-crimson-600 to-laser-600 flex items-center justify-center font-bold text-white shadow-md">
               <Bot className="w-4 h-4" />
@@ -916,16 +930,35 @@ export const Dashboard: React.FC = () => {
       {/* ==========================================
           MAIN DASHBOARD BODY WITH SIDEBAR
          ========================================== */}
-      <div className="flex-1 flex flex-col md:flex-row w-full min-h-[calc(100vh-65px)]">
-        {/* Left Sidebar Navigation */}
-        <aside className="w-full md:w-64 bg-carbon-900/95 border-b md:border-b-0 md:border-r border-white/10 p-3 sm:p-4 flex-shrink-0 flex flex-col justify-between">
+      <div className="flex-1 flex flex-col md:flex-row w-full min-h-[calc(100vh-65px)] relative">
+        {/* Mobile Backdrop overlay */}
+        {mobileSidebarOpen && (
+          <div
+            onClick={() => setMobileSidebarOpen(false)}
+            className="fixed inset-0 z-30 bg-black/70 backdrop-blur-sm md:hidden"
+          />
+        )}
+
+        {/* Left Sidebar Navigation (Desktop persistent, Mobile slide-in drawer) */}
+        <aside className={`
+          w-72 md:w-64 bg-carbon-900 border-r border-white/10 p-3 sm:p-4 flex-shrink-0 flex flex-col justify-between
+          fixed md:static inset-y-0 left-0 z-40 md:z-0 transform transition-transform duration-200 ease-in-out
+          ${mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+          overflow-y-auto max-h-screen md:max-h-none
+        `}>
           <div className="space-y-1">
-            <div className="px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-zinc-500">
-              Navigation Menu
+            <div className="flex items-center justify-between px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-zinc-500">
+              <span>Navigation Menu</span>
+              <button
+                onClick={() => setMobileSidebarOpen(false)}
+                className="md:hidden p-1 rounded-lg text-zinc-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
 
             <button
-              onClick={() => setActiveTab('overview')}
+              onClick={() => { setActiveTab('overview'); setMobileSidebarOpen(false); }}
               className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all text-left ${
                 activeTab === 'overview'
                   ? 'bg-crimson-500/20 text-crimson-400 border border-crimson-500/30 shadow-sm'
@@ -939,7 +972,7 @@ export const Dashboard: React.FC = () => {
             </button>
 
             <button
-              onClick={() => setActiveTab('groups')}
+              onClick={() => { setActiveTab('groups'); setMobileSidebarOpen(false); }}
               className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all text-left ${
                 activeTab === 'groups'
                   ? 'bg-crimson-500/20 text-crimson-400 border border-crimson-500/30 shadow-sm'
@@ -954,7 +987,7 @@ export const Dashboard: React.FC = () => {
             </button>
 
             <button
-              onClick={() => setActiveTab('custom_products')}
+              onClick={() => { setActiveTab('custom_products'); setMobileSidebarOpen(false); }}
               className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all text-left ${
                 activeTab === 'custom_products'
                   ? 'bg-crimson-500/20 text-crimson-400 border border-crimson-500/30 shadow-sm'
@@ -969,7 +1002,7 @@ export const Dashboard: React.FC = () => {
             </button>
 
             <button
-              onClick={() => setActiveTab('wholesale')}
+              onClick={() => { setActiveTab('wholesale'); setMobileSidebarOpen(false); }}
               className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all text-left ${
                 activeTab === 'wholesale'
                   ? 'bg-crimson-500/20 text-crimson-400 border border-crimson-500/30 shadow-sm'
@@ -983,7 +1016,7 @@ export const Dashboard: React.FC = () => {
             </button>
 
             <button
-              onClick={() => setActiveTab('store_products')}
+              onClick={() => { setActiveTab('store_products'); setMobileSidebarOpen(false); }}
               className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all text-left ${
                 activeTab === 'store_products'
                   ? 'bg-crimson-500/20 text-crimson-400 border border-crimson-500/30 shadow-sm'
@@ -998,7 +1031,7 @@ export const Dashboard: React.FC = () => {
             </button>
 
             <button
-              onClick={() => setActiveTab('deposits')}
+              onClick={() => { setActiveTab('deposits'); setMobileSidebarOpen(false); }}
               className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all text-left ${
                 activeTab === 'deposits'
                   ? 'bg-crimson-500/20 text-crimson-400 border border-crimson-500/30 shadow-sm'
@@ -1017,7 +1050,7 @@ export const Dashboard: React.FC = () => {
             </button>
 
             <button
-              onClick={() => setActiveTab('customers')}
+              onClick={() => { setActiveTab('customers'); setMobileSidebarOpen(false); }}
               className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all text-left ${
                 activeTab === 'customers'
                   ? 'bg-crimson-500/20 text-crimson-400 border border-crimson-500/30 shadow-sm'
@@ -1036,7 +1069,7 @@ export const Dashboard: React.FC = () => {
             </div>
 
             <button
-              onClick={() => setActiveTab('bot_editor')}
+              onClick={() => { setActiveTab('bot_editor'); setMobileSidebarOpen(false); }}
               className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all text-left ${
                 activeTab === 'bot_editor'
                   ? 'bg-gradient-to-r from-laser-600/30 to-purple-600/30 text-laser-300 border border-laser-500/40 shadow-sm'
@@ -1050,7 +1083,7 @@ export const Dashboard: React.FC = () => {
             </button>
 
             <button
-              onClick={() => setActiveTab('settings')}
+              onClick={() => { setActiveTab('settings'); setMobileSidebarOpen(false); }}
               className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all text-left ${
                 activeTab === 'settings'
                   ? 'bg-crimson-500/20 text-crimson-400 border border-crimson-500/30 shadow-sm'
@@ -1064,7 +1097,7 @@ export const Dashboard: React.FC = () => {
             </button>
 
             <button
-              onClick={() => setActiveTab('subscription')}
+              onClick={() => { setActiveTab('subscription'); setMobileSidebarOpen(false); }}
               className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all text-left ${
                 activeTab === 'subscription'
                   ? 'bg-crimson-500/20 text-crimson-400 border border-crimson-500/30 shadow-sm'
@@ -2346,6 +2379,22 @@ export const Dashboard: React.FC = () => {
                   onChange={(e) => setSettingsData({ ...settingsData, botToken: e.target.value })}
                   className="w-full px-4 py-2.5 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-laser-500"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                  Your Personal Telegram User ID (For 1-Click Deposit Alerts & Approvals)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. 1234567890 (Get your ID from @userinfobot)"
+                  value={settingsData.adminTelegramId || ''}
+                  onChange={(e) => setSettingsData({ ...settingsData, adminTelegramId: e.target.value.trim() })}
+                  className="w-full px-4 py-2.5 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-emerald-500"
+                />
+                <span className="text-[10px] text-zinc-500 mt-1 block">
+                  When a customer submits a manual deposit (bKash/Nagad/Rocket), your bot will send an alert directly to this Telegram ID with [✅ Approve] & [❌ Reject] buttons!
+                </span>
               </div>
             </div>
 
