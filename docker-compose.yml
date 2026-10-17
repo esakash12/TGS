@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   mogent-cloud:
     build: .
@@ -19,7 +17,8 @@ services:
     deploy:
       resources:
         limits:
-          memory: 300M
+          memory: 600M
+
 
 volumes:
   mogent_data:
