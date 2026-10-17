@@ -373,9 +373,9 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
       const icon = getProductIcon(p.name, p.category);
       const priceFormatted = Number(p.retail_price_usd).toFixed(2);
       const stock = p.stock !== undefined && p.stock !== null ? Number(p.stock) : 0;
-      const stockBadge = stock > 0 ? `[Stock: ${stock}]` : '[❌ Out of stock]';
+      const stockBadge = stock > 0 ? `[${stock}]` : '[0]';
 
-      // Required Format: [Icon] [Name] — $[Price] [Stock] (Price first, then Stock)
+      // Required Format: [Icon] [Name] — $[Price] [Number] (only number in brackets)
       keyboard.text(`${icon} ${p.name} — $${priceFormatted} ${stockBadge}`, `view_p_${p.id}`).row();
     }
 
