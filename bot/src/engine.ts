@@ -186,7 +186,7 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
       return [];
     }
 
-    // When categories are enabled, only explicit created categories/folders appear. No default 'General' category!
+    // 1. Fetch custom folders/groups
     const customGroups = db.prepare(`
       SELECT g.id, g.name, g.icon, COUNT(p.id) as active_count
       FROM product_groups g
@@ -208,6 +208,31 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
         icon: cg.icon || '📁',
         isGroup: true,
         count: Number(cg.active_count),
+      });
+    }
+
+    // 2. Fetch products that have no group_id (e.g. category = 'General' or other custom category)
+    const ungroupedCats = db.prepare(`
+      SELECT p.category, COUNT(p.id) as active_count
+      FROM products p
+      LEFT JOIN platform_wholesale_rules r ON p.provider_product_id = r.provider_product_id
+      WHERE p.tenant_id = ?
+        AND p.is_active = 1
+        AND p.group_id IS NULL
+        AND (p.provider = 'custom' OR r.is_active IS NULL OR r.is_active = 1)
+      GROUP BY p.category
+      ORDER BY p.category ASC
+    `).all(tenantId) as any[];
+
+    for (const uc of ungroupedCats) {
+      const catName = uc.category || 'General';
+      const icon = getProductIcon('', catName);
+      categoryList.push({
+        id: catName,
+        name: catName,
+        icon: icon && icon !== '💎' ? icon : '📁',
+        isGroup: false,
+        count: Number(uc.active_count),
       });
     }
 
@@ -487,6 +512,8 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
       backCallback = 'nav_products';
     } else if (product.group_id) {
       backCallback = `view_grp_${product.group_id}`;
+    } else if (product.category) {
+      backCallback = `view_cat_${encodeURIComponent(product.category)}`;
     }
 
     keyboard.text('⬅️ Back', backCallback);
