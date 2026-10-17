@@ -223,6 +223,14 @@ class DynamicBotRegistry {
       started_at: entry ? new Date(entry.startedAt).toISOString() : null,
     };
   }
+
+  /**
+   * Get direct bot instance for a tenant
+   */
+  public getBotInstance(tenantId: string): Bot | null {
+    const entry = this.activeBots.get(tenantId);
+    return entry ? entry.bot : null;
+  }
 }
 
 export const botRegistry = new DynamicBotRegistry();

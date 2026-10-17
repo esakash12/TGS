@@ -62,7 +62,7 @@ export const Dashboard: React.FC = () => {
     setDialog({ type: 'prompt', tone: 'info', title, message, inputLabel, defaultValue, onConfirm });
   };
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'groups' | 'custom_products' | 'wholesale' | 'store_products' | 'deposits' | 'customers' | 'subscription' | 'settings'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'groups' | 'custom_products' | 'wholesale' | 'store_products' | 'deposits' | 'customers' | 'bot_editor' | 'subscription' | 'settings'>('overview');
   const [overview, setOverview] = useState<any>(null);
   const [products, setProducts] = useState<any[]>([]);
   const [groups, setGroups] = useState<any[]>([]);
@@ -73,6 +73,26 @@ export const Dashboard: React.FC = () => {
   const [botRestartLoading, setBotRestartLoading] = useState(false);
   const [botRestartFeedback, setBotRestartFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Bot Profile Live Editor State
+  const [botProfileLoading, setBotProfileLoading] = useState(false);
+  const [botProfileSaving, setBotProfileSaving] = useState(false);
+  const [botProfileData, setBotProfileData] = useState<{
+    name: string;
+    about: string;
+    description: string;
+    username: string;
+    commands: Array<{ command: string; description: string }>;
+  }>({
+    name: '',
+    about: '',
+    description: '',
+    username: '',
+    commands: [
+      { command: 'start', description: 'Open Store Menu' },
+      { command: 'help', description: 'Customer Support' },
+    ],
+  });
 
   // Subscription State
   const [subData, setSubData] = useState<any | null>(null);
@@ -265,11 +285,50 @@ export const Dashboard: React.FC = () => {
     }
   };
 
+  // Load Live Bot Profile from Telegram API
+  const loadBotProfile = async () => {
+    setBotProfileLoading(true);
+    try {
+      const res = await axios.get('/api/merchant/bot/profile', authHeaders);
+      if (res.data) {
+        setBotProfileData({
+          name: res.data.name || '',
+          about: res.data.about || '',
+          description: res.data.description || '',
+          username: res.data.username || '',
+          commands: res.data.commands || [
+            { command: 'start', description: 'Open Store Menu' },
+            { command: 'help', description: 'Customer Support' },
+          ],
+        });
+      }
+    } catch (err: any) {
+      console.warn('Failed to load bot profile from Telegram:', err.message);
+    } finally {
+      setBotProfileLoading(false);
+    }
+  };
+
+  const handleSaveBotProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBotProfileSaving(true);
+    try {
+      const res = await axios.put('/api/merchant/bot/profile', botProfileData, authHeaders);
+      showNotice('Telegram Updated', res.data.message || 'Bot profile updated successfully on Telegram!', 'success');
+      loadBotProfile();
+    } catch (err: any) {
+      showNotice('Update Failed', err.response?.data?.error || 'Failed to update bot profile on Telegram.', 'danger');
+    } finally {
+      setBotProfileSaving(false);
+    }
+  };
+
   useEffect(() => {
     if (activeTab === 'wholesale') loadWholesaleCatalog();
     if (activeTab === 'groups') loadGroups();
     if (activeTab === 'settings') loadSettings();
     if (activeTab === 'customers') loadCustomers();
+    if (activeTab === 'bot_editor') loadBotProfile();
     if (activeTab === 'subscription' || activeTab === 'overview') loadSubscriptionData();
   }, [activeTab]);
 
@@ -940,6 +999,17 @@ export const Dashboard: React.FC = () => {
             }`}
           >
             <Users className="w-4 h-4" /> Customers ({overview?.totalCustomers ?? customers.length})
+          </button>
+
+          <button
+            onClick={() => setActiveTab('bot_editor')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+              activeTab === 'bot_editor'
+                ? 'bg-gradient-to-r from-laser-600/30 to-purple-600/30 text-laser-300 border border-laser-500/40 shadow-sm'
+                : 'text-zinc-400 hover:text-white'
+            }`}
+          >
+            <Bot className="w-4 h-4 text-laser-400" /> Bot Profile Editor
           </button>
 
           <button
@@ -1923,6 +1993,226 @@ export const Dashboard: React.FC = () => {
                 </table>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* ==========================================
+            TAB: BOT PROFILE & COMMANDS EDITOR (Direct Telegram API Sync)
+           ========================================== */}
+        {activeTab === 'bot_editor' && (
+          <div className="space-y-6 max-w-4xl">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <Bot className="w-5 h-5 text-laser-400" /> Telegram Bot Profile & Identity Editor
+                </h3>
+                <p className="text-xs text-zinc-400">
+                  Edit your bot's live display name, about bio, description, and slash commands directly on Telegram without using @BotFather. No image files are saved on website servers.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={loadBotProfile}
+                disabled={botProfileLoading}
+                className="px-3.5 py-2 rounded-xl bg-carbon-800 hover:bg-carbon-700 text-zinc-300 hover:text-white border border-white/10 text-xs font-bold flex items-center gap-2 self-start sm:self-auto transition-all"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${botProfileLoading ? 'animate-spin' : ''}`} />
+                <span>Fetch from Telegram</span>
+              </button>
+            </div>
+
+            {/* Telegram Live Bot Badge */}
+            <div className="glass-card rounded-2xl p-5 border border-laser-500/30 bg-gradient-to-r from-laser-950/20 to-purple-950/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-laser-600 to-purple-600 flex items-center justify-center text-white text-xl font-bold shadow-lg shadow-laser-500/20">
+                  🤖
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-white">
+                      {botProfileData.name || tenant?.name || 'My Store Bot'}
+                    </span>
+                    {botProfileData.username && (
+                      <span className="text-xs font-mono text-laser-400 bg-laser-500/10 px-2 py-0.5 rounded-full border border-laser-500/20">
+                        @{botProfileData.username}
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-[11px] text-zinc-400">
+                    Live changes sync directly to Telegram Official API in real time.
+                  </span>
+                </div>
+              </div>
+
+              {botProfileData.username && (
+                <a
+                  href={`https://t.me/${botProfileData.username}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-4 py-2 rounded-xl bg-laser-600/20 hover:bg-laser-600/30 text-laser-300 border border-laser-500/30 text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Open in Telegram</span>
+                </a>
+              )}
+            </div>
+
+            <form onSubmit={handleSaveBotProfile} className="space-y-6">
+              {/* 1. Bot Name (Display Name) */}
+              <div className="glass-card rounded-2xl p-6 border border-white/10 space-y-3">
+                <div className="flex justify-between items-center">
+                  <label className="text-xs font-bold text-white flex items-center gap-2 uppercase tracking-wider font-mono">
+                    <Tag className="w-4 h-4 text-laser-400" /> 1. Edit Name (Display Name)
+                  </label>
+                  <span className="text-[10px] text-zinc-400 font-mono">Max 64 characters</span>
+                </div>
+                <input
+                  type="text"
+                  maxLength={64}
+                  placeholder="e.g. MT Online Shop"
+                  value={botProfileData.name}
+                  onChange={(e) => setBotProfileData({ ...botProfileData, name: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl bg-carbon-800 border border-white/10 text-white text-xs font-semibold focus:outline-none focus:border-laser-500 transition-colors"
+                />
+                <p className="text-[11px] text-zinc-500">
+                  This is the bold name people see when they open your bot or view it in chat lists.
+                </p>
+              </div>
+
+              {/* 2. Bot About (Bio Card) */}
+              <div className="glass-card rounded-2xl p-6 border border-white/10 space-y-3">
+                <div className="flex justify-between items-center">
+                  <label className="text-xs font-bold text-white flex items-center gap-2 uppercase tracking-wider font-mono">
+                    <AlertCircle className="w-4 h-4 text-purple-400" /> 2. Edit About (Bio & Profile Card)
+                  </label>
+                  <span className="text-[10px] text-zinc-400 font-mono">Max 120 characters</span>
+                </div>
+                <input
+                  type="text"
+                  maxLength={120}
+                  placeholder="e.g. 24/7 Automated Digital Store • Instant Delivery • 100% Genuine Licenses"
+                  value={botProfileData.about}
+                  onChange={(e) => setBotProfileData({ ...botProfileData, about: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl bg-carbon-800 border border-white/10 text-white text-xs focus:outline-none focus:border-purple-500 transition-colors"
+                />
+                <p className="text-[11px] text-zinc-500">
+                  People will see this on the bot's profile page and when someone shares the link to your bot.
+                </p>
+              </div>
+
+              {/* 3. Bot Description ("What can this bot do?") */}
+              <div className="glass-card rounded-2xl p-6 border border-white/10 space-y-3">
+                <div className="flex justify-between items-center">
+                  <label className="text-xs font-bold text-white flex items-center gap-2 uppercase tracking-wider font-mono">
+                    <Sliders className="w-4 h-4 text-emerald-400" /> 3. Edit Description ("What can this bot do?")
+                  </label>
+                  <span className="text-[10px] text-zinc-400 font-mono">Max 512 characters</span>
+                </div>
+                <textarea
+                  rows={4}
+                  maxLength={512}
+                  placeholder="e.g. Welcome to MT Online Shop! We provide premium AI subscriptions, VPNs, and software keys with instant automated delivery. Tap /start to view our catalog."
+                  value={botProfileData.description}
+                  onChange={(e) => setBotProfileData({ ...botProfileData, description: e.target.value })}
+                  className="w-full px-4 py-2.5 rounded-xl bg-carbon-800 border border-white/10 text-white text-xs focus:outline-none focus:border-emerald-500 resize-none transition-colors"
+                />
+                <p className="text-[11px] text-zinc-500">
+                  Displayed on the empty chat screen before a customer taps the "Start" button for the first time.
+                </p>
+              </div>
+
+              {/* 4. Bot Slash Commands */}
+              <div className="glass-card rounded-2xl p-6 border border-white/10 space-y-4">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <label className="text-xs font-bold text-white flex items-center gap-2 uppercase tracking-wider font-mono">
+                      <Key className="w-4 h-4 text-amber-400" /> 4. Edit Commands Menu (/start, /help, etc.)
+                    </label>
+                    <p className="text-[11px] text-zinc-500 mt-0.5">
+                      These appear in the bottom-left Menu button inside Telegram for quick customer actions.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBotProfileData({
+                        ...botProfileData,
+                        commands: [...botProfileData.commands, { command: '', description: '' }],
+                      });
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-carbon-800 hover:bg-carbon-700 text-xs font-bold text-laser-400 border border-white/10 flex items-center gap-1 transition-all"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Add Command
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {botProfileData.commands.map((cmd, idx) => (
+                    <div key={idx} className="flex items-center gap-3">
+                      <div className="relative w-1/3">
+                        <span className="absolute left-3 top-2.5 text-zinc-500 font-mono text-xs">/</span>
+                        <input
+                          type="text"
+                          placeholder="start"
+                          value={cmd.command}
+                          onChange={(e) => {
+                            const newCmds = [...botProfileData.commands];
+                            newCmds[idx].command = e.target.value.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase();
+                            setBotProfileData({ ...botProfileData, commands: newCmds });
+                          }}
+                          className="w-full pl-6 pr-3 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-amber-500"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <input
+                          type="text"
+                          placeholder="Short description (e.g. Open Store Menu)"
+                          value={cmd.description}
+                          onChange={(e) => {
+                            const newCmds = [...botProfileData.commands];
+                            newCmds[idx].description = e.target.value;
+                            setBotProfileData({ ...botProfileData, commands: newCmds });
+                          }}
+                          className="w-full px-3 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white text-xs focus:outline-none focus:border-amber-500"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newCmds = botProfileData.commands.filter((_, i) => i !== idx);
+                          setBotProfileData({ ...botProfileData, commands: newCmds });
+                        }}
+                        className="p-2 rounded-xl bg-carbon-800 hover:bg-crimson-500/20 text-zinc-400 hover:text-crimson-400 border border-white/5 transition-all"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Botpic & Description Picture Guide Note */}
+              <div className="p-4 rounded-2xl bg-carbon-900/60 border border-white/5 space-y-1.5 text-zinc-400 text-xs">
+                <div className="flex items-center gap-2 font-bold text-zinc-200">
+                  <Shield className="w-4 h-4 text-laser-400" /> Privacy & Zero-Server-Storage Policy
+                </div>
+                <p>
+                  To keep the SaaS light, fast, and 100% private with <b>no image storage overhead on website servers</b>, profile images (Botpic & Description Picture) are hosted exclusively on Telegram servers. You can set or change your avatar directly via <code>@BotFather &rarr; /setuserpic</code> at any time.
+                </p>
+              </div>
+
+              {/* Save All to Telegram Button */}
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="submit"
+                  disabled={botProfileSaving}
+                  className="px-6 py-3 rounded-2xl bg-gradient-to-r from-laser-600 to-purple-600 hover:from-laser-500 hover:to-purple-500 text-white font-bold text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-laser-600/30 transition-all active:scale-95 disabled:opacity-50"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  <span>{botProfileSaving ? 'Updating Telegram...' : 'Save & Sync to Telegram 🚀'}</span>
+                </button>
+              </div>
+            </form>
           </div>
         )}
 

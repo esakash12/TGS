@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import axios from 'axios';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
 import { db } from '../db/database';
 import { encrypt, decrypt } from '../services/crypto';
@@ -850,6 +851,104 @@ merchantRouter.post('/bot/restart', async (req: AuthenticatedRequest, res: Respo
     username: result.username,
     message: `Bot @${result.username} is connected and running!`,
   });
+});
+
+// 7.1. Bot Profile & Metadata Editor (Direct Telegram Bot API Sync - No Server Storage)
+merchantRouter.get('/bot/profile', async (req: AuthenticatedRequest, res: Response) => {
+  const tenantId = req.tenant.id;
+  const tenant = db.prepare('SELECT bot_token, bot_username FROM tenants WHERE id = ?').get(tenantId) as any;
+
+  if (!tenant?.bot_token) {
+    return res.status(400).json({ error: 'Please save a valid Bot Token first.' });
+  }
+
+  const token = tenant.bot_token.trim();
+  try {
+    const [meRes, nameRes, descRes, shortDescRes, commandsRes] = await Promise.all([
+      axios.get(`https://api.telegram.org/bot${token}/getMe`, { timeout: 8000 }).catch(() => null),
+      axios.get(`https://api.telegram.org/bot${token}/getMyName`, { timeout: 8000 }).catch(() => null),
+      axios.get(`https://api.telegram.org/bot${token}/getMyDescription`, { timeout: 8000 }).catch(() => null),
+      axios.get(`https://api.telegram.org/bot${token}/getMyShortDescription`, { timeout: 8000 }).catch(() => null),
+      axios.get(`https://api.telegram.org/bot${token}/getMyCommands`, { timeout: 8000 }).catch(() => null),
+    ]);
+
+    res.json({
+      success: true,
+      username: meRes?.data?.result?.username || tenant.bot_username || '',
+      name: nameRes?.data?.result?.name || meRes?.data?.result?.first_name || '',
+      about: shortDescRes?.data?.result?.short_description || '',
+      description: descRes?.data?.result?.description || '',
+      commands: commandsRes?.data?.result || [
+        { command: 'start', description: 'Open Store Menu' },
+        { command: 'help', description: 'Customer Support' }
+      ],
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to fetch bot profile from Telegram: ' + (err.message || err) });
+  }
+});
+
+merchantRouter.put('/bot/profile', async (req: AuthenticatedRequest, res: Response) => {
+  const tenantId = req.tenant.id;
+  const tenant = db.prepare('SELECT bot_token, bot_username FROM tenants WHERE id = ?').get(tenantId) as any;
+
+  if (!tenant?.bot_token) {
+    return res.status(400).json({ error: 'Please save a valid Bot Token first.' });
+  }
+
+  const token = tenant.bot_token.trim();
+  const { name, about, description, commands } = req.body;
+
+  const updates: Promise<any>[] = [];
+
+  // 1. Update Bot Display Name
+  if (name !== undefined) {
+    updates.push(
+      axios.post(`https://api.telegram.org/bot${token}/setMyName`, { name: String(name).slice(0, 64) }, { timeout: 8000 })
+    );
+  }
+
+  // 2. Update About (Short Description on Bot Profile, max 120 chars)
+  if (about !== undefined) {
+    updates.push(
+      axios.post(`https://api.telegram.org/bot${token}/setMyShortDescription`, { short_description: String(about).slice(0, 120) }, { timeout: 8000 })
+    );
+  }
+
+  // 3. Update Description ("What can this bot do?" welcome text, max 512 chars)
+  if (description !== undefined) {
+    updates.push(
+      axios.post(`https://api.telegram.org/bot${token}/setMyDescription`, { description: String(description).slice(0, 512) }, { timeout: 8000 })
+    );
+  }
+
+  // 4. Update Slash Commands
+  if (Array.isArray(commands)) {
+    const validCommands = commands
+      .filter((c: any) => c.command && c.command.trim())
+      .map((c: any) => ({
+        command: c.command.trim().replace(/^\//, '').toLowerCase().slice(0, 32),
+        description: (c.description || 'Command').trim().slice(0, 256),
+      }));
+
+    if (validCommands.length > 0) {
+      updates.push(
+        axios.post(`https://api.telegram.org/bot${token}/setMyCommands`, { commands: validCommands }, { timeout: 8000 })
+      );
+    }
+  }
+
+  try {
+    await Promise.all(updates);
+    res.json({
+      success: true,
+      message: 'Bot profile & commands updated directly on Telegram!',
+    });
+  } catch (err: any) {
+    res.status(500).json({
+      error: 'Failed to update on Telegram: ' + (err.response?.data?.description || err.message),
+    });
+  }
 });
 
 // ==========================================
