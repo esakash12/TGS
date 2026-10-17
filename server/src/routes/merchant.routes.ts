@@ -753,6 +753,7 @@ merchantRouter.get('/settings', (req: AuthenticatedRequest, res: Response) => {
     aboutText: tenant.about_text || '',
     supportText: tenant.support_text || '',
     welcomeText: tenant.welcome_text || '',
+    categoriesEnabled: tenant.categories_enabled !== undefined && tenant.categories_enabled !== null ? Boolean(tenant.categories_enabled) : true,
   });
 });
 
@@ -768,6 +769,7 @@ merchantRouter.put('/settings', async (req: AuthenticatedRequest, res: Response)
     aboutText,
     supportText,
     welcomeText,
+    categoriesEnabled,
   } = req.body;
 
   const current = db.prepare('SELECT * FROM tenants WHERE id = ?').get(tenantId) as any;
@@ -802,7 +804,8 @@ merchantRouter.put('/settings', async (req: AuthenticatedRequest, res: Response)
         global_markup_fixed_usd = COALESCE(?, global_markup_fixed_usd),
         about_text = COALESCE(?, about_text),
         support_text = COALESCE(?, support_text),
-        welcome_text = COALESCE(?, welcome_text)
+        welcome_text = COALESCE(?, welcome_text),
+        categories_enabled = COALESCE(?, categories_enabled)
     WHERE id = ?
   `).run(
     storeName,
@@ -816,6 +819,7 @@ merchantRouter.put('/settings', async (req: AuthenticatedRequest, res: Response)
     aboutText !== undefined ? String(aboutText) : null,
     supportText !== undefined ? String(supportText) : null,
     welcomeText !== undefined ? String(welcomeText) : null,
+    categoriesEnabled !== undefined ? (categoriesEnabled ? 1 : 0) : null,
     tenantId
   );
 

@@ -7,7 +7,7 @@ import { authRouter } from './routes/auth.routes';
 import { merchantRouter } from './routes/merchant.routes';
 import { godmodeRouter } from './routes/godmode.routes';
 import { botRegistry } from '../../bot/src/registry';
-import { fetchLiveWholesaleCatalog } from './services/wholesale';
+import { fetchLiveWholesaleCatalog, syncLivePricesForAllTenants } from './services/wholesale';
 
 dotenv.config();
 
@@ -108,18 +108,21 @@ app.listen(PORT, async () => {
   ==============================================================
   `);
 
-  // Warm live wholesale catalog cache on startup
+  // Warm live wholesale catalog cache on startup & auto-sync merchant prices
   try {
     const catalog = await fetchLiveWholesaleCatalog(true);
     console.log(`📦 [Wholesale Engine] Cached ${catalog.length} live wholesale products with real-time stock.`);
+    const updatedCount = await syncLivePricesForAllTenants();
+    console.log(`⚡ [Wholesale Engine] Auto-synced real-time wholesale prices across active stores (${updatedCount} products updated).`);
   } catch (err: any) {
     console.warn('⚠️ [Wholesale Engine] Initial catalog fetch warning:', err.message);
   }
 
-  // Periodic live stock refresh every 3 minutes
+  // Periodic live stock & upstream price refresh every 3 minutes
   setInterval(async () => {
     try {
       await fetchLiveWholesaleCatalog(true);
+      await syncLivePricesForAllTenants();
     } catch (e: any) {
       // background refresh silent fail
     }

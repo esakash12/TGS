@@ -754,6 +754,7 @@ export const Dashboard: React.FC = () => {
           welcomeText: settingsData.welcomeText,
           aboutText: settingsData.aboutText,
           supportText: settingsData.supportText,
+          categoriesEnabled: settingsData.categoriesEnabled,
         },
         authHeaders
       );
@@ -1156,15 +1157,44 @@ export const Dashboard: React.FC = () => {
                   <Folder className="w-5 h-5 text-laser-400" /> Custom Categories & Folders
                 </h3>
                 <p className="text-xs text-zinc-400">
-                  When customers tap "🛍️ Products" in Telegram, these folders appear first. Tapping a folder reveals its products!
+                  When enabled, your bot organizes products into folders. When disabled, customers see all products directly in a flat list with no categories.
                 </p>
               </div>
-              <button
-                onClick={() => setShowAddGroupModal(true)}
-                className="px-4 py-2.5 rounded-xl bg-laser-600 hover:bg-laser-500 text-white font-bold text-xs flex items-center gap-2 shadow-md self-start sm:self-auto"
-              >
-                <FolderPlus className="w-4 h-4" /> Add Category / Group
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const newStatus = !settingsData.categoriesEnabled;
+                    setSettingsData({ ...settingsData, categoriesEnabled: newStatus });
+                    try {
+                      await axios.put(
+                        '/api/merchant/settings',
+                        {
+                          storeName: settingsData.name,
+                          categoriesEnabled: newStatus,
+                        },
+                        authHeaders
+                      );
+                    } catch (e) {
+                      console.error('Failed to toggle categories:', e);
+                    }
+                  }}
+                  className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all border ${
+                    settingsData.categoriesEnabled
+                      ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                      : 'bg-carbon-800 text-zinc-400 border-white/10 hover:text-white'
+                  }`}
+                >
+                  <span className={`w-2 h-2 rounded-full ${settingsData.categoriesEnabled ? 'bg-emerald-400' : 'bg-zinc-500'}`}></span>
+                  Categories: {settingsData.categoriesEnabled ? 'ON' : 'OFF'}
+                </button>
+                <button
+                  onClick={() => setShowAddGroupModal(true)}
+                  className="px-4 py-2.5 rounded-xl bg-laser-600 hover:bg-laser-500 text-white font-bold text-xs flex items-center gap-2 shadow-md self-start sm:self-auto"
+                >
+                  <FolderPlus className="w-4 h-4" /> Add Category / Group
+                </button>
+              </div>
             </div>
 
             {/* Groups Grid */}

@@ -166,6 +166,17 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
 
   // Helper: Fetch Categories & Product Groups
   const getCategoriesForTenant = () => {
+    const tenant = getTenant();
+    const categoriesEnabled = tenant.categories_enabled !== undefined && tenant.categories_enabled !== null 
+      ? Boolean(tenant.categories_enabled) 
+      : true;
+
+    // If merchant turned off categories, return empty so it displays direct flat product list
+    if (!categoriesEnabled) {
+      return [];
+    }
+
+    // When categories are enabled, only explicit created categories/folders appear. No default 'General' category!
     const customGroups = db.prepare(`
       SELECT g.id, g.name, g.icon, COUNT(p.id) as active_count
       FROM product_groups g
@@ -176,18 +187,6 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
         AND (p.provider = 'custom' OR r.is_active IS NULL OR r.is_active = 1)
       GROUP BY g.id
       ORDER BY g.sort_order ASC, g.name ASC
-    `).all(tenantId) as any[];
-
-    const ungrouped = db.prepare(`
-      SELECT p.category, COUNT(p.id) as active_count
-      FROM products p
-      LEFT JOIN platform_wholesale_rules r ON p.provider_product_id = r.provider_product_id
-      WHERE p.tenant_id = ?
-        AND p.group_id IS NULL
-        AND p.is_active = 1
-        AND (p.provider = 'custom' OR r.is_active IS NULL OR r.is_active = 1)
-      GROUP BY p.category
-      ORDER BY p.category ASC
     `).all(tenantId) as any[];
 
     const categoryList: Array<{ id: string; name: string; icon: string; isGroup: boolean; count: number }> = [];
@@ -202,23 +201,11 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
       });
     }
 
-    for (const ug of ungrouped) {
-      const catName = ug.category || 'General';
-      const icon = getProductIcon(catName);
-      categoryList.push({
-        id: catName,
-        name: catName,
-        icon,
-        isGroup: false,
-        count: Number(ug.active_count),
-      });
-    }
-
     return categoryList;
   };
 
-  // Helper: Fetch products in category or group
-  const getProductsByCategoryOrGroup = (selector: { groupId?: string; categoryName?: string }) => {
+  // Helper: Fetch products in category or group (or all active products)
+  const getProductsByCategoryOrGroup = (selector: { groupId?: string; categoryName?: string; allProducts?: boolean }) => {
     let query = `
       SELECT p.*, g.name as group_name, g.icon as group_icon, r.is_active as platform_active
       FROM products p
@@ -236,6 +223,8 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
     } else if (selector.categoryName) {
       query += ` AND p.group_id IS NULL AND p.category = ?`;
       params.push(selector.categoryName);
+    } else if (selector.allProducts) {
+      // Return all active products without category grouping
     }
 
     query += ` ORDER BY p.retail_price_usd ASC`;
@@ -307,19 +296,25 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
   });
 
   // ==========================================
-  // 2. Category Browser (Matching Screenshot 2)
+  // ==========================================
+  // 2. Category Browser or Direct Product List
   // ==========================================
   const showCategoryBrowser = async (ctx: any) => {
+    const tenant = getTenant();
+    const categoriesEnabled = tenant.categories_enabled !== undefined && tenant.categories_enabled !== null 
+      ? Boolean(tenant.categories_enabled) 
+      : true;
+
+    // If categories are OFF: Directly render flat list of all products!
+    if (!categoriesEnabled) {
+      return handleShowProductsList(ctx, { allProducts: true });
+    }
+
     const categories = getCategoriesForTenant();
 
     if (categories.length === 0) {
-      const emptyMsg = '🛍️ <b>No products currently in stock.</b>\nPlease check back soon!';
-      const kb = new InlineKeyboard().text('⬅️ Back', 'nav_start');
-      if (ctx.callbackQuery) {
-        await ctx.editMessageText(emptyMsg, { parse_mode: 'HTML', reply_markup: kb });
-        return ctx.answerCallbackQuery();
-      }
-      return ctx.reply(emptyMsg, { parse_mode: 'HTML', reply_markup: kb });
+      // Categories are enabled, but merchant hasn't created any custom category yet
+      return handleShowProductsList(ctx, { allProducts: true });
     }
 
     // 2-Column Inline Button Grid
@@ -357,16 +352,20 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
   bot.hears([/🛍️ Products/i, /🛍️ প্রোডাক্ট কিনুন/i], showCategoryBrowser);
 
   // ==========================================
-  // 3. Products in Category (Matching Screenshot 3)
+  // 3. Products in Category / Store (Matching Screenshot 3)
+  // Format: Name — $Price [Stock]
   // ==========================================
-  const handleShowProductsList = async (ctx: any, selector: { groupId?: string; categoryName?: string }) => {
+  const handleShowProductsList = async (ctx: any, selector: { groupId?: string; categoryName?: string; allProducts?: boolean }) => {
     const products = getProductsByCategoryOrGroup(selector);
 
     if (products.length === 0) {
-      return ctx.answerCallbackQuery({
-        text: 'No available products in this category.',
-        show_alert: true,
-      });
+      const emptyMsg = '🛍️ <b>No available products in this section.</b>\nPlease check back soon!';
+      const kb = new InlineKeyboard().text('⬅️ Back', 'nav_start');
+      if (ctx.callbackQuery) {
+        await ctx.editMessageText(emptyMsg, { parse_mode: 'HTML', reply_markup: kb });
+        return ctx.answerCallbackQuery();
+      }
+      return ctx.reply(emptyMsg, { parse_mode: 'HTML', reply_markup: kb });
     }
 
     const keyboard = new InlineKeyboard();
@@ -375,13 +374,31 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
       const priceFormatted = Number(p.retail_price_usd).toFixed(2);
       const stock = p.stock !== undefined && p.stock !== null ? Number(p.stock) : 0;
       const stockBadge = stock > 0 ? `[Stock: ${stock}]` : '[❌ Out of stock]';
-      keyboard.text(`${icon} ${p.name} ${stockBadge} — $${priceFormatted}`, `view_p_${p.id}`).row();
+
+      // Required Format: [Icon] [Name] — $[Price] [Stock] (Price first, then Stock)
+      keyboard.text(`${icon} ${p.name} — $${priceFormatted} ${stockBadge}`, `view_p_${p.id}`).row();
     }
-    keyboard.text('⬅️ Back', 'nav_products');
+
+    const tenant = getTenant();
+    const categoriesEnabled = tenant.categories_enabled !== undefined && tenant.categories_enabled !== null 
+      ? Boolean(tenant.categories_enabled) 
+      : true;
+    const hasCategories = categoriesEnabled && getCategoriesForTenant().length > 0;
+
+    // Back button routes to category browser if categories active, else to home menu
+    keyboard.text('⬅️ Back', hasCategories ? 'nav_products' : 'nav_start');
 
     const title = '<b>Select a product:</b>';
-    await ctx.editMessageText(title, { parse_mode: 'HTML', reply_markup: keyboard });
-    await ctx.answerCallbackQuery();
+    if (ctx.callbackQuery) {
+      try {
+        await ctx.editMessageText(title, { parse_mode: 'HTML', reply_markup: keyboard });
+      } catch (e) {
+        await ctx.reply(title, { parse_mode: 'HTML', reply_markup: keyboard });
+      }
+      await ctx.answerCallbackQuery();
+    } else {
+      await ctx.reply(title, { parse_mode: 'HTML', reply_markup: keyboard });
+    }
   };
 
   bot.callbackQuery(/^view_grp_(.+)$/, async (ctx) => {
@@ -440,9 +457,18 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
       keyboard.text('🛒 Buy Now', `qty_menu_${product.id}`).row();
     }
 
-    const backCallback = product.group_id
-      ? `view_grp_${product.group_id}`
-      : `view_cat_${encodeURIComponent(product.category || 'General')}`;
+    const tenant = getTenant();
+    const categoriesEnabled = tenant.categories_enabled !== undefined && tenant.categories_enabled !== null 
+      ? Boolean(tenant.categories_enabled) 
+      : true;
+    const hasCategories = categoriesEnabled && getCategoriesForTenant().length > 0;
+
+    let backCallback = 'nav_products';
+    if (!hasCategories) {
+      backCallback = 'nav_products';
+    } else if (product.group_id) {
+      backCallback = `view_grp_${product.group_id}`;
+    }
 
     keyboard.text('⬅️ Back', backCallback);
 

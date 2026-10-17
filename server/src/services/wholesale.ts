@@ -368,3 +368,22 @@ export async function syncLivePricesForTenant(tenantId: string): Promise<{ updat
   return { updatedCount, totalWholesale: wholesaleProducts.length };
 }
 
+export async function syncLivePricesForAllTenants(): Promise<number> {
+  const tenants = db.prepare(`
+    SELECT id FROM tenants 
+    WHERE status = 'ACTIVE' 
+      AND subscription_status = 'ACTIVE'
+  `).all() as any[];
+
+  let totalUpdated = 0;
+  for (const t of tenants) {
+    try {
+      const res = await syncLivePricesForTenant(t.id);
+      totalUpdated += res.updatedCount;
+    } catch (err: any) {
+      console.warn(`[Auto-Sync] Warning syncing tenant ${t.id}:`, err.message);
+    }
+  }
+  return totalUpdated;
+}
+

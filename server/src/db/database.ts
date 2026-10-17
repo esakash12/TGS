@@ -42,6 +42,7 @@ export function initDatabase() {
       if (!tenantCols.includes('about_text')) db.exec("ALTER TABLE tenants ADD COLUMN about_text TEXT;");
       if (!tenantCols.includes('support_text')) db.exec("ALTER TABLE tenants ADD COLUMN support_text TEXT;");
       if (!tenantCols.includes('welcome_text')) db.exec("ALTER TABLE tenants ADD COLUMN welcome_text TEXT;");
+      if (!tenantCols.includes('categories_enabled')) db.exec("ALTER TABLE tenants ADD COLUMN categories_enabled INTEGER DEFAULT 1;");
       if (!tenantCols.includes('subscription_cycle')) db.exec("ALTER TABLE tenants ADD COLUMN subscription_cycle TEXT DEFAULT 'MONTHLY';");
       if (!tenantCols.includes('subscription_status')) db.exec("ALTER TABLE tenants ADD COLUMN subscription_status TEXT DEFAULT 'EXPIRED';");
       if (!tenantCols.includes('subscription_started_at')) {

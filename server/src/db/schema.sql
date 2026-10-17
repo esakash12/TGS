@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS tenants (
     about_text TEXT,
     support_text TEXT,
     welcome_text TEXT,
+    categories_enabled INTEGER DEFAULT 1, -- 1 = Categories active (folders), 0 = Flat product list (no categories)
     subscription_cycle TEXT DEFAULT 'MONTHLY', -- MONTHLY, YEARLY, TRIAL
     subscription_status TEXT DEFAULT 'TRIAL', -- TRIAL, ACTIVE, GRACE, EXPIRED, SUSPENDED
     subscription_started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
