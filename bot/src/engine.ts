@@ -3,6 +3,7 @@ import { db } from '../../server/src/db/database';
 import { processCustomerPurchase } from '../../server/src/services/inventory';
 import { verifyCustomerRetailBinanceDeposit } from '../../server/src/services/binance';
 import { decrypt } from '../../server/src/services/crypto';
+import { getCachedProductLiveStock } from '../../server/src/services/wholesale';
 
 // In-memory conversation state for multi-step prompts (deposits & custom qty)
 interface UserConversationState {
@@ -238,7 +239,18 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
     }
 
     query += ` ORDER BY p.retail_price_usd ASC`;
-    return db.prepare(query).all(...params) as any[];
+    const results = db.prepare(query).all(...params) as any[];
+
+    // Ensure real live stock is attached for wholesale products
+    return results.map(p => {
+      if (p.provider !== 'custom' && p.provider_product_id) {
+        const liveStock = getCachedProductLiveStock(p.provider_product_id);
+        if (liveStock !== null) {
+          return { ...p, stock: liveStock };
+        }
+      }
+      return p;
+    });
   };
 
   // ==========================================
@@ -402,6 +414,13 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
         text: 'Product is currently unavailable.',
         show_alert: true,
       });
+    }
+
+    if (product.provider !== 'custom' && product.provider_product_id) {
+      const liveStock = getCachedProductLiveStock(product.provider_product_id);
+      if (liveStock !== null) {
+        product.stock = liveStock;
+      }
     }
 
     const price = Number(product.retail_price_usd).toFixed(2);

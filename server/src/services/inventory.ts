@@ -125,6 +125,7 @@ export async function processCustomerPurchase(params: {
 
     // Two-Phase Precheck: Merchant must have enough USD in their wholesale wallet
     if (!tenant || tenant.wallet_usd < totalMerchantWholesaleCost) {
+      console.warn(`[Wholesale Wallet Depleted] Tenant "${tenantId}" wholesale wallet balance ($${Number(tenant?.wallet_usd || 0).toFixed(2)}) is less than required wholesale cost ($${totalMerchantWholesaleCost.toFixed(2)}). Merchant needs to top up wholesale wallet.`);
       return {
         success: false,
         error: 'Product is temporarily unavailable due to store restocking. Please try again shortly or contact support.',

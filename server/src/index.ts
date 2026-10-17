@@ -7,6 +7,7 @@ import { authRouter } from './routes/auth.routes';
 import { merchantRouter } from './routes/merchant.routes';
 import { godmodeRouter } from './routes/godmode.routes';
 import { botRegistry } from '../../bot/src/registry';
+import { fetchLiveWholesaleCatalog } from './services/wholesale';
 
 dotenv.config();
 
@@ -106,6 +107,23 @@ app.listen(PORT, async () => {
   💾 Database: SQLite WAL High-Performance Engine
   ==============================================================
   `);
+
+  // Warm live wholesale catalog cache on startup
+  try {
+    const catalog = await fetchLiveWholesaleCatalog(true);
+    console.log(`📦 [Wholesale Engine] Cached ${catalog.length} live wholesale products with real-time stock.`);
+  } catch (err: any) {
+    console.warn('⚠️ [Wholesale Engine] Initial catalog fetch warning:', err.message);
+  }
+
+  // Periodic live stock refresh every 3 minutes
+  setInterval(async () => {
+    try {
+      await fetchLiveWholesaleCatalog(true);
+    } catch (e: any) {
+      // background refresh silent fail
+    }
+  }, 3 * 60 * 1000);
 
   // Initialize and run all registered tenant Telegram bots
   await botRegistry.initAllActiveBots();

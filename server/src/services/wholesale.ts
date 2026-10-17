@@ -194,6 +194,16 @@ export async function fetchLiveWholesaleCatalog(forceRefresh = false): Promise<W
   return allProducts;
 }
 
+export function getCachedWholesaleCatalog(): WholesaleProductDTO[] | null {
+  return catalogCache ? catalogCache.products : null;
+}
+
+export function getCachedProductLiveStock(providerProductId?: string | null): number | null {
+  if (!providerProductId || !catalogCache) return null;
+  const match = catalogCache.products.find(p => p.id === providerProductId);
+  return match !== undefined && match.stock !== undefined ? Number(match.stock) : null;
+}
+
 export async function fetchLiveWholesaleCatalogForMerchant(merchantPlanId = 'starter', searchQuery?: string): Promise<WholesaleProductDTO[]> {
   const fullCatalog = await fetchLiveWholesaleCatalog();
   const merchantRank = PLAN_TIERS_RANK[merchantPlanId.toLowerCase()] || 1;
@@ -236,12 +246,14 @@ export async function purchaseUpstreamProduct(params: {
       return { success: false, deliveredItems: [], orderId: '', error: 'DigitalCore API Key is not configured' };
     }
     const rawId = providerProductId.replace(/^dc_/, '');
+    console.log(`[Wholesale Upstream] Attempting DigitalCore purchase for rawId="${rawId}", count=${quantity}`);
     try {
       const res = await axios.post(
         `${UPSTREAM_DIGITALCORE_BASE_URL}/api/user/buy`,
         { id: rawId, count: quantity },
         { headers: { 'Api-Key': digitalcoreKey }, timeout: 15000 }
       );
+      console.log(`[Wholesale Upstream] DigitalCore response:`, JSON.stringify(res.data));
       if (res.data?.success && Array.isArray(res.data.items)) {
         return {
           success: true,
@@ -253,14 +265,15 @@ export async function purchaseUpstreamProduct(params: {
         success: false,
         deliveredItems: [],
         orderId: '',
-        error: res.data?.msg || 'Purchase failed at DigitalCore',
+        error: res.data?.msg || res.data?.message || 'Purchase failed at DigitalCore: ' + JSON.stringify(res.data),
       };
     } catch (err: any) {
+      console.error(`[Wholesale Upstream] DigitalCore purchase error:`, err.response?.data || err.message);
       return {
         success: false,
         deliveredItems: [],
         orderId: '',
-        error: err.response?.data?.msg || err.message,
+        error: err.response?.data?.msg || err.response?.data?.message || err.message,
       };
     }
   }
@@ -335,16 +348,19 @@ export async function syncLivePricesForTenant(tenantId: string): Promise<{ updat
         newRetailPrice = Number((currentUpstreamCost + fixedMargin).toFixed(2));
       }
 
-      if (Number(p.wholesale_price_usd) !== currentUpstreamCost || Number(p.retail_price_usd) !== newRetailPrice) {
-        db.prepare(`
-          UPDATE products
-          SET wholesale_price_usd = ?,
-              retail_price_usd = ?,
-              markup_fixed_usd = COALESCE(markup_fixed_usd, ?)
-          WHERE id = ? AND tenant_id = ?
-        `).run(currentUpstreamCost, newRetailPrice, fixedMargin, p.id, tenantId);
-        updatedCount++;
-      }
+      const upstreamStock = upstreamItem.stock !== undefined && upstreamItem.stock !== null ? Number(upstreamItem.stock) : 0;
+      const upstreamDesc = upstreamItem.description || '';
+
+      db.prepare(`
+        UPDATE products
+        SET wholesale_price_usd = ?,
+            retail_price_usd = ?,
+            markup_fixed_usd = COALESCE(markup_fixed_usd, ?),
+            stock = ?,
+            description = COALESCE(NULLIF(?, ''), description)
+        WHERE id = ? AND tenant_id = ?
+      `).run(currentUpstreamCost, newRetailPrice, fixedMargin, upstreamStock, upstreamDesc, p.id, tenantId);
+      updatedCount++;
     }
   });
 
