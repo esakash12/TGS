@@ -92,6 +92,24 @@ class DynamicBotRegistry {
       // Save bot username in DB if not set
       db.prepare('UPDATE tenants SET bot_username = ? WHERE id = ?').run(botInfo.username, tenantId);
 
+      // Register standard bot commands and persistent chat menu button [ ≡ Menu ]
+      try {
+        await bot.api.setMyCommands([
+          { command: 'start', description: '🛒 Start Store & Main Menu' },
+          { command: 'products', description: '🛍️ Browse Products & Prices' },
+          { command: 'deposit', description: '💰 Add Funds / Wallet Deposit' },
+          { command: 'orders', description: '📦 My Purchase History' },
+          { command: 'support', description: '🗣️ Contact Store Support' },
+        ]).catch(() => {});
+
+        // Configure persistent chat menu button to open bot commands list
+        await bot.api.setChatMenuButton({
+          menu_button: { type: 'commands' }
+        }).catch(() => {});
+      } catch (cmdErr: any) {
+        console.warn(`[BotRegistry] Notice setting commands for @${botInfo.username}:`, cmdErr.message);
+      }
+
       const entry: ActiveBotEntry = {
         bot,
         tenantId,

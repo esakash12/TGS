@@ -142,26 +142,36 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
   // Helper: brand icon extractor for products
   const getProductIcon = (name: string, category?: string) => {
     const combined = `${name || ''} ${category || ''}`.toLowerCase();
-    if (/gemini/i.test(combined)) return '🇬';
+    if (/gemini/i.test(combined)) return '✨';
     if (/chatgpt|openai|gpt/i.test(combined)) return '🤖';
-    if (/claude|anthropic/i.test(combined)) return '☀️';
-    if (/notion/i.test(combined)) return '🗃';
+    if (/claude|anthropic/i.test(combined)) return '🧠';
+    if (/cursor/i.test(combined)) return '⚡';
+    if (/midjourney/i.test(combined)) return '🎨';
+    if (/notion/i.test(combined)) return '📝';
     if (/github/i.test(combined)) return '🐙';
     if (/capcut/i.test(combined)) return '🎬';
-    if (/grok|x\.ai/i.test(combined)) return '𝕏';
+    if (/grok|x\.ai/i.test(combined)) return '🚀';
     if (/canva/i.test(combined)) return '🎨';
-    if (/loveable/i.test(combined)) return '🚀';
-    if (/telegram|tg\s*prem/i.test(combined)) return '✈️';
+    if (/loveable/i.test(combined)) return '❤️';
+    if (/telegram|tg\s*prem/i.test(combined)) return '⭐';
+    if (/discord/i.test(combined)) return '👾';
     if (/vpn|nord|express|surfshark/i.test(combined)) return '🛡️';
     if (/youtube/i.test(combined)) return '▶️';
-    if (/email|gmail|mail/i.test(combined)) return '✉️';
-    if (/figma/i.test(combined)) return '🖋️';
+    if (/spotify/i.test(combined)) return '🎵';
+    if (/netflix/i.test(combined)) return '🍿';
+    if (/disney/i.test(combined)) return '🏰';
+    if (/prime|amazon/i.test(combined)) return '📦';
+    if (/crunchyroll/i.test(combined)) return '🍥';
+    if (/apple|itunes/i.test(combined)) return '🍏';
+    if (/windows|office|microsoft/i.test(combined)) return '🪟';
+    if (/steam|game|playstation|xbox/i.test(combined)) return '🎮';
+    if (/email|gmail|mail/i.test(combined)) return '📧';
+    if (/figma/i.test(combined)) return '📐';
     if (/duolingo/i.test(combined)) return '🦉';
-    if (/leonardo/i.test(combined)) return '🎨';
-    if (/muse/i.test(combined)) return '♾️';
-    if (/netflix|spotify|disney|prime|streaming/i.test(combined)) return '🍿';
+    if (/leonardo/i.test(combined)) return '🖌️';
     if (/api/i.test(combined)) return '🔑';
-    return '📦';
+    if (/account|login/i.test(combined)) return '👤';
+    return '💎';
   };
 
   // Helper: Fetch Categories & Product Groups
@@ -374,9 +384,18 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
       const priceFormatted = Number(p.retail_price_usd).toFixed(2);
       const stock = p.stock !== undefined && p.stock !== null ? Number(p.stock) : 0;
       const stockBadge = stock > 0 ? `[${stock}]` : '[0]';
+      const suffix = ` — $${priceFormatted} ${stockBadge}`;
+
+      // Telegram buttons can visually truncate if too long, cutting off price & stock.
+      // We guarantee price & stock are 100% visible by truncating the product name when long.
+      const maxNameLen = 22;
+      const cleanName = p.name ? p.name.trim() : 'Product';
+      const truncatedName = cleanName.length > maxNameLen
+        ? `${cleanName.substring(0, maxNameLen).trim()}…`
+        : cleanName;
 
       // Required Format: [Icon] [Name] — $[Price] [Number] (only number in brackets)
-      keyboard.text(`${icon} ${p.name} — $${priceFormatted} ${stockBadge}`, `view_p_${p.id}`).row();
+      keyboard.text(`${icon} ${truncatedName}${suffix}`, `view_p_${p.id}`).row();
     }
 
     const tenant = getTenant();

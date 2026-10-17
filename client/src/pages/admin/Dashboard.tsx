@@ -914,136 +914,199 @@ export const Dashboard: React.FC = () => {
       </header>
 
       {/* ==========================================
-          MAIN DASHBOARD BODY
+          MAIN DASHBOARD BODY WITH SIDEBAR
          ========================================== */}
-      <div className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-8 space-y-8">
-        {/* Navigation Tabs (7 Focused Lenses) */}
-        <div className="flex items-center gap-2 border-b border-white/10 pb-2 overflow-x-auto">
-          <button
-            onClick={() => setActiveTab('overview')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-              activeTab === 'overview'
-                ? 'bg-crimson-500/20 text-crimson-400 border border-crimson-500/30'
-                : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            <LayoutDashboard className="w-4 h-4" /> Overview
-          </button>
+      <div className="flex-1 flex flex-col md:flex-row w-full min-h-[calc(100vh-65px)]">
+        {/* Left Sidebar Navigation */}
+        <aside className="w-full md:w-64 bg-carbon-900/95 border-b md:border-b-0 md:border-r border-white/10 p-3 sm:p-4 flex-shrink-0 flex flex-col justify-between">
+          <div className="space-y-1">
+            <div className="px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-zinc-500">
+              Navigation Menu
+            </div>
 
-          <button
-            onClick={() => setActiveTab('groups')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-              activeTab === 'groups'
-                ? 'bg-crimson-500/20 text-crimson-400 border border-crimson-500/30'
-                : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            <Folder className="w-4 h-4" /> Categories & Folders ({groups.length})
-          </button>
+            <button
+              onClick={() => setActiveTab('overview')}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all text-left ${
+                activeTab === 'overview'
+                  ? 'bg-crimson-500/20 text-crimson-400 border border-crimson-500/30 shadow-sm'
+                  : 'text-zinc-400 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <LayoutDashboard className="w-4 h-4" />
+                <span>Overview</span>
+              </div>
+            </button>
 
-          <button
-            onClick={() => setActiveTab('custom_products')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-              activeTab === 'custom_products'
-                ? 'bg-crimson-500/20 text-crimson-400 border border-crimson-500/30'
-                : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            <Key className="w-4 h-4" /> Custom Accounts ({products.filter((p) => p.provider === 'custom').length})
-          </button>
+            <button
+              onClick={() => setActiveTab('groups')}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all text-left ${
+                activeTab === 'groups'
+                  ? 'bg-crimson-500/20 text-crimson-400 border border-crimson-500/30 shadow-sm'
+                  : 'text-zinc-400 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Folder className="w-4 h-4" />
+                <span>Categories & Folders</span>
+              </div>
+              <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-white/5 text-zinc-400">{groups.length}</span>
+            </button>
 
-          <button
-            onClick={() => setActiveTab('wholesale')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-              activeTab === 'wholesale'
-                ? 'bg-crimson-500/20 text-crimson-400 border border-crimson-500/30'
-                : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            <Zap className="w-4 h-4" /> Wholesale Sourcing
-          </button>
+            <button
+              onClick={() => setActiveTab('custom_products')}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all text-left ${
+                activeTab === 'custom_products'
+                  ? 'bg-crimson-500/20 text-crimson-400 border border-crimson-500/30 shadow-sm'
+                  : 'text-zinc-400 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Key className="w-4 h-4" />
+                <span>Custom Accounts</span>
+              </div>
+              <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-white/5 text-zinc-400">{products.filter((p) => p.provider === 'custom').length}</span>
+            </button>
 
-          <button
-            onClick={() => setActiveTab('store_products')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-              activeTab === 'store_products'
-                ? 'bg-crimson-500/20 text-crimson-400 border border-crimson-500/30'
-                : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            <ShoppingBag className="w-4 h-4" /> My Active Store ({products.length})
-          </button>
+            <button
+              onClick={() => setActiveTab('wholesale')}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all text-left ${
+                activeTab === 'wholesale'
+                  ? 'bg-crimson-500/20 text-crimson-400 border border-crimson-500/30 shadow-sm'
+                  : 'text-zinc-400 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Zap className="w-4 h-4 text-amber-400" />
+                <span>Wholesale Sourcing</span>
+              </div>
+            </button>
 
-          <button
-            onClick={() => setActiveTab('deposits')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap relative ${
-              activeTab === 'deposits'
-                ? 'bg-crimson-500/20 text-crimson-400 border border-crimson-500/30'
-                : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            <CreditCard className="w-4 h-4" /> Deposits
-            {overview?.pendingDepositsCount > 0 && (
-              <span className="w-4 h-4 rounded-full bg-crimson-500 text-white text-[10px] flex items-center justify-center font-bold">
-                {overview.pendingDepositsCount}
-              </span>
-            )}
-          </button>
+            <button
+              onClick={() => setActiveTab('store_products')}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all text-left ${
+                activeTab === 'store_products'
+                  ? 'bg-crimson-500/20 text-crimson-400 border border-crimson-500/30 shadow-sm'
+                  : 'text-zinc-400 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <ShoppingBag className="w-4 h-4" />
+                <span>My Active Store</span>
+              </div>
+              <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-white/5 text-zinc-400">{products.length}</span>
+            </button>
 
-          <button
-            onClick={() => setActiveTab('customers')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-              activeTab === 'customers'
-                ? 'bg-crimson-500/20 text-crimson-400 border border-crimson-500/30'
-                : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            <Users className="w-4 h-4" /> Customers ({overview?.totalCustomers ?? customers.length})
-          </button>
+            <button
+              onClick={() => setActiveTab('deposits')}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all text-left ${
+                activeTab === 'deposits'
+                  ? 'bg-crimson-500/20 text-crimson-400 border border-crimson-500/30 shadow-sm'
+                  : 'text-zinc-400 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <CreditCard className="w-4 h-4" />
+                <span>Deposits</span>
+              </div>
+              {overview?.pendingDepositsCount > 0 && (
+                <span className="w-4 h-4 rounded-full bg-crimson-500 text-white text-[10px] flex items-center justify-center font-bold">
+                  {overview.pendingDepositsCount}
+                </span>
+              )}
+            </button>
 
-          <button
-            onClick={() => setActiveTab('bot_editor')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-              activeTab === 'bot_editor'
-                ? 'bg-gradient-to-r from-laser-600/30 to-purple-600/30 text-laser-300 border border-laser-500/40 shadow-sm'
-                : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            <Bot className="w-4 h-4 text-laser-400" /> Bot Profile Editor
-          </button>
+            <button
+              onClick={() => setActiveTab('customers')}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all text-left ${
+                activeTab === 'customers'
+                  ? 'bg-crimson-500/20 text-crimson-400 border border-crimson-500/30 shadow-sm'
+                  : 'text-zinc-400 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Users className="w-4 h-4" />
+                <span>Customers</span>
+              </div>
+              <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-white/5 text-zinc-400">{overview?.totalCustomers ?? customers.length}</span>
+            </button>
 
-          <button
-            onClick={() => setActiveTab('settings')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-              activeTab === 'settings'
-                ? 'bg-crimson-500/20 text-crimson-400 border border-crimson-500/30'
-                : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            <Settings className="w-4 h-4" /> Settings & Bot Token
-          </button>
+            <div className="pt-3 pb-1 px-3 text-[11px] font-bold uppercase tracking-wider text-zinc-500">
+              Bot & System
+            </div>
 
-          <button
-            onClick={() => setActiveTab('subscription')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-              activeTab === 'subscription'
-                ? 'bg-crimson-500/20 text-crimson-400 border border-crimson-500/30'
-                : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            <Shield className="w-4 h-4" /> Subscription & Plan
-            {subData?.subscription?.status === 'TRIAL' && (
-              <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 text-[10px] font-bold">
-                Trial
-              </span>
-            )}
-            {subData?.subscription?.status === 'EXPIRED' && (
-              <span className="px-1.5 py-0.5 rounded bg-crimson-500/20 text-crimson-400 text-[10px] font-bold animate-pulse">
-                Expired
-              </span>
-            )}
-          </button>
-        </div>
+            <button
+              onClick={() => setActiveTab('bot_editor')}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all text-left ${
+                activeTab === 'bot_editor'
+                  ? 'bg-gradient-to-r from-laser-600/30 to-purple-600/30 text-laser-300 border border-laser-500/40 shadow-sm'
+                  : 'text-zinc-400 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Bot className="w-4 h-4 text-laser-400" />
+                <span>Bot Profile Editor</span>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('settings')}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all text-left ${
+                activeTab === 'settings'
+                  ? 'bg-crimson-500/20 text-crimson-400 border border-crimson-500/30 shadow-sm'
+                  : 'text-zinc-400 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Settings className="w-4 h-4" />
+                <span>Settings & Bot Token</span>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('subscription')}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all text-left ${
+                activeTab === 'subscription'
+                  ? 'bg-crimson-500/20 text-crimson-400 border border-crimson-500/30 shadow-sm'
+                  : 'text-zinc-400 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Shield className="w-4 h-4" />
+                <span>Subscription & Plan</span>
+              </div>
+              {subData?.subscription?.status === 'TRIAL' && (
+                <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 text-[10px] font-bold">
+                  Trial
+                </span>
+              )}
+              {subData?.subscription?.status === 'EXPIRED' && (
+                <span className="px-1.5 py-0.5 rounded bg-crimson-500/20 text-crimson-400 text-[10px] font-bold animate-pulse">
+                  Expired
+                </span>
+              )}
+            </button>
+          </div>
+
+          {/* Quick Rate & Bot Status in Sidebar footer */}
+          <div className="hidden md:block pt-4 border-t border-white/5 space-y-2">
+            <div className="p-2.5 rounded-xl bg-carbon-800/60 border border-white/5 text-[11px] text-zinc-400">
+              <div className="flex items-center justify-between mb-1">
+                <span>Exchange Rate:</span>
+                <span className="text-white font-bold">$1 = {overview?.usdToBdtRate || 125} ৳</span>
+              </div>
+              <div className="flex items-center justify-between text-[10px]">
+                <span>Status:</span>
+                <span className={botOnline ? 'text-emerald-400 font-semibold' : 'text-amber-400'}>
+                  {botOnline ? 'Bot Online' : 'Bot Offline'}
+                </span>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        {/* Main Content Area */}
+        <main className="flex-1 p-4 sm:p-8 space-y-8 overflow-y-auto">
 
         {/* Subscription Expiry / Warning Banner */}
         {subData?.subscription && (subData.subscription.status === 'EXPIRED' || (subData.subscription.daysRemaining !== undefined && subData.subscription.daysRemaining <= 3)) && (
@@ -2804,6 +2867,7 @@ export const Dashboard: React.FC = () => {
             </div>
           </div>
         )}
+        </main>
       </div>
 
       {/* ==========================================
