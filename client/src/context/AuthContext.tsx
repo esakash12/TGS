@@ -19,6 +19,10 @@ interface Tenant {
   wallet_usd: number;
   usd_to_bdt_rate: number;
   status: string;
+  subscription_status?: string;
+  subscription_expires_at?: string;
+  subscription_cycle?: string;
+  plan_id?: string;
 }
 
 interface AuthContextType {

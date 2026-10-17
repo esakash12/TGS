@@ -212,11 +212,22 @@ export const OnboardingPlan: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-4">
+            {tenant?.subscription_status === 'ACTIVE' && (
+              <button
+                onClick={() => navigate('/admin')}
+                className="text-xs text-zinc-300 hover:text-white transition-colors font-medium flex items-center gap-1"
+              >
+                <span>Dashboard</span> &rarr;
+              </button>
+            )}
             <button
-              onClick={() => navigate('/admin')}
-              className="text-xs text-zinc-400 hover:text-white transition-colors"
+              onClick={() => {
+                localStorage.removeItem('mogent_token');
+                window.location.href = '/login';
+              }}
+              className="text-xs text-zinc-500 hover:text-crimson-400 transition-colors"
             >
-              Skip to Dashboard &rarr;
+              Log out
             </button>
           </div>
         </div>

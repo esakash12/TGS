@@ -392,8 +392,7 @@ export const Dashboard: React.FC = () => {
         'Subscription Required',
         'Your merchant subscription is currently inactive. Please choose a subscription tier and activate with Binance Pay to use full catalog and bot features.',
         () => {
-          const plan = subData?.plans?.find((p: any) => p.id === subData?.subscription?.planId) || subData?.plans?.[0];
-          if (plan) handleOpenUpgradeModal(plan, subData?.subscription?.cycle || 'MONTHLY');
+          navigate('/onboarding/plan');
         },
         'warning',
         'Choose Plan & Activate ⚡'
@@ -1000,10 +999,7 @@ export const Dashboard: React.FC = () => {
               </div>
             </div>
             <button
-              onClick={() => {
-                const targetPlan = subData.plans?.find((p: any) => p.id === subData.subscription.planId) || subData.plans?.[0];
-                if (targetPlan) handleOpenUpgradeModal(targetPlan, subData.subscription.cycle || 'MONTHLY');
-              }}
+              onClick={() => navigate('/onboarding/plan')}
               className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-crimson-600 to-crimson-500 hover:from-crimson-500 text-white font-bold text-xs whitespace-nowrap shadow-md shadow-crimson-600/30 flex items-center gap-1.5"
             >
               <Sparkles className="w-3.5 h-3.5" />
