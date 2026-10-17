@@ -106,13 +106,13 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
   const buildStartCard = (customer: any, from: any, tenant: any) => {
     const name = from.first_name ? `${from.first_name} ${from.last_name || ''}`.trim() : 'Customer';
     const balance = Number(customer?.balance_usd || 0).toFixed(2);
-    let card = `🥷 <b>Name:</b> ${name}\n` +
-           `🆔 <b>ID:</b> <code>${from.id}</code>\n` +
-           `💶 <b>Wallet Balance:</b> $${balance} USD\n`;
+    let card = `🥷 <b>Name:</b> ${name}\n\n` +
+           `🆔 <b>ID:</b> <code>${from.id}</code>\n\n` +
+           `💶 <b>Wallet Balance:</b> $${balance} USD\n\n`;
     if (tenant?.welcome_text && tenant.welcome_text.trim()) {
-      card += `\n💬 ${tenant.welcome_text.trim()}\n`;
+      card += `💬 ${tenant.welcome_text.trim()}\n\n`;
     }
-    card += `\nChoose an option below 👇`;
+    card += `Choose an option below 👇`;
     return card;
   };
 
