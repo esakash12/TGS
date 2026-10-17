@@ -25,7 +25,15 @@ export const Login: React.FC = () => {
       });
 
       login(res.data.token, res.data.user, res.data.tenant);
-      navigate('/admin');
+
+      const isSubActive = res.data.tenant?.subscription_status === 'ACTIVE' &&
+        (!res.data.tenant?.subscription_expires_at || new Date(res.data.tenant.subscription_expires_at).getTime() > Date.now());
+
+      if (res.data.user?.role === 'merchant_admin' && !isSubActive) {
+        navigate('/onboarding/plan');
+      } else {
+        navigate('/admin');
+      }
     } catch (err: any) {
       setError(err.response?.data?.error || err.message || 'Login failed');
     } finally {

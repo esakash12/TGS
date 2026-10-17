@@ -565,6 +565,8 @@ export const Dashboard: React.FC = () => {
           retailPriceUsd: parseFloat(importRetailPrice),
           provider: importModalItem.provider,
           groupId: finalGroupId,
+          description: importModalItem.description || '',
+          stock: importModalItem.stock ?? 999,
         },
         authHeaders
       );
@@ -2505,6 +2507,78 @@ export const Dashboard: React.FC = () => {
               <Shield className="w-5 h-5" />
               <span>Purchase Subscription with Binance Pay</span>
             </div>
+
+            {/* Billing Cycle Switcher */}
+            <div className="flex rounded-xl bg-carbon-900 p-1 border border-white/10">
+              <button
+                type="button"
+                onClick={() => {
+                  setSubSelectedCycle('MONTHLY');
+                  setAppliedCoupon(null);
+                  setCouponFeedback(null);
+                }}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  subSelectedCycle === 'MONTHLY'
+                    ? 'bg-crimson-600 text-white shadow-md'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                Monthly Billing
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSubSelectedCycle('YEARLY');
+                  setAppliedCoupon(null);
+                  setCouponFeedback(null);
+                }}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                  subSelectedCycle === 'YEARLY'
+                    ? 'bg-gradient-to-r from-laser-600 to-crimson-600 text-white shadow-md'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                <span>Yearly Billing</span>
+                <span className="px-1.5 py-0.5 rounded text-[9px] bg-emerald-500/20 text-emerald-400 font-mono font-bold">
+                  2 Mo Free
+                </span>
+              </button>
+            </div>
+
+            {/* Plan Switcher Pills */}
+            {subData?.plans && subData.plans.length > 0 && (
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-mono text-zinc-400 uppercase">Select Plan Tier:</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {subData.plans.map((p: any) => {
+                    const isSelected = subSelectedPlan?.id === p.id;
+                    const price = subSelectedCycle === 'YEARLY' ? p.price_yearly_usd : p.price_monthly_usd;
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => {
+                          setSubSelectedPlan(p);
+                          setAppliedCoupon(null);
+                          setCouponFeedback(null);
+                        }}
+                        className={`p-2.5 rounded-xl border text-left transition-all ${
+                          isSelected
+                            ? 'bg-crimson-500/20 border-crimson-500 text-white ring-1 ring-crimson-500'
+                            : 'bg-carbon-900 border-white/10 hover:border-white/20 text-zinc-400'
+                        }`}
+                      >
+                        <span className="font-bold text-xs block text-white truncate">{p.name}</span>
+                        <span className="text-[11px] font-mono font-extrabold text-laser-400 block">${price?.toFixed(0)} USD</span>
+                        <span className="text-[9px] text-zinc-500 block truncate">
+                          {p.max_resale_products === -1 ? 'Unlimited' : `${p.max_resale_products} Resale`}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Selected Plan Summary Banner */}
             <div className="p-4 rounded-2xl bg-carbon-900 border border-white/10 space-y-2">

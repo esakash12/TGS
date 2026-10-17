@@ -457,7 +457,7 @@ merchantRouter.get('/wholesale/catalog', async (req: AuthenticatedRequest, res: 
 });
 
 // Import wholesale product into store (with optional custom group)
-merchantRouter.post('/wholesale/import', (req: AuthenticatedRequest, res: Response) => {
+merchantRouter.post('/wholesale/import', async (req: AuthenticatedRequest, res: Response) => {
   const tenantId = req.tenant.id;
   const subCheck = checkMerchantSubscription(tenantId);
   if (!subCheck.active) {
@@ -471,11 +471,17 @@ merchantRouter.post('/wholesale/import', (req: AuthenticatedRequest, res: Respon
     });
   }
 
-  const { wholesaleProductId, name, category, wholesaleCostUsd, retailPriceUsd, provider, groupId } = req.body;
+  const { wholesaleProductId, name, category, wholesaleCostUsd, retailPriceUsd, provider, groupId, description, stock } = req.body;
 
   if (!wholesaleProductId || !retailPriceUsd) {
     return res.status(400).json({ error: 'Missing product ID or retail price' });
   }
+
+  // Fetch catalog to get live stock & description from upstream if not explicitly provided
+  const catalog = await fetchLiveWholesaleCatalog();
+  const catalogItem = catalog.find(c => c.id === wholesaleProductId);
+  const realStock = stock !== undefined ? Number(stock) : (catalogItem?.stock ?? 999);
+  const realDesc = description || catalogItem?.description || '';
 
   // Check if already imported
   const existing = db.prepare(`
@@ -499,9 +505,10 @@ merchantRouter.post('/wholesale/import', (req: AuthenticatedRequest, res: Respon
     // update price, group, margin and reactivate
     db.prepare(`
       UPDATE products 
-      SET retail_price_usd = ?, wholesale_price_usd = ?, markup_fixed_usd = ?, pricing_mode = 'fixed', group_id = COALESCE(?, group_id), is_active = 1 
+      SET retail_price_usd = ?, wholesale_price_usd = ?, markup_fixed_usd = ?, pricing_mode = 'fixed', group_id = COALESCE(?, group_id), is_active = 1,
+          stock = ?, description = COALESCE(NULLIF(?, ''), description)
       WHERE tenant_id = ? AND provider_product_id = ?
-    `).run(Number(retailPriceUsd), Number(wholesaleCostUsd), markupFixed, groupId || null, tenantId, wholesaleProductId);
+    `).run(Number(retailPriceUsd), Number(wholesaleCostUsd), markupFixed, groupId || null, realStock, realDesc, tenantId, wholesaleProductId);
     return res.json({ success: true, updated: true, productId: existing.id });
   }
 
@@ -509,8 +516,8 @@ merchantRouter.post('/wholesale/import', (req: AuthenticatedRequest, res: Respon
   db.prepare(`
     INSERT INTO products (
       id, tenant_id, group_id, name, category, provider, provider_product_id,
-      wholesale_price_usd, retail_price_usd, markup_fixed_usd, pricing_mode, stock, is_active
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'fixed', 999, 1)
+      wholesale_price_usd, retail_price_usd, markup_fixed_usd, pricing_mode, stock, description, is_active
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'fixed', ?, ?, 1)
   `).run(
     productId,
     tenantId,
@@ -521,7 +528,9 @@ merchantRouter.post('/wholesale/import', (req: AuthenticatedRequest, res: Respon
     wholesaleProductId,
     Number(wholesaleCostUsd),
     Number(retailPriceUsd),
-    markupFixed
+    markupFixed,
+    realStock,
+    realDesc
   );
 
   res.status(201).json({ success: true, productId });
@@ -548,17 +557,29 @@ merchantRouter.post('/wholesale/bulk-enable', async (req: AuthenticatedRequest, 
         if (existing) {
           db.prepare(`
             UPDATE products 
-            SET retail_price_usd = ?, wholesale_price_usd = ?, is_active = 1
+            SET retail_price_usd = ?, wholesale_price_usd = ?, is_active = 1,
+                stock = ?, description = COALESCE(NULLIF(?, ''), description)
             WHERE id = ?
-          `).run(retail, cost, existing.id);
+          `).run(retail, cost, item.stock ?? 999, item.description || '', existing.id);
         } else {
           const productId = 'prd_' + Math.random().toString(36).substring(2, 10);
           db.prepare(`
             INSERT INTO products (
               id, tenant_id, name, category, provider, provider_product_id,
-              wholesale_price_usd, retail_price_usd, stock, is_active
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-          `).run(productId, tenantId, item.name, item.category, item.provider, item.id, cost, retail, item.stock || 999);
+              wholesale_price_usd, retail_price_usd, stock, description, is_active
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+          `).run(
+            productId,
+            tenantId,
+            item.name,
+            item.category,
+            item.provider,
+            item.id,
+            cost,
+            retail,
+            item.stock ?? 999,
+            item.description || ''
+          );
         }
         imported++;
       }

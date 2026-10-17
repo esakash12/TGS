@@ -273,6 +273,44 @@ export const GodMode: React.FC = () => {
     );
   };
 
+  // Delete Single Merchant Store
+  const handleDeleteMerchant = (merchantId: string, storeName: string, slug: string) => {
+    showConfirm(
+      `DELETE MERCHANT STORE?`,
+      `⚠️ PERMANENT ACTION: Are you sure you want to permanently delete store "${storeName}" (bot.mogent.tech/${slug})?\n\nThis will stop any active Telegram bot and erase all custom products, inventory, orders, customer balances, and merchant records for this store. This cannot be undone.`,
+      async () => {
+        try {
+          const res = await axios.delete(`/api/godmode/merchants/${merchantId}`, getHeaders());
+          loadGodModeData();
+          showNotice('Store Deleted', res.data?.message || `Merchant store "${storeName}" has been permanently removed.`, 'success');
+        } catch (err: any) {
+          showNotice('Deletion Failed', err.response?.data?.error || 'Failed to delete merchant store', 'danger');
+        }
+      },
+      'danger',
+      'Yes, Permanently Delete Store'
+    );
+  };
+
+  // Purge ALL Test Merchants (Clean Slate)
+  const handlePurgeAllMerchants = () => {
+    showConfirm(
+      'PURGE ALL TEST MERCHANTS?',
+      `🚨 HIGH RISK DANGER: This will completely wipe all ${merchants.length} merchant stores, their bots, products, orders, customers, and subscription histories from the platform!\n\nPlatform configuration, subscription plans, and coupons will be preserved.\n\nAre you 100% sure you want to clean slate the database?`,
+      async () => {
+        try {
+          const res = await axios.post('/api/godmode/merchants/purge-all', {}, getHeaders());
+          loadGodModeData();
+          showNotice('Database Cleaned', res.data?.message || 'All test merchants have been completely purged.', 'success');
+        } catch (err: any) {
+          showNotice('Purge Failed', err.response?.data?.error || 'Failed to purge merchants', 'danger');
+        }
+      },
+      'danger',
+      'Wipe All Test Stores Now ⚡'
+    );
+  };
+
   // Wholesale Product Availability Toggle
   const handleToggleWholesaleStatus = async (productId: string, currentActive: number) => {
     const newActive = currentActive === 1 ? 0 : 1;
@@ -851,13 +889,23 @@ export const GodMode: React.FC = () => {
            ========================================== */}
         {godTab === 'merchants' && (
           <div className="space-y-4">
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <h3 className="text-base font-mono font-bold text-white uppercase tracking-wider">
                   Merchant Fleet Table ({merchants.length})
                 </h3>
                 <p className="text-xs text-zinc-400">Monitor all stores, wallets, and toggle emergency killswitches</p>
               </div>
+
+              {merchants.length > 0 && (
+                <button
+                  onClick={handlePurgeAllMerchants}
+                  className="px-3.5 py-2 rounded-xl bg-crimson-600/20 hover:bg-crimson-600/30 text-crimson-400 border border-crimson-500/40 text-xs font-mono font-bold flex items-center gap-2 transition-all shadow-lg shadow-crimson-600/10 active:scale-95"
+                >
+                  <Trash2 className="w-4 h-4 text-crimson-400" />
+                  <span>Purge All Test Stores</span>
+                </button>
+              )}
             </div>
 
             <div className="glass-card-cyber rounded-2xl border border-white/10 overflow-hidden">
@@ -938,6 +986,13 @@ export const GodMode: React.FC = () => {
                               }`}
                             >
                               {m.status === 'ACTIVE' ? 'KILLSWITCH' : 'ACTIVATE'}
+                            </button>
+                            <button
+                              onClick={() => handleDeleteMerchant(m.id, m.name, m.slug)}
+                              className="px-2.5 py-1 rounded bg-crimson-950/60 hover:bg-crimson-900 text-crimson-400 border border-crimson-800/60 font-bold text-[10px] inline-flex items-center gap-1"
+                              title="Delete store permanently"
+                            >
+                              <Trash2 className="w-3 h-3" /> Delete
                             </button>
                           </td>
                         </tr>

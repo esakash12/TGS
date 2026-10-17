@@ -162,6 +162,78 @@ godmodeRouter.post('/merchants/:id/adjust-wallet', (req: Request, res: Response)
   res.json({ success: true, updated });
 });
 
+// Delete Single Merchant Store (God-Mode)
+godmodeRouter.delete('/merchants/:id', async (req: Request, res: Response) => {
+  const tenantId = String(req.params.id);
+  const tenant = db.prepare('SELECT id, name, slug FROM tenants WHERE id = ?').get(tenantId) as any;
+  if (!tenant) {
+    return res.status(404).json({ error: 'Merchant store not found' });
+  }
+
+  // 1. Stop bot instance if running
+  try {
+    await botRegistry.stopBot(tenantId);
+  } catch (err: any) {
+    console.warn(`[GodMode] Warning stopping bot for tenant ${tenantId}:`, err.message);
+  }
+
+  // 2. Cascade delete all child data cleanly inside an atomic transaction
+  const deleteTx = db.transaction(() => {
+    db.prepare('DELETE FROM orders WHERE tenant_id = ?').run(tenantId);
+    db.prepare('DELETE FROM deposits WHERE tenant_id = ?').run(tenantId);
+    db.prepare('DELETE FROM customers WHERE tenant_id = ?').run(tenantId);
+    db.prepare('DELETE FROM custom_inventory WHERE tenant_id = ?').run(tenantId);
+    db.prepare('DELETE FROM products WHERE tenant_id = ?').run(tenantId);
+    db.prepare('DELETE FROM product_groups WHERE tenant_id = ?').run(tenantId);
+    db.prepare('DELETE FROM subscription_history WHERE tenant_id = ?').run(tenantId);
+    db.prepare('DELETE FROM crypto_verified_transactions WHERE tenant_id = ?').run(tenantId);
+    db.prepare('DELETE FROM admin_users WHERE tenant_id = ?').run(tenantId);
+    db.prepare('DELETE FROM tenants WHERE id = ?').run(tenantId);
+  });
+
+  deleteTx();
+  console.log(`[GodMode Audit] Merchant "${tenant.name}" (${tenant.slug}, ID: ${tenantId}) permanently deleted.`);
+
+  res.json({ success: true, message: `Merchant "${tenant.name}" deleted successfully.` });
+});
+
+// Purge ALL Test Merchants (God-Mode Clean Slate)
+godmodeRouter.post('/merchants/purge-all', async (_req: Request, res: Response) => {
+  const allTenants = db.prepare('SELECT id, name, slug FROM tenants').all() as any[];
+
+  // 1. Stop all running merchant bots
+  for (const t of allTenants) {
+    try {
+      await botRegistry.stopBot(t.id);
+    } catch (e: any) {
+      // ignore
+    }
+  }
+
+  // 2. Atomic purge of all merchant records
+  const purgeTx = db.transaction(() => {
+    db.prepare('DELETE FROM orders').run();
+    db.prepare('DELETE FROM deposits').run();
+    db.prepare('DELETE FROM customers').run();
+    db.prepare('DELETE FROM custom_inventory').run();
+    db.prepare('DELETE FROM products').run();
+    db.prepare('DELETE FROM product_groups').run();
+    db.prepare('DELETE FROM subscription_history').run();
+    db.prepare('DELETE FROM crypto_verified_transactions WHERE tenant_id IS NOT NULL').run();
+    db.prepare("DELETE FROM admin_users WHERE role != 'super_admin' AND tenant_id IS NOT NULL").run();
+    db.prepare('DELETE FROM tenants').run();
+  });
+
+  purgeTx();
+  console.log(`[GodMode Audit] Completely purged ${allTenants.length} test merchants from the database.`);
+
+  res.json({
+    success: true,
+    purgedCount: allTenants.length,
+    message: `All ${allTenants.length} test merchants and associated store data have been completely purged.`,
+  });
+});
+
 // ==========================================
 // 3. Wholesale Providers & Margin Engine Config
 // ==========================================

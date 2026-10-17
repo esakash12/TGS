@@ -4,6 +4,7 @@ import { Landing } from './pages/Landing';
 import { Register } from './pages/Register';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/admin/Dashboard';
+import { OnboardingPlan } from './pages/OnboardingPlan';
 import { GodMode } from './pages/godmode/GodMode';
 import { useAuth } from './context/AuthContext';
 import { GODMODE_SECRET_PATH } from '../../shared/constants';
@@ -35,6 +36,16 @@ export const App: React.FC = () => {
       {/* Merchant Registration & Login */}
       <Route path="/register" element={<Register />} />
       <Route path="/login" element={<Login />} />
+
+      {/* SaaS Plan Selection & Onboarding */}
+      <Route
+        path="/onboarding/plan"
+        element={
+          <ProtectedAdminRoute>
+            <OnboardingPlan />
+          </ProtectedAdminRoute>
+        }
+      />
 
       {/* Protected Merchant Control Center */}
       <Route

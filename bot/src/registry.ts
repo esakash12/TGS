@@ -26,8 +26,11 @@ class DynamicBotRegistry {
   public async initAllActiveBots() {
     console.log('🤖 [BotRegistry] Initializing active merchant bots...');
     const tenants = db.prepare(`
-      SELECT id, slug, name, bot_token, status FROM tenants 
-      WHERE status = 'ACTIVE' AND bot_token IS NOT NULL AND TRIM(bot_token) != ''
+      SELECT id, slug, name, bot_token, status, subscription_status, subscription_expires_at FROM tenants 
+      WHERE status = 'ACTIVE' 
+        AND subscription_status = 'ACTIVE'
+        AND (subscription_expires_at IS NULL OR datetime(subscription_expires_at) > datetime('now'))
+        AND bot_token IS NOT NULL AND TRIM(bot_token) != ''
     `).all() as any[];
 
     for (const t of tenants) {
@@ -55,6 +58,30 @@ class DynamicBotRegistry {
 
     if (!botToken || botToken.trim() === '') {
       return { success: false, error: 'Bot token is empty' };
+    }
+
+    // Verify tenant account and active subscription status
+    const tenant = db.prepare(`
+      SELECT id, name, status, subscription_status, subscription_expires_at
+      FROM tenants WHERE id = ?
+    `).get(tenantId) as any;
+
+    if (!tenant) {
+      return { success: false, error: 'Store not found' };
+    }
+
+    if (tenant.status !== 'ACTIVE') {
+      return { success: false, error: 'Store account is suspended' };
+    }
+
+    const isSubActive = tenant.subscription_status === 'ACTIVE' &&
+      (!tenant.subscription_expires_at || new Date(tenant.subscription_expires_at).getTime() > Date.now());
+
+    if (!isSubActive) {
+      return {
+        success: false,
+        error: 'Merchant subscription is inactive or expired. Please activate your subscription with Binance Pay to launch your bot.'
+      };
     }
 
     try {

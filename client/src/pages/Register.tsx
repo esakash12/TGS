@@ -38,7 +38,7 @@ export const Register: React.FC = () => {
       });
 
       login(res.data.token, res.data.user, res.data.tenant);
-      navigate('/admin');
+      navigate('/onboarding/plan');
     } catch (err: any) {
       setError(err.response?.data?.error || err.message || 'Registration failed');
     } finally {

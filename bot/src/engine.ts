@@ -29,6 +29,40 @@ setInterval(() => {
 export function createBotEngine(tenantId: string, botToken: string): Bot {
   const bot = new Bot(botToken);
 
+  // Top-Level Active Subscription & Status Guard Middleware
+  bot.use(async (ctx, next) => {
+    const tenant = db.prepare(`
+      SELECT status, subscription_status, subscription_expires_at 
+      FROM tenants WHERE id = ?
+    `).get(tenantId) as any;
+
+    if (!tenant || tenant.status !== 'ACTIVE') {
+      if (ctx.callbackQuery) {
+        return ctx.answerCallbackQuery({ text: '⚠️ This store is currently suspended.', show_alert: true });
+      }
+      return ctx.reply('⚠️ <b>Store Suspended</b>\nThis bot is temporarily disabled.', { parse_mode: 'HTML' });
+    }
+
+    const isSubActive = tenant.subscription_status === 'ACTIVE' && 
+      (!tenant.subscription_expires_at || new Date(tenant.subscription_expires_at).getTime() > Date.now());
+
+    if (!isSubActive) {
+      if (ctx.callbackQuery) {
+        return ctx.answerCallbackQuery({
+          text: '⚠️ Store bot is inactive because the merchant subscription has expired.',
+          show_alert: true,
+        });
+      }
+      return ctx.reply(
+        '⚠️ <b>Store Bot Inactive</b>\n\n' +
+        'This store bot is currently offline because the merchant subscription has expired. Please contact the store administrator.',
+        { parse_mode: 'HTML' }
+      );
+    }
+
+    return next();
+  });
+
   // Helper: safely get tenant details
   const getTenant = () => {
     const raw = db.prepare('SELECT * FROM tenants WHERE id = ?').get(tenantId) as any;
@@ -327,7 +361,9 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
     for (const p of products) {
       const icon = getProductIcon(p.name, p.category);
       const priceFormatted = Number(p.retail_price_usd).toFixed(2);
-      keyboard.text(`${icon} ${p.name} — $${priceFormatted}`, `view_p_${p.id}`).row();
+      const stock = p.stock !== undefined && p.stock !== null ? Number(p.stock) : 0;
+      const stockBadge = stock > 0 ? `[Stock: ${stock}]` : '[❌ Out of stock]';
+      keyboard.text(`${icon} ${p.name} ${stockBadge} — $${priceFormatted}`, `view_p_${p.id}`).row();
     }
     keyboard.text('⬅️ Back', 'nav_products');
 
@@ -378,7 +414,7 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
       `<b>${product.name}</b>\n\n` +
       `<blockquote>${descContent}</blockquote>\n\n` +
       `💵 <b>Unit Price:</b> $${price}\n` +
-      `🎁 <b>Stock:</b> ${stock > 0 ? stock : 'Out of stock'}`;
+      `🎁 <b>Stock:</b> ${stock > 0 ? `${stock} available` : '❌ Out of stock'}`;
 
     const keyboard = new InlineKeyboard();
     if (stock > 0) {
