@@ -335,6 +335,9 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
   // 2. Category Browser or Direct Product List
   // ==========================================
   const showCategoryBrowser = async (ctx: any) => {
+    if (ctx.from?.id) {
+      userStates.delete(ctx.from.id);
+    }
     const tenant = getTenant();
     const categoriesEnabled = tenant.categories_enabled !== undefined && tenant.categories_enabled !== null 
       ? Boolean(tenant.categories_enabled) 
@@ -385,6 +388,7 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
 
   bot.callbackQuery('nav_products', showCategoryBrowser);
   bot.hears([/🛍️ Products/i, /🛍️ প্রোডাক্ট কিনুন/i], showCategoryBrowser);
+  bot.command('products', showCategoryBrowser);
 
   // ==========================================
   // 3. Products in Category / Store (Matching Screenshot 3)
@@ -666,6 +670,9 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
   // 7. Deposit Menu & Binance Pay Engine
   // ==========================================
   const showDepositMenu = async (ctx: any) => {
+    if (ctx.from?.id) {
+      userStates.delete(ctx.from.id);
+    }
     const tenant = getTenant();
     const customer = getOrCreateCustomer(ctx.from);
     const rate = Number(tenant?.usd_to_bdt_rate || 125.0);
@@ -704,6 +711,7 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
 
   bot.callbackQuery('nav_deposit', showDepositMenu);
   bot.hears([/💰 Deposit/i, /➕ ব্যালেন্স রিচার্জ/i, /➕ Add Funds/i], showDepositMenu);
+  bot.command('deposit', showDepositMenu);
 
   // Handle Deposit Selection
   bot.callbackQuery(/^dep_(bkash|nagad|rocket|binance)$/, async (ctx) => {
@@ -792,6 +800,27 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
     const rate = Number(tenant?.usd_to_bdt_rate || 125.0);
     const text = ctx.message.text.trim();
 
+    // 1. If user sent any bot command (starts with /), cancel any pending state and do not process as form input
+    if (text.startsWith('/')) {
+      userStates.delete(ctx.from.id);
+      return;
+    }
+
+    // 2. If user pressed a main menu keyboard button, cancel pending state and let the hears listener execute
+    if (/🛍️|💰|📦|🗣️|🌐|প্রোডাক্ট|অর্ডার|ব্যালেন্স|হেল্পলাইন/i.test(text)) {
+      userStates.delete(ctx.from.id);
+      return;
+    }
+
+    // 3. If user typed 'cancel' or 'back', cancel cleanly
+    if (/^(cancel|back|বাতিল|ক্যানসেল)$/i.test(text)) {
+      userStates.delete(ctx.from.id);
+      return ctx.reply('❌ <b>Operation cancelled.</b>', {
+        parse_mode: 'HTML',
+        reply_markup: buildStartInlineKeyboard(),
+      });
+    }
+
     // STEP A: Custom Quantity
     if (state.step === 'AWAITING_CUSTOM_QTY' && state.productId) {
       const qty = parseInt(text);
@@ -842,8 +871,10 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
     // STEP C: Awaiting Local TrxID
     if (state.step === 'AWAITING_LOCAL_TRX_ID') {
       const trxId = text.toUpperCase().replace(/\s+/g, '');
-      if (trxId.length < 5) {
-        return ctx.reply('❌ TrxID is too short. Please enter a valid TrxID:');
+
+      // Reject non-transaction inputs (e.g. commands, words with special chars, or too short/long)
+      if (!/^[A-Z0-9]{6,30}$/.test(trxId)) {
+        return ctx.reply('❌ Invalid Transaction ID format.\nPlease enter a valid TrxID (letters and numbers only, e.g. 9J28XK12):');
       }
 
       const existing = db.prepare(`
@@ -956,6 +987,9 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
   // 9. Orders History (nav_orders)
   // ==========================================
   const showOrdersHistory = async (ctx: any) => {
+    if (ctx.from?.id) {
+      userStates.delete(ctx.from.id);
+    }
     const recentOrders = db.prepare(`
       SELECT * FROM orders WHERE tenant_id = ? AND customer_telegram_id = ? ORDER BY created_at DESC LIMIT 5
     `).all(tenantId, ctx.from.id) as any[];
@@ -990,11 +1024,15 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
 
   bot.callbackQuery('nav_orders', showOrdersHistory);
   bot.hears([/📦 My Orders/i, /📦 অর্ডার হিস্টোরি/i], showOrdersHistory);
+  bot.command('orders', showOrdersHistory);
 
   // ==========================================
   // 10. Support (nav_support)
   // ==========================================
   const showSupport = async (ctx: any) => {
+    if (ctx.from?.id) {
+      userStates.delete(ctx.from.id);
+    }
     const tenant = getTenant();
     const defaultContact = tenant?.owner_email ? `Email: ${tenant.owner_email}` : 'Contact store administrator on Telegram.';
     const customSupport = tenant?.support_text ? tenant.support_text.trim() : null;
@@ -1017,6 +1055,20 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
 
   bot.callbackQuery('nav_support', showSupport);
   bot.hears([/🗣️ Support/i, /📞 হেল্পলাইন/i, /📞 Live Support/i], showSupport);
+  bot.command('support', showSupport);
+
+  // Explicit /cancel command
+  bot.command('cancel', async (ctx) => {
+    if (ctx.from?.id) {
+      userStates.delete(ctx.from.id);
+    }
+    await ctx.reply('❌ <b>Operation cancelled.</b>', { parse_mode: 'HTML' });
+    const tenant = getTenant();
+    const customer = getOrCreateCustomer(ctx.from);
+    const card = buildStartCard(customer, ctx.from, tenant);
+    const keyboard = buildStartInlineKeyboard();
+    return ctx.reply(card, { parse_mode: 'HTML', reply_markup: keyboard });
+  });
 
   // ==========================================
   // 11. About (nav_about)

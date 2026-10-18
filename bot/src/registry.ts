@@ -100,6 +100,7 @@ class DynamicBotRegistry {
           { command: 'deposit', description: '💰 Add Funds / Wallet Deposit' },
           { command: 'orders', description: '📦 My Purchase History' },
           { command: 'support', description: '🗣️ Contact Store Support' },
+          { command: 'cancel', description: '❌ Cancel Current Operation' },
         ]).catch(() => {});
 
         // Configure persistent chat menu button to open bot commands list
