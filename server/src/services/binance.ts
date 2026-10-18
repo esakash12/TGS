@@ -10,12 +10,17 @@ export interface BinanceVerifyResult {
   amountUsd?: number;
   payerId?: string;
   trxId?: string;
+  orderId?: string;
+  transactionId?: string;
   error?: string;
 }
 
 export function generateBinanceSignature(queryString: string, secret: string): string {
   return crypto.createHmac('sha256', secret).update(queryString).digest('hex');
 }
+
+// In-memory mutex to prevent concurrent double-click / parallel race conditions
+const inFlightTrxLocks = new Set<string>();
 
 /**
  * Verify a Binance Pay transaction using HMAC SHA256 SAPI
@@ -33,19 +38,32 @@ export async function verifyBinancePayTransaction(params: {
     return { success: false, error: 'Binance API credentials missing' };
   }
 
-  // 1. Check Replay Attack in global verified table
-  const existingTrx = db.prepare('SELECT id FROM crypto_verified_transactions WHERE trx_id = ?').get(trxId);
-  if (existingTrx) {
-    return { success: false, error: 'This transaction ID has already been redeemed and verified.' };
-  }
+  const cleanTrx = trxId.trim();
 
-  const timestamp = Date.now();
-  // Query past 48 hours to now
-  const startTimestamp = timestamp - 48 * 60 * 60 * 1000;
-  const queryString = `startTimestamp=${startTimestamp}&endTimestamp=${timestamp}&timestamp=${timestamp}`;
-  const signature = generateBinanceSignature(queryString, apiSecret);
+  // 1. In-flight mutex check (blocks parallel race conditions within the same millisecond)
+  if (inFlightTrxLocks.has(cleanTrx)) {
+    return { success: false, error: 'This transaction verification is already in progress. Please wait.' };
+  }
+  inFlightTrxLocks.add(cleanTrx);
 
   try {
+    // 2. Check Replay Attack in single central crypto_verified_transactions table
+    // Must match against any of: trx_id, order_id, or transaction_id
+    const existingTrx = db.prepare(`
+      SELECT id, purpose, verified_at FROM crypto_verified_transactions 
+      WHERE trx_id = ? OR order_id = ? OR transaction_id = ?
+    `).get(cleanTrx, cleanTrx, cleanTrx) as any;
+
+    if (existingTrx) {
+      return { success: false, error: 'This Binance payment has already been redeemed and verified.' };
+    }
+
+    const timestamp = Date.now();
+    // Query past 48 hours to now
+    const startTimestamp = timestamp - 48 * 60 * 60 * 1000;
+    const queryString = `startTimestamp=${startTimestamp}&endTimestamp=${timestamp}&timestamp=${timestamp}`;
+    const signature = generateBinanceSignature(queryString, apiSecret);
+
     const res = await axios.get(`${BINANCE_API_BASE}/sapi/v1/pay/transactions?${queryString}&signature=${signature}`, {
       headers: {
         'X-MBX-APIKEY': apiKey,
@@ -64,7 +82,7 @@ export async function verifyBinancePayTransaction(params: {
 
     // Find the specific transaction by transactionId or orderId
     const matchedTx = txList.find((tx: any) => {
-      const idMatch = String(tx.transactionId) === trxId || String(tx.orderId) === trxId;
+      const idMatch = String(tx.transactionId) === cleanTrx || String(tx.orderId) === cleanTrx;
       return idMatch;
     });
 
@@ -72,9 +90,29 @@ export async function verifyBinancePayTransaction(params: {
       return { success: false, error: 'Transaction ID not found in the last 48 hours for this Binance account.' };
     }
 
-    // 2. Validate transaction status
-    // Note: Items returned by Binance /sapi/v1/pay/transactions are historical completed transactions.
-    // If status or orderStatus is present, verify it is not failed/cancelled.
+    // Canonical Binance IDs
+    const canonicalOrderId = matchedTx.orderId ? String(matchedTx.orderId).trim() : null;
+    const canonicalTxId = matchedTx.transactionId ? String(matchedTx.transactionId).trim() : null;
+
+    // 3. Secondary Replay Check using Canonical IDs directly from Binance API
+    // Prevents exploiting alternate ID (e.g. user entered orderId, but transactionId was already used)
+    const canonicalCheck = db.prepare(`
+      SELECT id FROM crypto_verified_transactions 
+      WHERE (? IS NOT NULL AND (order_id = ? OR trx_id = ?))
+         OR (? IS NOT NULL AND (transaction_id = ? OR trx_id = ?))
+    `).get(canonicalOrderId, canonicalOrderId, canonicalOrderId, canonicalTxId, canonicalTxId, canonicalTxId);
+
+    if (canonicalCheck) {
+      return { success: false, error: 'This payment order has already been redeemed and credited.' };
+    }
+
+    // 4. Validate transaction direction: MUST be incoming transfer/deposit (not outgoing send)
+    const txType = (matchedTx.transactionType || matchedTx.fundsDetail?.[0]?.transType || '').toUpperCase();
+    if (txType && (txType === 'PAY' || txType === 'TRANSFER_OUT' || txType === 'OUT')) {
+      return { success: false, error: 'Invalid transaction: Outgoing transfer cannot be claimed as a deposit.' };
+    }
+
+    // 5. Validate transaction status
     if (matchedTx.status && matchedTx.status !== 'SUCCESS') {
       return { success: false, error: `Transaction is not completed (Current status: ${matchedTx.status})` };
     }
@@ -82,7 +120,7 @@ export async function verifyBinancePayTransaction(params: {
       return { success: false, error: `Transaction is not completed (Current status: ${matchedTx.orderStatus})` };
     }
 
-    // 3. Validate currency
+    // 6. Validate currency
     const currency = matchedTx.currency || matchedTx.fundsDetail?.[0]?.currency;
     if (currency && currency.toUpperCase() !== 'USDT') {
       return { success: false, error: `Invalid currency: ${currency}. Only USDT deposits are accepted.` };
@@ -95,7 +133,7 @@ export async function verifyBinancePayTransaction(params: {
       return { success: false, error: 'Could not determine valid transaction amount from Binance' };
     }
 
-    // 4. Validate amount if expected amount is provided
+    // 7. Validate amount if expected amount is provided
     if (expectedAmountUsd && Math.abs(actualAmount - expectedAmountUsd) > 0.05) {
       return {
         success: false,
@@ -107,12 +145,17 @@ export async function verifyBinancePayTransaction(params: {
       success: true,
       amountUsd: actualAmount,
       payerId: String(matchedTx.payerInfo?.binanceId || matchedTx.payerInfo?.name || matchedTx.payerId || ''),
-      trxId: String(matchedTx.transactionId || matchedTx.orderId),
+      trxId: canonicalOrderId || canonicalTxId || cleanTrx,
+      orderId: canonicalOrderId || undefined,
+      transactionId: canonicalTxId || undefined,
     };
   } catch (err: any) {
     console.error('Binance Pay SAPI error:', err.response?.data || err.message);
     const msg = err.response?.data?.msg || err.response?.data?.errorMessage || err.message;
     return { success: false, error: `Binance API error: ${msg}` };
+  } finally {
+    // Release in-flight mutex
+    inFlightTrxLocks.delete(cleanTrx);
   }
 }
 
@@ -156,9 +199,17 @@ export async function verifyMerchantWholesaleTopup(params: {
   const topupTx = db.transaction(() => {
     // 1. Record in crypto_verified_transactions
     db.prepare(`
-      INSERT INTO crypto_verified_transactions (trx_id, payer_id, receiver_uid, amount_usd, purpose, tenant_id)
-      VALUES (?, ?, ?, ?, 'wholesale_topup', ?)
-    `).run(trxId, result.payerId || '', ownerUid, result.amountUsd, tenantId);
+      INSERT INTO crypto_verified_transactions (trx_id, order_id, transaction_id, payer_id, receiver_uid, amount_usd, purpose, tenant_id)
+      VALUES (?, ?, ?, ?, ?, ?, 'wholesale_topup', ?)
+    `).run(
+      trxId,
+      result.orderId || null,
+      result.transactionId || null,
+      result.payerId || '',
+      ownerUid,
+      result.amountUsd,
+      tenantId
+    );
 
     // 2. Increment merchant wallet_usd
     db.prepare(`
@@ -256,9 +307,17 @@ export async function verifyCustomerRetailBinanceDeposit(params: {
   const depositTx = db.transaction(() => {
     // 1. Record verified crypto tx
     db.prepare(`
-      INSERT INTO crypto_verified_transactions (trx_id, payer_id, receiver_uid, amount_usd, purpose, tenant_id)
-      VALUES (?, ?, ?, ?, 'retail_deposit', ?)
-    `).run(trxId, result.payerId || '', config.uid!, result.amountUsd, tenantId);
+      INSERT INTO crypto_verified_transactions (trx_id, order_id, transaction_id, payer_id, receiver_uid, amount_usd, purpose, tenant_id)
+      VALUES (?, ?, ?, ?, ?, ?, 'retail_deposit', ?)
+    `).run(
+      trxId,
+      result.orderId || null,
+      result.transactionId || null,
+      result.payerId || '',
+      config.uid!,
+      result.amountUsd,
+      tenantId
+    );
 
     // 2. Insert into deposits table as APPROVED
     db.prepare(`
@@ -385,9 +444,17 @@ export async function verifyMerchantSubscriptionPayment(params: {
   const subTx = db.transaction(() => {
     // A. Replay attack record
     db.prepare(`
-      INSERT INTO crypto_verified_transactions (trx_id, payer_id, receiver_uid, amount_usd, purpose, tenant_id)
-      VALUES (?, ?, ?, ?, 'subscription_payment', ?)
-    `).run(trxId, result.payerId || '', ownerUid, result.amountUsd, tenantId);
+      INSERT INTO crypto_verified_transactions (trx_id, order_id, transaction_id, payer_id, receiver_uid, amount_usd, purpose, tenant_id)
+      VALUES (?, ?, ?, ?, ?, ?, 'subscription_payment', ?)
+    `).run(
+      trxId,
+      result.orderId || null,
+      result.transactionId || null,
+      result.payerId || '',
+      ownerUid,
+      result.amountUsd,
+      tenantId
+    );
 
     // B. Record subscription history
     db.prepare(`

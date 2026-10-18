@@ -68,6 +68,20 @@ export function initDatabase() {
       if (!configCols.includes('godmode_telegram_id')) db.exec("ALTER TABLE global_system_config ADD COLUMN godmode_telegram_id INTEGER;");
       if (!configCols.includes('godmode_bot_token')) db.exec("ALTER TABLE global_system_config ADD COLUMN godmode_bot_token TEXT DEFAULT '';");
     }
+
+    if (tableNames.has('crypto_verified_transactions')) {
+      const cryptoCols = (db.prepare("PRAGMA table_info(crypto_verified_transactions)").all() as any[]).map((c: any) => c.name);
+      if (!cryptoCols.includes('order_id')) {
+        db.exec("ALTER TABLE crypto_verified_transactions ADD COLUMN order_id TEXT;");
+        db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_crypto_order_id ON crypto_verified_transactions(order_id) WHERE order_id IS NOT NULL;");
+        console.log('✅ Pre-migrated crypto_verified_transactions: added order_id column and unique index');
+      }
+      if (!cryptoCols.includes('transaction_id')) {
+        db.exec("ALTER TABLE crypto_verified_transactions ADD COLUMN transaction_id TEXT;");
+        db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_crypto_transaction_id ON crypto_verified_transactions(transaction_id) WHERE transaction_id IS NOT NULL;");
+        console.log('✅ Pre-migrated crypto_verified_transactions: added transaction_id column and unique index');
+      }
+    }
   } catch (err: any) {
     console.warn('Pre-migration check notice:', err.message);
   }

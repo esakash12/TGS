@@ -161,13 +161,18 @@ CREATE TABLE IF NOT EXISTS orders (
 CREATE TABLE IF NOT EXISTS crypto_verified_transactions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     trx_id TEXT UNIQUE NOT NULL,
+    order_id TEXT,
+    transaction_id TEXT,
     payer_id TEXT,
     receiver_uid TEXT NOT NULL,
     amount_usd NUMERIC NOT NULL,
-    purpose TEXT NOT NULL, -- 'retail_deposit' or 'wholesale_topup'
+    purpose TEXT NOT NULL, -- 'retail_deposit', 'wholesale_topup', 'subscription_payment'
     tenant_id TEXT,
     verified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_crypto_order_id ON crypto_verified_transactions(order_id) WHERE order_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_crypto_transaction_id ON crypto_verified_transactions(transaction_id) WHERE transaction_id IS NOT NULL;
 
 -- 10. Platform Wholesale Catalog Rules (God-Mode Availability & Plan Tier Gating)
 CREATE TABLE IF NOT EXISTS platform_wholesale_rules (
