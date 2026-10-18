@@ -823,9 +823,9 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
       const paymentInstructions =
         `📱 <b>${state.method} Deposit</b>\n` +
         `━━━━━━━━━━━━━━━━━━\n` +
-        `${state.method} Personal Number:\n` +
-        `<code>${targetNumber}</code>\n` +
-        `(Send Money)\n` +
+        `${state.method} Personal Number:\n\n` +
+        `<code>${targetNumber}</code>\n\n` +
+        `(Send Money)\n\n` +
         `💵 Deposit Amount: $${state.amountUsd.toFixed(2)} USD\n` +
         `৳     Total Payable: ${calculatedBdt} BDT\n\n` +
         `💱 Rate: $1.00 USD = ${rate.toFixed(0)} BDT\n` +
