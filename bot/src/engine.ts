@@ -7,7 +7,7 @@ import { getCachedProductLiveStock } from '../../server/src/services/wholesale';
 
 // In-memory conversation state for multi-step prompts (deposits & custom qty)
 interface UserConversationState {
-  step: 'AWAITING_BDT_AMOUNT' | 'AWAITING_LOCAL_TRX_ID' | 'AWAITING_BINANCE_TX_ID' | 'AWAITING_BINANCE_AMOUNT' | 'AWAITING_CUSTOM_QTY';
+  step: 'AWAITING_LOCAL_USD_AMOUNT' | 'AWAITING_BDT_AMOUNT' | 'AWAITING_LOCAL_TRX_ID' | 'AWAITING_BINANCE_TX_ID' | 'AWAITING_BINANCE_AMOUNT' | 'AWAITING_CUSTOM_QTY';
   productId?: string;
   method?: 'bKash' | 'Nagad' | 'Rocket' | 'Binance';
   amountBdt?: number;
@@ -762,7 +762,7 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
     }
 
     userStates.set(ctx.from.id, {
-      step: 'AWAITING_BDT_AMOUNT',
+      step: 'AWAITING_LOCAL_USD_AMOUNT',
       method: methodName,
       updatedAt: Date.now(),
     });
@@ -770,11 +770,9 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
     const promptMsg =
       `📱 <b>${methodName} Deposit</b>\n` +
       `━━━━━━━━━━━━━━━━━━\n` +
-      `${methodName} Personal Number:\n\n` +
-      `<code>${targetNumber}</code>\n\n` +
-      `(Send Money)\n\n` +
       `💱 <b>Rate:</b> $1.00 USD = ${rate.toFixed(0)} BDT\n\n` +
-      `👉 <b>How much BDT did you send?</b>`;
+      `👉 <b>How much USD do you want to deposit?</b>\n` +
+      `Enter USD amount (e.g. 2, 5, or 10):`;
 
     await ctx.editMessageText(promptMsg, {
       parse_mode: 'HTML',
@@ -804,24 +802,41 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
       return executePurchase(ctx, state.productId, qty);
     }
 
-    // STEP B: Awaiting BDT Amount
-    if (state.step === 'AWAITING_BDT_AMOUNT') {
-      const bdt = parseFloat(text);
-      if (isNaN(bdt) || bdt <= 0) {
-        return ctx.reply('❌ Please enter a valid number for BDT (e.g. 250):');
+    // STEP B: Awaiting Local Deposit USD Amount
+    if (state.step === 'AWAITING_LOCAL_USD_AMOUNT' || state.step === 'AWAITING_BDT_AMOUNT') {
+      const usd = parseFloat(text);
+      if (isNaN(usd) || usd <= 0) {
+        return ctx.reply('❌ Please enter a valid number for USD (e.g. 2, 5, or 10):');
       }
 
-      const calculatedUsd = Number((bdt / rate).toFixed(2));
-      state.amountBdt = bdt;
-      state.amountUsd = calculatedUsd;
+      const numbers = tenant?.payment_numbers_json || {};
+      const methodKey = (state.method?.toLowerCase() || 'bkash') as 'bkash' | 'nagad' | 'rocket';
+      const targetNumber = numbers[methodKey] || 'Not Configured';
+
+      // Calculate required BDT (rounded cleanly)
+      const calculatedBdt = Math.round(usd * rate);
+      state.amountUsd = Number(usd.toFixed(2));
+      state.amountBdt = calculatedBdt;
       state.step = 'AWAITING_LOCAL_TRX_ID';
       state.updatedAt = Date.now();
 
-      const nextPrompt =
-        `✅ <b>Amount: ${bdt} BDT (~$${calculatedUsd.toFixed(2)} USD)</b>\n\n` +
-        `Now enter your payment <b>Transaction ID (TrxID)</b>:`;
+      const paymentInstructions =
+        `📱 <b>${state.method} Deposit</b>\n` +
+        `━━━━━━━━━━━━━━━━━━\n` +
+        `${state.method} Personal Number:\n\n` +
+        `<code>${targetNumber}</code>\n\n` +
+        `(Send Money)\n\n` +
+        `💵 <b>Deposit Amount:</b> $${state.amountUsd.toFixed(2)} USD\n` +
+        `৳ <b>Total Payable:</b> ${calculatedBdt} BDT\n` +
+        `💱 <b>Rate:</b> $1.00 USD = ${rate.toFixed(0)} BDT\n` +
+        `━━━━━━━━━━━━━━━━━━\n` +
+        `👉 Send exact <b>${calculatedBdt} BDT</b> to the number above via <b>Send Money</b>.\n\n` +
+        `After sending, enter your payment <b>Transaction ID (TrxID)</b>:`;
 
-      return ctx.reply(nextPrompt, { parse_mode: 'HTML' });
+      return ctx.reply(paymentInstructions, {
+        parse_mode: 'HTML',
+        reply_markup: new InlineKeyboard().text('❌ Cancel', 'nav_deposit'),
+      });
     }
 
     // STEP C: Awaiting Local TrxID
@@ -852,7 +867,7 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
         `🎉 <b>Deposit Request Submitted!</b>\n` +
         `━━━━━━━━━━━━━━━━━━\n` +
         `💳 Method: <b>${state.method}</b>\n` +
-        `💵 Amount: <b>${state.amountBdt} BDT (~$${state.amountUsd?.toFixed(2)} USD)</b>\n` +
+        `💵 Amount: <b>$${state.amountUsd?.toFixed(2)} USD (${state.amountBdt} BDT)</b>\n` +
         `🧾 TrxID: <code>${trxId}</code>\n` +
         `⏳ Status: <b>PENDING</b>\n` +
         `━━━━━━━━━━━━━━━━━━\n` +
