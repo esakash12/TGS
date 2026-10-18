@@ -827,7 +827,7 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
         `<code>${targetNumber}</code>\n\n` +
         `(Send Money)\n\n` +
         `💵 Deposit Amount: $${state.amountUsd.toFixed(2)} USD\n` +
-        `৳ Total Payable: ${calculatedBdt} BDT\n\n` +
+        `💳 Total Payable: ${calculatedBdt} BDT\n\n` +
         `💱 Rate: $1.00 USD = ${rate.toFixed(0)} BDT\n` +
         `━━━━━━━━━━━━━━━━━━\n` +
         `👉 Send exact ${calculatedBdt} BDT to the number above via Send Money.\n` +
