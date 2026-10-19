@@ -33,6 +33,8 @@ import {
   Ticket,
   Copy,
   Check,
+  Wallet,
+  X,
 } from 'lucide-react';
 import { CyberDialog, CyberDialogOptions } from '../../components/CyberDialog';
 
@@ -107,6 +109,13 @@ export const GodMode: React.FC = () => {
     maxUses: '-1',
     expiresAt: '',
   });
+
+  // Merchant Wallet Adjustment Modal State
+  const [adjustingMerchant, setAdjustingMerchant] = useState<any | null>(null);
+  const [walletAdjustAction, setWalletAdjustAction] = useState<'ADD' | 'DEDUCT'>('ADD');
+  const [walletAdjustAmount, setWalletAdjustAmount] = useState('');
+  const [walletAdjustNote, setWalletAdjustNote] = useState('');
+  const [walletAdjustLoading, setWalletAdjustLoading] = useState(false);
 
   const [config, setConfig] = useState<any>({
     digitalcoreKey: '',
@@ -240,39 +249,58 @@ export const GodMode: React.FC = () => {
     );
   };
 
-  // Adjust Merchant Wallet
-  const handleAdjustWallet = async (merchantId: string, storeName: string) => {
-    showPrompt(
-      'Adjust Merchant Balance',
-      `Enter USD balance adjustment for "${storeName}". Use + for credit and - for debit:`,
-      'Delta Amount ($ USD)',
-      '+10.00',
-      (delta) => {
-        if (!delta || isNaN(parseFloat(delta))) {
-          showNotice('Invalid Input', 'Please enter a valid numeric delta amount.', 'warning');
-          return;
-        }
-        showPrompt(
-          'Audit Note',
-          `Add an audit note for adjusting $${delta} USD on "${storeName}":`,
-          'Audit Reason',
-          'Manual GodMode credit',
-          async (note) => {
-            try {
-              await axios.post(
-                `/api/godmode/merchants/${merchantId}/adjust-wallet`,
-                { amountDeltaUsd: parseFloat(delta), note: note || 'Manual GodMode credit' },
-                getHeaders()
-              );
-              loadGodModeData();
-              showNotice('Balance Updated', `Successfully adjusted balance by $${delta} USD.`, 'success');
-            } catch (err: any) {
-              showNotice('Adjustment Failed', err.response?.data?.error || 'Wallet adjustment failed', 'danger');
-            }
-          }
-        );
-      }
-    );
+  // Adjust Merchant Wallet (Open Dedicated Modal)
+  const handleOpenAdjustWalletModal = (merchant: any) => {
+    setAdjustingMerchant(merchant);
+    setWalletAdjustAction('ADD');
+    setWalletAdjustAmount('');
+    setWalletAdjustNote('');
+  };
+
+  const handleConfirmWalletAdjustment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!adjustingMerchant) return;
+
+    const numAmount = parseFloat(walletAdjustAmount);
+    if (isNaN(numAmount) || numAmount <= 0) {
+      showNotice('Invalid Amount', 'Please enter a valid positive numeric amount greater than $0.00 USD.', 'warning');
+      return;
+    }
+
+    const currentBal = Number(adjustingMerchant.wallet_usd || 0);
+    if (walletAdjustAction === 'DEDUCT' && currentBal < numAmount) {
+      showNotice(
+        'Insufficient Balance',
+        `Cannot deduct $${numAmount.toFixed(2)} USD. Merchant currently has $${currentBal.toFixed(2)} USD in wallet.`,
+        'danger'
+      );
+      return;
+    }
+
+    const delta = walletAdjustAction === 'ADD' ? numAmount : -numAmount;
+    const finalNote = walletAdjustNote.trim() || (walletAdjustAction === 'ADD' ? 'Manual GodMode credit' : 'Manual GodMode debit');
+
+    setWalletAdjustLoading(true);
+    try {
+      await axios.post(
+        `/api/godmode/merchants/${adjustingMerchant.id}/adjust-wallet`,
+        { amountDeltaUsd: delta, note: finalNote },
+        getHeaders()
+      );
+      setAdjustingMerchant(null);
+      setWalletAdjustAmount('');
+      setWalletAdjustNote('');
+      loadGodModeData();
+      showNotice(
+        'Balance Updated',
+        `Successfully ${walletAdjustAction === 'ADD' ? 'credited' : 'deducted'} $${numAmount.toFixed(2)} USD for ${adjustingMerchant.name}.`,
+        'success'
+      );
+    } catch (err: any) {
+      showNotice('Adjustment Failed', err.response?.data?.error || 'Wallet adjustment failed', 'danger');
+    } finally {
+      setWalletAdjustLoading(false);
+    }
   };
 
   // Delete Single Merchant Store
@@ -974,7 +1002,7 @@ export const GodMode: React.FC = () => {
                           </td>
                           <td className="p-4 text-right space-x-2">
                             <button
-                              onClick={() => handleAdjustWallet(m.id, m.name)}
+                              onClick={() => handleOpenAdjustWalletModal(m)}
                               className="px-2.5 py-1 rounded bg-carbon-800 hover:bg-carbon-700 text-white font-bold text-[10px]"
                             >
                               Adjust $
@@ -2027,6 +2055,145 @@ export const GodMode: React.FC = () => {
                     className="px-5 py-2 rounded-xl bg-laser-600 hover:bg-laser-500 text-white font-bold"
                   >
                     Create Coupon
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Merchant Wholesale Wallet Adjustment Modal */}
+        {adjustingMerchant && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="relative w-full max-w-md bg-carbon-900 border border-white/10 rounded-2xl p-6 shadow-2xl space-y-5">
+              <div className="flex items-center justify-between border-b border-white/5 pb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-laser-600/20 text-laser-400 flex items-center justify-center font-bold">
+                    <Wallet className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-base font-bold text-white font-mono">Adjust Merchant Balance</h4>
+                    <p className="text-xs text-zinc-400 font-mono">
+                      {adjustingMerchant.name} (@{adjustingMerchant.slug})
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAdjustingMerchant(null)}
+                  className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-white/5"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Current Balance Display */}
+              <div className="p-3.5 rounded-xl bg-carbon-800/80 border border-white/5 flex items-center justify-between">
+                <span className="text-xs text-zinc-400 font-mono">Current Wallet Balance:</span>
+                <span className="text-sm font-bold font-mono text-laser-400">
+                  ${Number(adjustingMerchant.wallet_usd || 0).toFixed(2)} USD
+                </span>
+              </div>
+
+              <form onSubmit={handleConfirmWalletAdjustment} className="space-y-4">
+                {/* Action Selector: Add or Deduct */}
+                <div className="grid grid-cols-2 gap-2 p-1 bg-carbon-800 rounded-xl border border-white/5">
+                  <button
+                    type="button"
+                    onClick={() => setWalletAdjustAction('ADD')}
+                    className={`py-2 text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5 transition-all font-mono ${
+                      walletAdjustAction === 'ADD'
+                        ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30 font-bold'
+                        : 'text-zinc-400 hover:text-zinc-200'
+                    }`}
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Credit / Add (+)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setWalletAdjustAction('DEDUCT')}
+                    className={`py-2 text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5 transition-all font-mono ${
+                      walletAdjustAction === 'DEDUCT'
+                        ? 'bg-crimson-600 text-white shadow-lg shadow-crimson-600/30 font-bold'
+                        : 'text-zinc-400 hover:text-zinc-200'
+                    }`}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Debit / Deduct (-)
+                  </button>
+                </div>
+
+                {/* Amount Input */}
+                <div>
+                  <label className="block text-xs font-mono font-medium text-zinc-300 mb-1.5">
+                    Amount to {walletAdjustAction === 'ADD' ? 'Credit' : 'Debit'} (USD $)
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2.5 text-zinc-400 font-mono text-xs">$</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      required
+                      placeholder="10.00"
+                      value={walletAdjustAmount}
+                      onChange={(e) => setWalletAdjustAmount(e.target.value)}
+                      className="w-full pl-7 pr-14 py-2 bg-carbon-800 border border-white/10 rounded-xl text-white font-mono text-sm focus:outline-none focus:border-laser-500"
+                    />
+                    <span className="absolute right-3 top-2.5 text-zinc-500 font-mono text-xs">USD</span>
+                  </div>
+                  {walletAdjustAmount && !isNaN(parseFloat(walletAdjustAmount)) && (
+                    <p className="text-[11px] font-mono text-zinc-400 mt-1">
+                      Resulting Balance:{' '}
+                      <span className="font-bold text-white">
+                        $
+                        {Math.max(
+                          0,
+                          walletAdjustAction === 'ADD'
+                            ? Number(adjustingMerchant.wallet_usd || 0) + parseFloat(walletAdjustAmount)
+                            : Number(adjustingMerchant.wallet_usd || 0) - parseFloat(walletAdjustAmount)
+                        ).toFixed(2)}{' '}
+                        USD
+                      </span>
+                    </p>
+                  )}
+                </div>
+
+                {/* Audit Note */}
+                <div>
+                  <label className="block text-xs font-mono font-medium text-zinc-300 mb-1.5">
+                    Audit Note / Reason
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Manual wholesale credit, deposit adjustment, bonus..."
+                    value={walletAdjustNote}
+                    onChange={(e) => setWalletAdjustNote(e.target.value)}
+                    className="w-full px-3 py-2 bg-carbon-800 border border-white/10 rounded-xl text-white text-xs font-mono focus:outline-none focus:border-laser-500 placeholder:text-zinc-500"
+                  />
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-white/5">
+                  <button
+                    type="button"
+                    onClick={() => setAdjustingMerchant(null)}
+                    className="px-4 py-2 rounded-xl text-xs font-mono font-medium text-zinc-400 hover:text-white hover:bg-white/5 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={walletAdjustLoading || !walletAdjustAmount || parseFloat(walletAdjustAmount) <= 0}
+                    className={`px-5 py-2 rounded-xl text-xs font-mono font-bold text-white shadow-lg transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed ${
+                      walletAdjustAction === 'ADD'
+                        ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/30'
+                        : 'bg-crimson-600 hover:bg-crimson-500 shadow-crimson-600/30'
+                    }`}
+                  >
+                    {walletAdjustLoading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                    {walletAdjustAction === 'ADD' ? 'Confirm Credit ($)' : 'Confirm Debit ($)'}
                   </button>
                 </div>
               </form>
