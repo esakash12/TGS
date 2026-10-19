@@ -161,10 +161,8 @@ export function initDatabase() {
       insertPlanStmt.run(p);
     }
 
-    // Sync default plan limits
-    db.exec(`UPDATE subscription_plans SET max_resale_products = 1, max_custom_products = 50 WHERE id = 'starter';`);
-    db.exec(`UPDATE subscription_plans SET max_resale_products = 25, max_custom_products = 250 WHERE id = 'pro';`);
-    db.exec(`UPDATE subscription_plans SET max_resale_products = -1, max_custom_products = -1 WHERE id = 'enterprise';`);
+    // Note: Do NOT forcefully overwrite custom/resale limits with hardcoded numbers here on every restart.
+    // Otherwise, changes made by Platform Admin in God Mode get wiped back to 1 on each server reboot/update.
   } catch (err: any) {
     console.warn('Subscription plans sync notice:', err.message);
   }
