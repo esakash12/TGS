@@ -979,6 +979,91 @@ merchantRouter.get('/customers', (req: AuthenticatedRequest, res: Response) => {
   res.json(customers);
 });
 
+// Adjust Customer Wallet Balance (Add or Deduct USD)
+merchantRouter.post('/customers/:telegramId/balance', (req: AuthenticatedRequest, res: Response) => {
+  const tenantId = req.tenant.id;
+  const telegramId = Number(req.params.telegramId);
+  const { amount, action, reason } = req.body;
+
+  if (isNaN(telegramId) || !telegramId) {
+    return res.status(400).json({ error: 'Valid Telegram ID is required' });
+  }
+
+  const numAmount = Number(amount);
+  if (isNaN(numAmount) || numAmount <= 0) {
+    return res.status(400).json({ error: 'Amount must be a positive number greater than 0' });
+  }
+
+  if (action !== 'ADD' && action !== 'DEDUCT') {
+    return res.status(400).json({ error: 'Action must be either ADD or DEDUCT' });
+  }
+
+  const customer = db.prepare('SELECT * FROM customers WHERE tenant_id = ? AND telegram_id = ?').get(tenantId, telegramId) as any;
+  if (!customer) {
+    return res.status(404).json({ error: 'Customer not found' });
+  }
+
+  const currentBal = Number(customer.balance_usd || 0);
+
+  if (action === 'DEDUCT' && currentBal < numAmount) {
+    return res.status(400).json({
+      error: `Cannot deduct $${numAmount.toFixed(2)} USD. Customer only has $${currentBal.toFixed(2)} USD in wallet.`
+    });
+  }
+
+  const newBalance = action === 'ADD' ? currentBal + numAmount : Math.max(0, currentBal - numAmount);
+  const note = (reason && String(reason).trim()) ? String(reason).trim() : (action === 'ADD' ? 'Admin manual credit' : 'Admin manual debit');
+
+  const adjustTx = db.transaction(() => {
+    // 1. Update customer balance
+    db.prepare(`
+      UPDATE customers 
+      SET balance_usd = ? 
+      WHERE tenant_id = ? AND telegram_id = ?
+    `).run(Number(newBalance.toFixed(2)), tenantId, telegramId);
+
+    // 2. Insert into deposits ledger for financial tracking and audit trail
+    const fakeTrx = `MANUAL-${action}-${Date.now().toString().slice(-6)}`;
+    db.prepare(`
+      INSERT INTO deposits (
+        tenant_id, customer_telegram_id, customer_username, method, amount_bdt, amount_usd,
+        trx_id, status, admin_note, processed_at
+      ) VALUES (?, ?, ?, 'Manual', 0, ?, ?, 'APPROVED', ?, CURRENT_TIMESTAMP)
+    `).run(
+      tenantId,
+      telegramId,
+      customer.username || customer.first_name || '',
+      action === 'ADD' ? numAmount : -numAmount,
+      fakeTrx,
+      note
+    );
+  });
+
+  adjustTx();
+
+  // Send real-time bot notification to customer
+  try {
+    const changeSymbol = action === 'ADD' ? '➕' : '➖';
+    const actionText = action === 'ADD' ? 'Wallet Credited' : 'Wallet Debited';
+    const message =
+      `💳 <b>Wallet Balance Adjustment</b>\n\n` +
+      `${changeSymbol} <b>${actionText}:</b> $${numAmount.toFixed(2)} USD\n` +
+      `👛 <b>Current Wallet Balance:</b> $${newBalance.toFixed(2)} USD\n` +
+      (reason ? `📝 <b>Reason:</b> ${reason}\n\n` : `\n`) +
+      `<i>Updated by Store Merchant.</i>`;
+
+    botRegistry.sendNotificationToCustomer(tenantId, telegramId, message);
+  } catch (err: any) {
+    console.warn('Customer notification notice:', err.message);
+  }
+
+  res.json({
+    success: true,
+    message: `Customer balance successfully ${action === 'ADD' ? 'credited' : 'deducted'} by $${numAmount.toFixed(2)} USD.`,
+    newBalance: Number(newBalance.toFixed(2))
+  });
+});
+
 // ==========================================
 // 9. Merchant Subscription & Billing
 // ==========================================

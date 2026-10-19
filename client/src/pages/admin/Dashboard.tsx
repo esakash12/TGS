@@ -73,6 +73,11 @@ export const Dashboard: React.FC = () => {
   const [deposits, setDeposits] = useState<any[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
   const [customerSearch, setCustomerSearch] = useState('');
+  const [balanceModalCustomer, setBalanceModalCustomer] = useState<any | null>(null);
+  const [balanceAdjustAction, setBalanceAdjustAction] = useState<'ADD' | 'DEDUCT'>('ADD');
+  const [balanceAdjustAmount, setBalanceAdjustAmount] = useState<string>('');
+  const [balanceAdjustReason, setBalanceAdjustReason] = useState<string>('');
+  const [balanceAdjustLoading, setBalanceAdjustLoading] = useState<boolean>(false);
   const [botRestartLoading, setBotRestartLoading] = useState(false);
   const [botRestartFeedback, setBotRestartFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -230,6 +235,55 @@ export const Dashboard: React.FC = () => {
       setCustomers(res.data);
     } catch (err) {
       console.error('Failed to load customers:', err);
+    }
+  };
+
+  const handleAdjustCustomerBalance = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!balanceModalCustomer) return;
+
+    const numAmount = parseFloat(balanceAdjustAmount);
+    if (isNaN(numAmount) || numAmount <= 0) {
+      showNotice('Invalid Amount', 'Please enter a valid amount greater than 0 USD.', 'warning');
+      return;
+    }
+
+    if (balanceAdjustAction === 'DEDUCT' && Number(balanceModalCustomer.balance_usd || 0) < numAmount) {
+      showNotice(
+        'Insufficient Balance',
+        `Cannot deduct $${numAmount.toFixed(2)} USD. Customer balance is only $${Number(balanceModalCustomer.balance_usd || 0).toFixed(2)} USD.`,
+        'danger'
+      );
+      return;
+    }
+
+    setBalanceAdjustLoading(true);
+    try {
+      const res = await axios.post(
+        `/api/merchant/customers/${balanceModalCustomer.telegram_id}/balance`,
+        {
+          amount: numAmount,
+          action: balanceAdjustAction,
+          reason: balanceAdjustReason.trim(),
+        },
+        authHeaders
+      );
+
+      showNotice(
+        'Wallet Adjusted',
+        res.data?.message || 'Customer balance updated successfully.',
+        'success'
+      );
+
+      // Close modal and refresh customers list
+      setBalanceModalCustomer(null);
+      setBalanceAdjustAmount('');
+      setBalanceAdjustReason('');
+      await loadCustomers();
+    } catch (err: any) {
+      showNotice('Failed to Adjust', err.response?.data?.error || err.message || 'Error updating balance.', 'danger');
+    } finally {
+      setBalanceAdjustLoading(false);
     }
   };
 
@@ -2019,6 +2073,7 @@ export const Dashboard: React.FC = () => {
                       <th className="p-4">Orders</th>
                       <th className="p-4">Language</th>
                       <th className="p-4">Registered Date</th>
+                      <th className="p-4 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5 font-mono">
@@ -2031,7 +2086,7 @@ export const Dashboard: React.FC = () => {
                       return name.includes(q) || username.includes(q) || tgId.includes(q);
                     }).length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="p-8 text-center text-zinc-500 font-sans text-xs">
+                        <td colSpan={8} className="p-8 text-center text-zinc-500 font-sans text-xs">
                           {customerSearch ? 'No customers matching search criteria.' : 'No customers have started your Telegram bot yet.'}
                         </td>
                       </tr>
@@ -2082,6 +2137,21 @@ export const Dashboard: React.FC = () => {
                             <td className="p-4 text-zinc-400 text-[11px]">
                               {new Date(c.created_at).toLocaleDateString()}
                             </td>
+                            <td className="p-4 text-right">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setBalanceModalCustomer(c);
+                                  setBalanceAdjustAction('ADD');
+                                  setBalanceAdjustAmount('');
+                                  setBalanceAdjustReason('');
+                                }}
+                                className="px-3 py-1.5 rounded-xl bg-laser-600/10 hover:bg-laser-600/20 text-laser-400 border border-laser-500/20 text-[11px] font-semibold transition-all inline-flex items-center gap-1.5 shadow-sm hover:scale-[1.02] active:scale-[0.98]"
+                              >
+                                <DollarSign className="w-3.5 h-3.5" />
+                                Adjust Balance
+                              </button>
+                            </td>
                           </tr>
                         ))
                     )}
@@ -2089,6 +2159,145 @@ export const Dashboard: React.FC = () => {
                 </table>
               </div>
             </div>
+
+            {/* Customer Wallet Adjustment Modal */}
+            {balanceModalCustomer && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+                <div className="relative w-full max-w-md bg-carbon-900 border border-white/10 rounded-2xl p-6 shadow-2xl space-y-5">
+                  <div className="flex items-center justify-between border-b border-white/5 pb-4">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-xl bg-laser-600/20 text-laser-400 flex items-center justify-center font-bold">
+                        <Wallet className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className="text-base font-bold text-white">Adjust Customer Balance</h4>
+                        <p className="text-xs text-zinc-400 font-mono">
+                          {balanceModalCustomer.first_name || 'User'} ({balanceModalCustomer.telegram_id})
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setBalanceModalCustomer(null)}
+                      className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-white/5"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  {/* Current Balance Display */}
+                  <div className="p-3.5 rounded-xl bg-carbon-800/80 border border-white/5 flex items-center justify-between">
+                    <span className="text-xs text-zinc-400">Current Wallet Balance:</span>
+                    <span className="text-sm font-bold font-mono text-emerald-400">
+                      ${Number(balanceModalCustomer.balance_usd || 0).toFixed(2)} USD
+                    </span>
+                  </div>
+
+                  <form onSubmit={handleAdjustCustomerBalance} className="space-y-4">
+                    {/* Action Selector: Add or Deduct */}
+                    <div className="grid grid-cols-2 gap-2 p-1 bg-carbon-800 rounded-xl border border-white/5">
+                      <button
+                        type="button"
+                        onClick={() => setBalanceAdjustAction('ADD')}
+                        className={`py-2 text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5 transition-all ${
+                          balanceAdjustAction === 'ADD'
+                            ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30 font-bold'
+                            : 'text-zinc-400 hover:text-zinc-200'
+                        }`}
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Add Balance (+)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBalanceAdjustAction('DEDUCT')}
+                        className={`py-2 text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5 transition-all ${
+                          balanceAdjustAction === 'DEDUCT'
+                            ? 'bg-crimson-600 text-white shadow-lg shadow-crimson-600/30 font-bold'
+                            : 'text-zinc-400 hover:text-zinc-200'
+                        }`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Deduct / Reduce (-)
+                      </button>
+                    </div>
+
+                    {/* Amount Input */}
+                    <div>
+                      <label className="block text-xs font-medium text-zinc-300 mb-1.5">
+                        Amount to {balanceAdjustAction === 'ADD' ? 'Credit' : 'Debit'} (USD $)
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-2.5 text-zinc-400 font-mono text-xs">$</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0.01"
+                          required
+                          placeholder="0.00"
+                          value={balanceAdjustAmount}
+                          onChange={(e) => setBalanceAdjustAmount(e.target.value)}
+                          className="w-full pl-7 pr-14 py-2 bg-carbon-800 border border-white/10 rounded-xl text-white font-mono text-sm focus:outline-none focus:border-laser-500"
+                        />
+                        <span className="absolute right-3 top-2.5 text-zinc-500 font-mono text-xs">USD</span>
+                      </div>
+                      {balanceAdjustAmount && !isNaN(parseFloat(balanceAdjustAmount)) && (
+                        <p className="text-[11px] font-mono text-zinc-400 mt-1">
+                          Resulting Balance:{' '}
+                          <span className="font-bold text-white">
+                            $
+                            {Math.max(
+                              0,
+                              balanceAdjustAction === 'ADD'
+                                ? Number(balanceModalCustomer.balance_usd || 0) + parseFloat(balanceAdjustAmount)
+                                : Number(balanceModalCustomer.balance_usd || 0) - parseFloat(balanceAdjustAmount)
+                            ).toFixed(2)}{' '}
+                            USD
+                          </span>
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Reason Input */}
+                    <div>
+                      <label className="block text-xs font-medium text-zinc-300 mb-1.5">
+                        Reason / Note (Optional, sent to customer)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Compensation, Order Refund, Manual Correction..."
+                        value={balanceAdjustReason}
+                        onChange={(e) => setBalanceAdjustReason(e.target.value)}
+                        className="w-full px-3 py-2 bg-carbon-800 border border-white/10 rounded-xl text-white text-xs focus:outline-none focus:border-laser-500 placeholder:text-zinc-500"
+                      />
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-white/5">
+                      <button
+                        type="button"
+                        onClick={() => setBalanceModalCustomer(null)}
+                        className="px-4 py-2 rounded-xl text-xs font-medium text-zinc-400 hover:text-white hover:bg-white/5 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={balanceAdjustLoading || !balanceAdjustAmount || parseFloat(balanceAdjustAmount) <= 0}
+                        className={`px-5 py-2 rounded-xl text-xs font-bold text-white shadow-lg transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed ${
+                          balanceAdjustAction === 'ADD'
+                            ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/30'
+                            : 'bg-crimson-600 hover:bg-crimson-500 shadow-crimson-600/30'
+                        }`}
+                      >
+                        {balanceAdjustLoading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                        {balanceAdjustAction === 'ADD' ? 'Confirm Add Balance' : 'Confirm Deduct Balance'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
