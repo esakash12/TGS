@@ -746,6 +746,10 @@ merchantRouter.get('/wholesale-wallet/info', (req: AuthenticatedRequest, res: Re
     walletMap[w.provider] = Number(w.wallet_usd || 0);
   }
 
+  // Legacy balance compatibility: Existing balance in tenants.wallet_usd belongs to digitalcore (Mogent V1)
+  const legacyWalletUsd = Number(tenant?.wallet_usd || 0);
+  walletMap.digitalcore = Math.max(legacyWalletUsd, walletMap.digitalcore || 0);
+
   // Fetch Platform Owner Binance Pay Info from Global System Config
   const globalConfig = db.prepare('SELECT owner_binance_uid FROM global_system_config WHERE id = 1').get() as any;
 

@@ -115,7 +115,7 @@ export async function processCustomerPurchase(params: {
   // ==========================================
   // CASE B: Wholesale Provider Product (DigitalCore / Canboso)
   // ==========================================
-  if (product.provider === 'digitalcore' || product.provider === 'canboso') {
+  if (product.provider === 'digitalcore' || product.provider === 'vexorix' || product.provider === 'canboso') {
     const tenant = db.prepare('SELECT wallet_usd FROM tenants WHERE id = ?').get(tenantId) as any;
     const { platformFeeFixed, platformFeePct } = getGlobalWholesaleConfig();
 
@@ -123,8 +123,23 @@ export async function processCustomerPurchase(params: {
     const platformFee = wholesaleBaseCost * (platformFeePct / 100) + platformFeeFixed * quantity;
     const totalMerchantWholesaleCost = Number((wholesaleBaseCost + platformFee).toFixed(2));
 
-    // Two-Phase Precheck: Merchant must have enough USD in their wholesale wallet
-    if (!tenant || tenant.wallet_usd < totalMerchantWholesaleCost) {
+    // Multi-API Dedicated Wallet Check with fallback for digitalcore
+    const providerWalletRow = db.prepare(
+      'SELECT wallet_usd FROM tenant_api_wallets WHERE tenant_id = ? AND provider = ?'
+    ).get(tenantId, product.provider) as any;
+
+    let currentProviderBalance = Number(providerWalletRow?.wallet_usd || 0);
+    let useLegacyWalletDeduction = false;
+    if (product.provider === 'digitalcore' && currentProviderBalance < totalMerchantWholesaleCost) {
+      const legacyBal = Number(tenant?.wallet_usd || 0);
+      if (legacyBal >= totalMerchantWholesaleCost) {
+        currentProviderBalance = legacyBal;
+        useLegacyWalletDeduction = true;
+      }
+    }
+
+    // Two-Phase Precheck: Merchant must have enough USD in the dedicated wholesale wallet
+    if (currentProviderBalance < totalMerchantWholesaleCost) {
       console.warn(`[Wholesale Wallet Depleted] Tenant "${tenantId}" wholesale wallet balance ($${Number(tenant?.wallet_usd || 0).toFixed(2)}) is less than required wholesale cost ($${totalMerchantWholesaleCost.toFixed(2)}). Merchant needs to top up wholesale wallet.`);
       return {
         success: false,
@@ -158,10 +173,18 @@ export async function processCustomerPurchase(params: {
         WHERE tenant_id = ? AND telegram_id = ?
       `).run(totalPriceUsd, totalPriceUsd, tenantId, customerTelegramId);
 
-      // 2. Deduct merchant wholesale wallet
-      db.prepare(`
-        UPDATE tenants SET wallet_usd = wallet_usd - ? WHERE id = ?
-      `).run(totalMerchantWholesaleCost, tenantId);
+      // 2. Deduct merchant wholesale wallet (dedicated provider wallet or fallback legacy)
+      if (useLegacyWalletDeduction) {
+        db.prepare(`
+          UPDATE tenants SET wallet_usd = wallet_usd - ? WHERE id = ?
+        `).run(totalMerchantWholesaleCost, tenantId);
+      } else {
+        db.prepare(`
+          INSERT INTO tenant_api_wallets (tenant_id, provider, wallet_usd)
+          VALUES (?, ?, 0)
+          ON CONFLICT(tenant_id, provider) DO UPDATE SET wallet_usd = wallet_usd - ?
+        `).run(tenantId, product.provider, totalMerchantWholesaleCost);
+      }
 
       // 3. Record order
       db.prepare(`

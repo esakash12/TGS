@@ -66,7 +66,7 @@ export const GodMode: React.FC = () => {
   const [merchants, setMerchants] = useState<any[]>([]);
   const [wholesaleCatalog, setWholesaleCatalog] = useState<any[]>([]);
   const [wholesaleSearch, setWholesaleSearch] = useState('');
-  const [wholesaleProviderFilter, setWholesaleProviderFilter] = useState<'all' | 'digitalcore' | 'canboso'>('all');
+  const [wholesaleProviderFilter, setWholesaleProviderFilter] = useState<'all' | 'digitalcore' | 'canboso' | 'vexorix'>('all');
   const [wholesaleCategoryFilter, setWholesaleCategoryFilter] = useState('all');
   const [wholesaleLoading, setWholesaleLoading] = useState(false);
 
@@ -119,6 +119,7 @@ export const GodMode: React.FC = () => {
 
   const [config, setConfig] = useState<any>({
     digitalcoreKey: '',
+    vexorixKey: '',
     canbosoKey: '',
     platformFeeFixedUsd: 0.01,
     platformFeePct: 0.0,
@@ -801,7 +802,21 @@ export const GodMode: React.FC = () => {
             </span>
           </div>
 
-          {/* Card 3: Canboso Balance */}
+          {/* Card 3: Vexorix (Mogent V2) Live */}
+          <div className="glass-card-cyber rounded-2xl p-5 border border-white/10 space-y-2">
+            <div className="flex justify-between items-center text-xs text-zinc-400">
+              <span className="font-mono">VEXORIX LIVE</span>
+              <Zap className="w-4 h-4 text-laser-400" />
+            </div>
+            <div className="text-2xl font-mono font-extrabold text-laser-400">
+              ${overview?.wholesaleBalances?.vexorix?.balance?.toFixed(2) || '0.00'} <span className="text-xs text-zinc-500">USD</span>
+            </div>
+            <span className="text-[10px] text-zinc-500 font-mono">
+              Username: {overview?.wholesaleBalances?.vexorix?.username || 'Active'}
+            </span>
+          </div>
+
+          {/* Card 4: Canboso Balance */}
           <div className="glass-card-cyber rounded-2xl p-5 border border-white/10 space-y-2">
             <div className="flex justify-between items-center text-xs text-zinc-400">
               <span className="font-mono">CANBOSO LIVE</span>
@@ -1111,6 +1126,23 @@ export const GodMode: React.FC = () => {
               </button>
               <button
                 onClick={() => {
+                  setWholesaleProviderFilter('vexorix');
+                  setWholesaleCategoryFilter('all');
+                }}
+                className={`px-4 py-2 rounded-xl text-xs font-mono font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
+                  wholesaleProviderFilter === 'vexorix'
+                    ? 'bg-crimson-600 text-white shadow-md shadow-crimson-600/30'
+                    : 'bg-carbon-900 text-zinc-400 hover:text-white border border-white/5'
+                }`}
+              >
+                <Zap className="w-3.5 h-3.5 text-laser-400" />
+                <span>VEXORIX API</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] bg-black/40">
+                  {wholesaleCatalog.filter((i) => i.provider?.toLowerCase() === 'vexorix').length}
+                </span>
+              </button>
+              <button
+                onClick={() => {
                   setWholesaleProviderFilter('canboso');
                   setWholesaleCategoryFilter('all');
                 }}
@@ -1318,6 +1350,17 @@ export const GodMode: React.FC = () => {
                     value={config.digitalcoreKey}
                     onChange={(e) => setConfig({ ...config, digitalcoreKey: e.target.value })}
                     className="w-full px-4 py-2 rounded-xl bg-carbon-900 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-crimson-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1">Vexorix (Mogent V2) Reseller API Key</label>
+                  <input
+                    type="text"
+                    placeholder="Paste vexorix (207-148-64-141.sslip.io) key"
+                    value={config.vexorixKey || ''}
+                    onChange={(e) => setConfig({ ...config, vexorixKey: e.target.value })}
+                    className="w-full px-4 py-2 rounded-xl bg-carbon-900 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-laser-500"
                   />
                 </div>
 
