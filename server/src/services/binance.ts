@@ -137,7 +137,7 @@ export async function verifyBinancePayTransaction(params: {
     if (expectedAmountUsd && Math.abs(actualAmount - expectedAmountUsd) > 0.05) {
       return {
         success: false,
-        error: `Amount mismatch: Expected $${expectedAmountUsd.toFixed(2)} USDT, but transaction is $${actualAmount.toFixed(2)} USDT`,
+        error: 'Invalid payment details. Please check your Transaction ID and Amount and try again.',
       };
     }
 
