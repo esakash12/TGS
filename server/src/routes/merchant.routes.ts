@@ -361,6 +361,61 @@ merchantRouter.put('/products/:id', (req: AuthenticatedRequest, res: Response) =
   res.json(updated);
 });
 
+
+// Get raw stock items for a custom product
+merchantRouter.get('/products/:id/stock-items', (req: AuthenticatedRequest, res: Response) => {
+  const tenantId = req.tenant.id;
+  const productId = req.params.id;
+  const items = db.prepare(`
+    SELECT id, item_data, status, created_at
+    FROM custom_inventory
+    WHERE product_id = ? AND tenant_id = ?
+    ORDER BY id ASC
+  `).all(productId, tenantId);
+  res.json(items);
+});
+
+// Update / overwrite custom inventory items wholesale
+merchantRouter.put('/products/:id/stock-items', (req: AuthenticatedRequest, res: Response) => {
+  const tenantId = req.tenant.id;
+  const productId = req.params.id;
+  const { stockText } = req.body;
+
+  if (typeof stockText !== 'string') {
+    return res.status(400).json({ error: 'stockText string is required' });
+  }
+
+  const lines = stockText
+    .split('\n')
+    .map((line: string) => line.trim())
+    .filter((line: string) => line.length > 0);
+
+  const updateTx = db.transaction(() => {
+    // Keep DELIVERED items intact for customer history, delete only AVAILABLE items
+    db.prepare(`
+      DELETE FROM custom_inventory 
+      WHERE product_id = ? AND tenant_id = ? AND status = 'AVAILABLE'
+    `).run(productId, tenantId);
+
+    // Insert new available lines
+    const insertStmt = db.prepare(`
+      INSERT INTO custom_inventory (tenant_id, product_id, item_data, status)
+      VALUES (?, ?, ?, 'AVAILABLE')
+    `);
+    for (const item of lines) {
+      insertStmt.run(tenantId, productId, item);
+    }
+
+    // Update stock count in products table
+    db.prepare(`
+      UPDATE products SET stock = ? WHERE id = ? AND tenant_id = ?
+    `).run(lines.length, productId, tenantId);
+  });
+
+  updateTx();
+  res.json({ success: true, count: lines.length });
+});
+
 // Bulk Clear / Delete Products (all, wholesale only, or custom only)
 merchantRouter.delete('/products/clear-all', (req: AuthenticatedRequest, res: Response) => {
   const tenantId = req.tenant.id;
@@ -674,24 +729,36 @@ merchantRouter.post('/deposits/:id/reject', (req: AuthenticatedRequest, res: Res
 });
 
 // ==========================================
-// 5. Wholesale Wallet (Tier 2 Top-Up)
+// 5. Wholesale Wallet & Multi-API Ledgers (Tier 2 Top-Up)
 // ==========================================
 merchantRouter.get('/wholesale-wallet/info', (req: AuthenticatedRequest, res: Response) => {
   const tenantId = req.tenant.id;
   const tenant = db.prepare('SELECT wallet_usd FROM tenants WHERE id = ?').get(tenantId) as any;
+
+  // Fetch individual provider wallets
+  const apiWallets = db.prepare('SELECT provider, wallet_usd FROM tenant_api_wallets WHERE tenant_id = ?').all(tenantId) as any[];
+  const walletMap: Record<string, number> = {
+    digitalcore: 0,
+    vexorix: 0,
+    canboso: 0,
+  };
+  for (const w of apiWallets) {
+    walletMap[w.provider] = Number(w.wallet_usd || 0);
+  }
 
   // Fetch Platform Owner Binance Pay Info from Global System Config
   const globalConfig = db.prepare('SELECT owner_binance_uid FROM global_system_config WHERE id = 1').get() as any;
 
   res.json({
     walletUsd: Number(tenant?.wallet_usd || 0),
+    walletsByProvider: walletMap,
     platformOwnerBinanceUid: globalConfig?.owner_binance_uid || 'Configure in God Mode',
   });
 });
 
 merchantRouter.post('/wholesale-wallet/verify', async (req: AuthenticatedRequest, res: Response) => {
   const tenantId = req.tenant.id;
-  const { trxId, amountUsd } = req.body;
+  const { trxId, amountUsd, provider = 'digitalcore' } = req.body;
 
   if (!trxId || !amountUsd) {
     return res.status(400).json({ error: 'Transaction ID and amount (USD) are required.' });
@@ -701,6 +768,7 @@ merchantRouter.post('/wholesale-wallet/verify', async (req: AuthenticatedRequest
     tenantId,
     trxId: String(trxId).trim(),
     declaredAmountUsd: Number(amountUsd),
+    provider: String(provider).trim().toLowerCase(),
   });
 
   if (!result.success) {
@@ -708,10 +776,14 @@ merchantRouter.post('/wholesale-wallet/verify', async (req: AuthenticatedRequest
   }
 
   const updatedTenant = db.prepare('SELECT wallet_usd FROM tenants WHERE id = ?').get(tenantId) as any;
+  const updatedApiWallet = db.prepare('SELECT wallet_usd FROM tenant_api_wallets WHERE tenant_id = ? AND provider = ?').get(tenantId, provider) as any;
+
   res.json({
     success: true,
-    message: `Successfully verified and credited $${result.amountUsd?.toFixed(2)} USD!`,
+    message: `Successfully verified and credited ${result.amountUsd?.toFixed(2)} USD to ${provider.toUpperCase()}!`,
     newBalanceUsd: Number(updatedTenant.wallet_usd || 0),
+    newProviderBalanceUsd: Number(updatedApiWallet?.wallet_usd || 0),
+    provider,
   });
 });
 

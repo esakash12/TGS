@@ -69,8 +69,22 @@ export function initDatabase() {
       const configCols = (db.prepare("PRAGMA table_info(global_system_config)").all() as any[]).map((c: any) => c.name);
       if (!configCols.includes('godmode_telegram_id')) db.exec("ALTER TABLE global_system_config ADD COLUMN godmode_telegram_id INTEGER;");
       if (!configCols.includes('godmode_bot_token')) db.exec("ALTER TABLE global_system_config ADD COLUMN godmode_bot_token TEXT DEFAULT '';");
+      if (!configCols.includes('wholesale_vexorix_key')) db.exec("ALTER TABLE global_system_config ADD COLUMN wholesale_vexorix_key TEXT DEFAULT '';");
     }
 
+        if (!tableNames.has('tenant_api_wallets')) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS tenant_api_wallets (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+          provider TEXT NOT NULL,
+          wallet_usd NUMERIC DEFAULT 0.0,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(tenant_id, provider)
+        );
+      `);
+      console.log('✅ Created tenant_api_wallets table');
+    }
     if (tableNames.has('crypto_verified_transactions')) {
       const cryptoCols = (db.prepare("PRAGMA table_info(crypto_verified_transactions)").all() as any[]).map((c: any) => c.name);
       if (!cryptoCols.includes('order_id')) {

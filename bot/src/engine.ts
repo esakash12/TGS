@@ -805,7 +805,8 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
     };
     const methodName = methodNames[methodKey];
     const numbers = tenant?.payment_numbers_json || {};
-    const targetNumber = numbers[methodKey];
+    const methodConfig = numbers[methodKey];
+    const targetNumber = typeof methodConfig === 'object' ? methodConfig?.number : methodConfig;
 
     if (!targetNumber) {
       return ctx.answerCallbackQuery({
@@ -885,7 +886,11 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
 
       const numbers = tenant?.payment_numbers_json || {};
       const methodKey = (state.method?.toLowerCase() || 'bkash') as 'bkash' | 'nagad' | 'rocket';
-      const targetNumber = numbers[methodKey] || 'Not Configured';
+      const methodConfig = numbers[methodKey];
+      const targetNumber = typeof methodConfig === 'object' ? methodConfig?.number : (methodConfig || 'Not Configured');
+      const isMerchantType = typeof methodConfig === 'object' && methodConfig?.type === 'merchant';
+      const typeLabel = isMerchantType ? 'Merchant (Payment)' : 'Personal (Send Money)';
+      const actionInstruction = isMerchantType ? 'Make Payment (পেমেন্ট)' : 'Send Money (সেন্ড মানি)';
 
       // Calculate required BDT (rounded cleanly)
       const calculatedBdt = Math.round(usd * rate);
@@ -897,14 +902,14 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
       const paymentInstructions =
         `📱 <b>${state.method} Deposit</b>\n` +
         `━━━━━━━━━━━━━━━━━━\n` +
-        `${state.method} Personal Number:\n\n` +
+        `${state.method} ${typeLabel} Number:\n\n` +
         `<code>${targetNumber}</code>\n\n` +
-        `(Send Money)\n\n` +
-        `💵 Deposit Amount: $${state.amountUsd.toFixed(2)} USD\n` +
+        `(${actionInstruction})\n\n` +
+        `💵 Deposit Amount: ${state.amountUsd.toFixed(2)} USD\n` +
         `💳 Total Payable: ${calculatedBdt} BDT\n\n` +
         `💱 Rate: $1.00 USD = ${rate.toFixed(0)} BDT\n` +
         `━━━━━━━━━━━━━━━━━━\n` +
-        `👉 Send exact ${calculatedBdt} BDT to the number above via Send Money.\n` +
+        `👉 Send exact ${calculatedBdt} BDT to the number above via ${actionInstruction}.\n` +
         `After sending, enter your payment Transaction ID (TrxID):`;
 
       return ctx.reply(paymentInstructions, {

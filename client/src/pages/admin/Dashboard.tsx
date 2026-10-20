@@ -122,7 +122,7 @@ export const Dashboard: React.FC = () => {
   // Filter & Search states
   const [storeFilter, setStoreFilter] = useState<'all' | 'custom' | 'wholesale'>('all');
   const [wholesaleSearch, setWholesaleSearch] = useState('');
-  const [wholesaleProviderFilter, setWholesaleProviderFilter] = useState<'all' | 'digitalcore' | 'canboso'>('all');
+  const [wholesaleProviderFilter, setWholesaleProviderFilter] = useState<'all' | 'digitalcore' | 'canboso' | 'vexorix'>('all');
   const [wholesaleCategoryFilter, setWholesaleCategoryFilter] = useState('all');
 
   // Clear Store / Products Modal
@@ -165,6 +165,24 @@ export const Dashboard: React.FC = () => {
   const [newProdGroupId, setNewProdGroupId] = useState('');
   const [newProdPrice, setNewProdPrice] = useState('');
   const [newProdKeys, setNewProdKeys] = useState('');
+  const [newProdDesc, setNewProdDesc] = useState('');
+
+  // Edit Product Modal State
+  const [editProductModal, setEditProductModal] = useState<any | null>(null);
+  const [editProdName, setEditProdName] = useState('');
+  const [editProdPrice, setEditProdPrice] = useState('');
+  const [editProdDesc, setEditProdDesc] = useState('');
+  const [editProdGroupId, setEditProdGroupId] = useState('');
+  const [editProdCategory, setEditProdCategory] = useState('');
+
+  // Manage Full Stock Items Modal State
+  const [manageStockProduct, setManageStockProduct] = useState<any | null>(null);
+  const [stockItemsList, setStockItemsList] = useState<any[]>([]);
+  const [stockEditText, setStockEditText] = useState('');
+  const [stockEditLoading, setStockEditLoading] = useState(false);
+
+  // Topup Provider Selection
+  const [topupProvider, setTopupProvider] = useState<'digitalcore' | 'vexorix' | 'canboso'>('vexorix');
   const [addStockProdId, setAddStockProdId] = useState<string | null>(null);
   const [addStockKeys, setAddStockKeys] = useState('');
 
@@ -413,7 +431,11 @@ export const Dashboard: React.FC = () => {
     try {
       const res = await axios.post(
         '/api/merchant/wholesale-wallet/verify',
-        { trxId: topupTrxId, amountUsd: parseFloat(topupAmountUsd) },
+        {
+          trxId: topupTrxId,
+          amountUsd: parseFloat(topupAmountUsd),
+          provider: topupProvider,
+        },
         authHeaders
       );
       setTopupMsg({ text: res.data.message, type: 'success' });
@@ -592,6 +614,7 @@ export const Dashboard: React.FC = () => {
           groupId: newProdGroupId || null,
           retailPriceUsd: parseFloat(newProdPrice),
           inventoryItems: newProdKeys,
+          description: newProdDesc,
         },
         authHeaders
       );
@@ -599,10 +622,83 @@ export const Dashboard: React.FC = () => {
       setNewProdName('');
       setNewProdPrice('');
       setNewProdKeys('');
+      setNewProdDesc('');
       setNewProdGroupId('');
       loadDashboardData();
     } catch (err: any) {
       showNotice('Product Creation', err.response?.data?.error || 'Failed to create product', 'danger');
+    }
+  };
+
+  // Open Edit Product Modal
+  const handleOpenEditProductModal = (product: any) => {
+    setEditProductModal(product);
+    setEditProdName(product.name || '');
+    setEditProdPrice(Number(product.retail_price_usd).toFixed(2));
+    setEditProdDesc(product.description || '');
+    setEditProdGroupId(product.group_id || '');
+    setEditProdCategory(product.category || 'General');
+  };
+
+  const handleSaveEditProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editProductModal) return;
+    try {
+      await axios.put(
+        `/api/merchant/products/${editProductModal.id}`,
+        {
+          name: editProdName.trim(),
+          retailPriceUsd: parseFloat(editProdPrice),
+          description: editProdDesc.trim(),
+          groupId: editProdGroupId || null,
+          category: editProdCategory.trim(),
+        },
+        authHeaders
+      );
+      setEditProductModal(null);
+      loadDashboardData();
+      showNotice('Product Updated', 'Product details saved successfully.', 'success');
+    } catch (err: any) {
+      showNotice('Update Failed', err.response?.data?.error || 'Failed to update product', 'danger');
+    }
+  };
+
+  // Open Full Stock Manage Modal
+  const handleOpenManageStock = async (product: any) => {
+    setManageStockProduct(product);
+    setStockEditLoading(true);
+    try {
+      const res = await axios.get(`/api/merchant/products/${product.id}/stock-items`, authHeaders);
+      setStockItemsList(res.data);
+      const availableLines = res.data
+        .filter((i: any) => i.status === 'AVAILABLE')
+        .map((i: any) => i.item_data)
+        .join('\n');
+      setStockEditText(availableLines);
+    } catch (err: any) {
+      console.error('Failed to load stock items:', err);
+    } finally {
+      setStockEditLoading(false);
+    }
+  };
+
+  const handleSaveManageStock = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!manageStockProduct) return;
+    setStockEditLoading(true);
+    try {
+      const res = await axios.put(
+        `/api/merchant/products/${manageStockProduct.id}/stock-items`,
+        { stockText: stockEditText },
+        authHeaders
+      );
+      showNotice('Stock Updated', `Inventory updated! ${res.data.count} items active.`, 'success');
+      setManageStockProduct(null);
+      loadDashboardData();
+    } catch (err: any) {
+      showNotice('Stock Update Failed', err.response?.data?.error || 'Failed to save inventory', 'danger');
+    } finally {
+      setStockEditLoading(false);
     }
   };
 
@@ -920,7 +1016,11 @@ export const Dashboard: React.FC = () => {
       wholesaleCategoryFilter === 'all' ||
       item.category.toLowerCase() === wholesaleCategoryFilter.toLowerCase();
 
-    return matchSearch && matchCategory;
+    const matchProvider =
+      wholesaleProviderFilter === 'all' ||
+      item.provider?.toLowerCase() === wholesaleProviderFilter.toLowerCase();
+
+    return matchSearch && matchCategory && matchProvider;
   });
 
   // Unique wholesale categories for filter chips
@@ -1574,18 +1674,32 @@ export const Dashboard: React.FC = () => {
                                 {p.is_active ? 'ACTIVE (ON)' : 'DISABLED (OFF)'}
                               </button>
                             </td>
-                            <td className="p-4 text-right space-x-2">
+                            <td className="p-4 text-right space-x-1.5 whitespace-nowrap">
+                              <button
+                                onClick={() => handleOpenEditProductModal(p)}
+                                className="px-2.5 py-1 rounded-lg bg-carbon-700 hover:bg-carbon-600 text-laser-300 font-semibold text-[11px] inline-flex items-center gap-1"
+                                title="Edit Product Name, Price & Description"
+                              >
+                                <Edit3 className="w-3 h-3" /> Edit
+                              </button>
+                              <button
+                                onClick={() => handleOpenManageStock(p)}
+                                className="px-2.5 py-1 rounded-lg bg-carbon-700 hover:bg-carbon-600 text-emerald-300 font-semibold text-[11px] inline-flex items-center gap-1"
+                                title="View & Edit Existing Stock Serials"
+                              >
+                                <Layers className="w-3 h-3" /> Manage Stock
+                              </button>
                               <button
                                 onClick={() => setAddStockProdId(p.id)}
-                                className="px-2.5 py-1 rounded-lg bg-carbon-700 hover:bg-carbon-600 text-white font-semibold text-[11px]"
+                                className="px-2.5 py-1 rounded-lg bg-carbon-800 hover:bg-carbon-700 text-white font-semibold text-[11px]"
                               >
-                                + Add Stock
+                                + Add
                               </button>
                               <button
                                 onClick={() => handleDeleteProduct(p.id, p.name)}
-                                className="px-2.5 py-1 rounded-lg bg-crimson-500/20 text-crimson-400 hover:bg-crimson-500/30 text-[11px]"
+                                className="px-2 py-1 rounded-lg bg-crimson-500/20 text-crimson-400 hover:bg-crimson-500/30 text-[11px]"
                               >
-                                Delete
+                                <Trash2 className="w-3 h-3" />
                               </button>
                             </td>
                           </tr>
@@ -1657,6 +1771,55 @@ export const Dashboard: React.FC = () => {
                 )}
               </div>
 
+              {/* API Provider Switcher (Mogent V1, Mogent V2, etc.) */}
+              <div className="space-y-1.5 pb-2 border-b border-white/5">
+                <div className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Zap className="w-3.5 h-3.5 text-amber-400" /> Wholesale API Provider:
+                </div>
+                <div className="flex items-center gap-2 overflow-x-auto">
+                  <button
+                    onClick={() => setWholesaleProviderFilter('all')}
+                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                      wholesaleProviderFilter === 'all'
+                        ? 'bg-gradient-to-r from-laser-600 to-purple-600 text-white shadow'
+                        : 'bg-carbon-800 text-zinc-400 hover:text-white border border-white/5'
+                    }`}
+                  >
+                    <span>⚡ All Providers</span>
+                  </button>
+                  <button
+                    onClick={() => setWholesaleProviderFilter('vexorix')}
+                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                      wholesaleProviderFilter === 'vexorix'
+                        ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow'
+                        : 'bg-carbon-800 text-zinc-400 hover:text-white border border-white/5'
+                    }`}
+                  >
+                    <span>🚀 Mogent V2 (Vexorix)</span>
+                  </button>
+                  <button
+                    onClick={() => setWholesaleProviderFilter('digitalcore')}
+                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                      wholesaleProviderFilter === 'digitalcore'
+                        ? 'bg-gradient-to-r from-crimson-600 to-rose-600 text-white shadow'
+                        : 'bg-carbon-800 text-zinc-400 hover:text-white border border-white/5'
+                    }`}
+                  >
+                    <span>📦 Mogent V1 (DigitalCore)</span>
+                  </button>
+                  <button
+                    onClick={() => setWholesaleProviderFilter('canboso')}
+                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                      wholesaleProviderFilter === 'canboso'
+                        ? 'bg-gradient-to-r from-blue-600 to-cyan-600 text-white shadow'
+                        : 'bg-carbon-800 text-zinc-400 hover:text-white border border-white/5'
+                    }`}
+                  >
+                    <span>🌐 Canboso</span>
+                  </button>
+                </div>
+              </div>
+
               {/* Category Filter Chips (Brand & Service Folders) */}
               <div className="space-y-1.5">
                 <div className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
@@ -1719,7 +1882,7 @@ export const Dashboard: React.FC = () => {
                     <div className="space-y-2">
                       <div className="flex justify-between items-start gap-2">
                         <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-carbon-800 text-laser-400 border border-laser-500/20 uppercase flex items-center gap-1">
-                          <span>{item.icon || '⚡'}</span> Cloud Sourcing
+                          <span>{item.icon || '⚡'}</span> {item.provider === 'vexorix' ? 'Mogent V2' : item.provider === 'digitalcore' ? 'Mogent V1' : item.provider}
                         </span>
                         <span className="text-xs font-mono text-emerald-400 font-bold">
                           In Stock ({item.stock})
@@ -2738,60 +2901,191 @@ export const Dashboard: React.FC = () => {
               </div>
             </div>
 
-            {/* 3. MANUAL MOBILE BANKING NUMBERS (bKash/Nagad/Rocket) */}
-            <div className="glass-card rounded-2xl p-6 border border-white/10 space-y-4">
+            {/* 3. MANUAL MOBILE BANKING NUMBERS (bKash/Nagad/Rocket) WITH PERSONAL / MERCHANT TOGGLE */}
+            <div className="glass-card rounded-2xl p-6 border border-white/10 space-y-5">
               <div>
-                <h4 className="text-xs font-mono font-bold text-crimson-400 uppercase">3. Manual Payment Numbers (Personal Send Money)</h4>
+                <h4 className="text-xs font-mono font-bold text-crimson-400 uppercase">3. Manual Payment Receiving Numbers</h4>
                 <p className="text-xs text-zinc-400 mt-0.5">
-                  Customers who prefer manual offline payment will send money to these numbers and enter their Transaction ID for your approval.
+                  Set your manual numbers and choose whether each number is <b>Personal (Send Money)</b> or <b>Merchant (Make Payment)</b>.
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-300 mb-1">bKash Personal Number</label>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                {/* bKash Config */}
+                <div className="p-4 rounded-xl bg-carbon-800/60 border border-white/5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-xs text-pink-400">📱 bKash (বিকাশ)</span>
+                    <div className="flex items-center gap-1.5 text-[10px]">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const cur = typeof settingsData.paymentNumbers?.bkash === 'object' ? settingsData.paymentNumbers.bkash : { number: settingsData.paymentNumbers?.bkash || '' };
+                          setSettingsData({
+                            ...settingsData,
+                            paymentNumbers: { ...settingsData.paymentNumbers, bkash: { ...cur, type: 'personal' } },
+                          });
+                        }}
+                        className={`px-2 py-0.5 rounded font-bold transition-all ${
+                          (typeof settingsData.paymentNumbers?.bkash === 'object' ? settingsData.paymentNumbers.bkash?.type : 'personal') !== 'merchant'
+                            ? 'bg-pink-500/20 text-pink-300 border border-pink-500/40'
+                            : 'text-zinc-500 hover:text-white'
+                        }`}
+                      >
+                        Personal
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const cur = typeof settingsData.paymentNumbers?.bkash === 'object' ? settingsData.paymentNumbers.bkash : { number: settingsData.paymentNumbers?.bkash || '' };
+                          setSettingsData({
+                            ...settingsData,
+                            paymentNumbers: { ...settingsData.paymentNumbers, bkash: { ...cur, type: 'merchant' } },
+                          });
+                        }}
+                        className={`px-2 py-0.5 rounded font-bold transition-all ${
+                          typeof settingsData.paymentNumbers?.bkash === 'object' && settingsData.paymentNumbers.bkash?.type === 'merchant'
+                            ? 'bg-pink-500/20 text-pink-300 border border-pink-500/40'
+                            : 'text-zinc-500 hover:text-white'
+                        }`}
+                      >
+                        Merchant
+                      </button>
+                    </div>
+                  </div>
                   <input
                     type="text"
                     placeholder="01XXXXXXXXX"
-                    value={settingsData.paymentNumbers?.bkash || ''}
-                    onChange={(e) =>
+                    value={typeof settingsData.paymentNumbers?.bkash === 'object' ? settingsData.paymentNumbers.bkash?.number || '' : settingsData.paymentNumbers?.bkash || ''}
+                    onChange={(e) => {
+                      const curType = typeof settingsData.paymentNumbers?.bkash === 'object' ? (settingsData.paymentNumbers.bkash?.type || 'personal') : 'personal';
                       setSettingsData({
                         ...settingsData,
-                        paymentNumbers: { ...settingsData.paymentNumbers, bkash: e.target.value },
-                      })
-                    }
-                    className="w-full px-4 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-crimson-500"
+                        paymentNumbers: { ...settingsData.paymentNumbers, bkash: { number: e.target.value.trim(), type: curType } },
+                      });
+                    }}
+                    className="w-full px-3 py-2 rounded-xl bg-carbon-900 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-pink-500"
                   />
+                  <span className="text-[10px] text-zinc-500 block">
+                    Mode: {(typeof settingsData.paymentNumbers?.bkash === 'object' && settingsData.paymentNumbers.bkash?.type === 'merchant') ? 'Make Payment (মার্চেন্ট পেমেন্ট)' : 'Send Money (পার্সোনাল)'}
+                  </span>
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-300 mb-1">Nagad Personal Number</label>
+
+                {/* Nagad Config */}
+                <div className="p-4 rounded-xl bg-carbon-800/60 border border-white/5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-xs text-amber-400">📱 Nagad (নগদ)</span>
+                    <div className="flex items-center gap-1.5 text-[10px]">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const cur = typeof settingsData.paymentNumbers?.nagad === 'object' ? settingsData.paymentNumbers.nagad : { number: settingsData.paymentNumbers?.nagad || '' };
+                          setSettingsData({
+                            ...settingsData,
+                            paymentNumbers: { ...settingsData.paymentNumbers, nagad: { ...cur, type: 'personal' } },
+                          });
+                        }}
+                        className={`px-2 py-0.5 rounded font-bold transition-all ${
+                          (typeof settingsData.paymentNumbers?.nagad === 'object' ? settingsData.paymentNumbers.nagad?.type : 'personal') !== 'merchant'
+                            ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                            : 'text-zinc-500 hover:text-white'
+                        }`}
+                      >
+                        Personal
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const cur = typeof settingsData.paymentNumbers?.nagad === 'object' ? settingsData.paymentNumbers.nagad : { number: settingsData.paymentNumbers?.nagad || '' };
+                          setSettingsData({
+                            ...settingsData,
+                            paymentNumbers: { ...settingsData.paymentNumbers, nagad: { ...cur, type: 'merchant' } },
+                          });
+                        }}
+                        className={`px-2 py-0.5 rounded font-bold transition-all ${
+                          typeof settingsData.paymentNumbers?.nagad === 'object' && settingsData.paymentNumbers.nagad?.type === 'merchant'
+                            ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                            : 'text-zinc-500 hover:text-white'
+                        }`}
+                      >
+                        Merchant
+                      </button>
+                    </div>
+                  </div>
                   <input
                     type="text"
                     placeholder="01XXXXXXXXX"
-                    value={settingsData.paymentNumbers?.nagad || ''}
-                    onChange={(e) =>
+                    value={typeof settingsData.paymentNumbers?.nagad === 'object' ? settingsData.paymentNumbers.nagad?.number || '' : settingsData.paymentNumbers?.nagad || ''}
+                    onChange={(e) => {
+                      const curType = typeof settingsData.paymentNumbers?.nagad === 'object' ? (settingsData.paymentNumbers.nagad?.type || 'personal') : 'personal';
                       setSettingsData({
                         ...settingsData,
-                        paymentNumbers: { ...settingsData.paymentNumbers, nagad: e.target.value },
-                      })
-                    }
-                    className="w-full px-4 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-crimson-500"
+                        paymentNumbers: { ...settingsData.paymentNumbers, nagad: { number: e.target.value.trim(), type: curType } },
+                      });
+                    }}
+                    className="w-full px-3 py-2 rounded-xl bg-carbon-900 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-amber-500"
                   />
+                  <span className="text-[10px] text-zinc-500 block">
+                    Mode: {(typeof settingsData.paymentNumbers?.nagad === 'object' && settingsData.paymentNumbers.nagad?.type === 'merchant') ? 'Make Payment (মার্চেন্ট পেমেন্ট)' : 'Send Money (পার্সোনাল)'}
+                  </span>
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-300 mb-1">Rocket Personal Number</label>
+
+                {/* Rocket Config */}
+                <div className="p-4 rounded-xl bg-carbon-800/60 border border-white/5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-xs text-purple-400">📱 Rocket (রকেট)</span>
+                    <div className="flex items-center gap-1.5 text-[10px]">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const cur = typeof settingsData.paymentNumbers?.rocket === 'object' ? settingsData.paymentNumbers.rocket : { number: settingsData.paymentNumbers?.rocket || '' };
+                          setSettingsData({
+                            ...settingsData,
+                            paymentNumbers: { ...settingsData.paymentNumbers, rocket: { ...cur, type: 'personal' } },
+                          });
+                        }}
+                        className={`px-2 py-0.5 rounded font-bold transition-all ${
+                          (typeof settingsData.paymentNumbers?.rocket === 'object' ? settingsData.paymentNumbers.rocket?.type : 'personal') !== 'merchant'
+                            ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+                            : 'text-zinc-500 hover:text-white'
+                        }`}
+                      >
+                        Personal
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const cur = typeof settingsData.paymentNumbers?.rocket === 'object' ? settingsData.paymentNumbers.rocket : { number: settingsData.paymentNumbers?.rocket || '' };
+                          setSettingsData({
+                            ...settingsData,
+                            paymentNumbers: { ...settingsData.paymentNumbers, rocket: { ...cur, type: 'merchant' } },
+                          });
+                        }}
+                        className={`px-2 py-0.5 rounded font-bold transition-all ${
+                          typeof settingsData.paymentNumbers?.rocket === 'object' && settingsData.paymentNumbers.rocket?.type === 'merchant'
+                            ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+                            : 'text-zinc-500 hover:text-white'
+                        }`}
+                      >
+                        Merchant
+                      </button>
+                    </div>
+                  </div>
                   <input
                     type="text"
                     placeholder="01XXXXXXXXX"
-                    value={settingsData.paymentNumbers?.rocket || ''}
-                    onChange={(e) =>
+                    value={typeof settingsData.paymentNumbers?.rocket === 'object' ? settingsData.paymentNumbers.rocket?.number || '' : settingsData.paymentNumbers?.rocket || ''}
+                    onChange={(e) => {
+                      const curType = typeof settingsData.paymentNumbers?.rocket === 'object' ? (settingsData.paymentNumbers.rocket?.type || 'personal') : 'personal';
                       setSettingsData({
                         ...settingsData,
-                        paymentNumbers: { ...settingsData.paymentNumbers, rocket: e.target.value },
-                      })
-                    }
-                    className="w-full px-4 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-crimson-500"
+                        paymentNumbers: { ...settingsData.paymentNumbers, rocket: { number: e.target.value.trim(), type: curType } },
+                      });
+                    }}
+                    className="w-full px-3 py-2 rounded-xl bg-carbon-900 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-purple-500"
                   />
+                  <span className="text-[10px] text-zinc-500 block">
+                    Mode: {(typeof settingsData.paymentNumbers?.rocket === 'object' && settingsData.paymentNumbers.rocket?.type === 'merchant') ? 'Make Payment (মার্চেন্ট পেমেন্ট)' : 'Send Money (পার্সোনাল)'}
+                  </span>
                 </div>
               </div>
             </div>
@@ -3549,6 +3843,25 @@ export const Dashboard: React.FC = () => {
               </div>
             )}
 
+            {/* Per-Provider Balance Badges */}
+            <div className="p-3 rounded-2xl bg-carbon-950 border border-white/5 space-y-2">
+              <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">Your API Provider Balances:</span>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="p-2 rounded-xl bg-carbon-900 border border-emerald-500/20">
+                  <span className="text-[10px] text-emerald-400 block font-bold">Mogent V2</span>
+                  <span className="font-mono text-xs font-extrabold text-white">${Number(topupInfo?.walletsByProvider?.vexorix || 0).toFixed(2)}</span>
+                </div>
+                <div className="p-2 rounded-xl bg-carbon-900 border border-crimson-500/20">
+                  <span className="text-[10px] text-crimson-400 block font-bold">Mogent V1</span>
+                  <span className="font-mono text-xs font-extrabold text-white">${Number(topupInfo?.walletsByProvider?.digitalcore || 0).toFixed(2)}</span>
+                </div>
+                <div className="p-2 rounded-xl bg-carbon-900 border border-blue-500/20">
+                  <span className="text-[10px] text-blue-400 block font-bold">Canboso</span>
+                  <span className="font-mono text-xs font-extrabold text-white">${Number(topupInfo?.walletsByProvider?.canboso || 0).toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+
             <div className="bg-carbon-900/90 p-4 rounded-2xl border border-white/10 space-y-2">
               <span className="text-[11px] text-zinc-400 block font-semibold">1. Send USDT to Platform Owner UID:</span>
               <div className="flex items-center justify-between bg-carbon-800 p-2.5 rounded-xl font-mono text-xs text-white">
@@ -3561,6 +3874,19 @@ export const Dashboard: React.FC = () => {
             </div>
 
             <form onSubmit={handleVerifyTopup} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">Select API Provider to Credit</label>
+                <select
+                  value={topupProvider}
+                  onChange={(e: any) => setTopupProvider(e.target.value)}
+                  className="w-full px-4 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white text-xs font-semibold focus:outline-none focus:border-laser-500"
+                >
+                  <option value="vexorix">🚀 Mogent V2 (Vexorix Wholesale)</option>
+                  <option value="digitalcore">📦 Mogent V1 (DigitalCore Wholesale)</option>
+                  <option value="canboso">🌐 Canboso Global</option>
+                </select>
+              </div>
+
               <div>
                 <label className="block text-xs font-semibold text-zinc-300 mb-1">Amount Sent (USDT)</label>
                 <input
@@ -3726,6 +4052,19 @@ export const Dashboard: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                  Product Description & Usage Instructions (Optional)
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="e.g. 4K Ultra HD • Instant code delivery • Replace guarantee within 24h"
+                  value={newProdDesc}
+                  onChange={(e) => setNewProdDesc(e.target.value)}
+                  className="w-full px-4 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white text-xs focus:outline-none focus:border-crimson-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">
                   Initial Inventory Stock (1 Item / Serial Key per line)
                 </label>
                 <textarea
@@ -3780,6 +4119,146 @@ export const Dashboard: React.FC = () => {
               >
                 Append to Inventory
               </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+            {/* ==========================================
+          MODAL 6: EDIT CUSTOM PRODUCT DETAILS
+         ========================================== */}
+      {editProductModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="glass-card rounded-3xl p-6 sm:p-8 max-w-lg w-full space-y-4 border border-white/10 relative">
+            <button
+              onClick={() => setEditProductModal(null)}
+              className="absolute top-5 right-5 text-zinc-400 hover:text-white"
+            >
+              <XCircle className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-2 text-laser-400 font-bold text-base">
+              <Edit3 className="w-5 h-5" /> Edit Product Details
+            </div>
+
+            <form onSubmit={handleSaveEditProduct} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">Product Title</label>
+                <input
+                  type="text"
+                  required
+                  value={editProdName}
+                  onChange={(e) => setEditProdName(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl bg-carbon-800 border border-white/10 text-white text-xs focus:outline-none focus:border-laser-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1">Category / Folder</label>
+                  <select
+                    value={editProdGroupId}
+                    onChange={(e) => setEditProdGroupId(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl bg-carbon-800 border border-white/10 text-white text-xs focus:outline-none focus:border-laser-500"
+                  >
+                    <option value="">📁 General (Unassigned)</option>
+                    {groups.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.icon || '📁'} {g.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1">Retail Selling Price ($ USD)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    value={editProdPrice}
+                    onChange={(e) => setEditProdPrice(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl bg-carbon-800 border border-white/10 text-white text-xs font-mono focus:outline-none focus:border-laser-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">Description & Instructions</label>
+                <textarea
+                  rows={3}
+                  value={editProdDesc}
+                  onChange={(e) => setEditProdDesc(e.target.value)}
+                  placeholder="Product description, instructions, or warranty info"
+                  className="w-full px-4 py-2.5 rounded-xl bg-carbon-800 border border-white/10 text-white text-xs focus:outline-none focus:border-laser-500"
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-3 rounded-xl bg-laser-600 hover:bg-laser-500 text-white font-bold text-xs shadow-md transition-all active:scale-98"
+              >
+                Save Changes
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ==========================================
+          MODAL 7: VIEW & EDIT EXISTING STOCK INVENTORY
+         ========================================== */}
+      {manageStockProduct && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="glass-card rounded-3xl p-6 sm:p-8 max-w-xl w-full space-y-4 border border-white/10 relative">
+            <button
+              onClick={() => setManageStockProduct(null)}
+              className="absolute top-5 right-5 text-zinc-400 hover:text-white"
+            >
+              <XCircle className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-2 text-emerald-400 font-bold text-base">
+              <Layers className="w-5 h-5" /> Manage & Edit Stock for "{manageStockProduct.name}"
+            </div>
+
+            <p className="text-xs text-zinc-400">
+              Edit, add, or delete your active digital items below (1 item/key per line). Previously delivered items are safely kept in order receipts.
+            </p>
+
+            <form onSubmit={handleSaveManageStock} className="space-y-4">
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="text-xs font-semibold text-zinc-300">Active Unsold Inventory Stock:</label>
+                  <span className="text-[11px] font-mono text-emerald-400 font-bold">
+                    {stockEditText.split('\n').filter((l: string) => l.trim().length > 0).length} items remaining
+                  </span>
+                </div>
+                <textarea
+                  rows={8}
+                  disabled={stockEditLoading}
+                  value={stockEditText}
+                  onChange={(e) => setStockEditText(e.target.value)}
+                  placeholder="Paste serial keys or accounts (one per line)"
+                  className="w-full px-4 py-2.5 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setManageStockProduct(null)}
+                  className="px-4 py-2.5 rounded-xl bg-carbon-800 hover:bg-carbon-700 text-zinc-300 text-xs font-bold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={stockEditLoading}
+                  className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md transition-all active:scale-98 disabled:opacity-50"
+                >
+                  {stockEditLoading ? 'Saving...' : 'Update Inventory Stock'}
+                </button>
+              </div>
             </form>
           </div>
         </div>

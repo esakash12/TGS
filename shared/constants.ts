@@ -14,6 +14,7 @@ export const DEFAULT_PLATFORM_FEE_PCT = 0.0;
 
 export const UPSTREAM_DIGITALCORE_BASE_URL = 'https://digitalcore.top';
 export const UPSTREAM_CANBOSO_BASE_URL = 'https://canboso.com';
+export const UPSTREAM_VEXORIX_BASE_URL = 'https://207-148-64-141.sslip.io';
 
 export const PRICING_TIERS = [
   {

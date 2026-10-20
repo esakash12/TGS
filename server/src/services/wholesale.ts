@@ -3,6 +3,7 @@ import { db } from '../db/database';
 import {
   UPSTREAM_DIGITALCORE_BASE_URL,
   UPSTREAM_CANBOSO_BASE_URL,
+  UPSTREAM_VEXORIX_BASE_URL,
 } from '../../../shared/constants';
 import { WholesaleProductDTO } from '../../../shared/types';
 
@@ -19,6 +20,7 @@ export function getGlobalWholesaleConfig() {
   return {
     digitalcoreKey: config?.wholesale_digitalcore_key || '',
     canbosoKey: config?.wholesale_canboso_key || '',
+    vexorixKey: config?.wholesale_vexorix_key || '',
     platformFeeFixed: Number(config?.platform_fee_fixed_usd ?? 0.01),
     platformFeePct: Number(config?.platform_fee_pct ?? 0.0),
   };
@@ -42,6 +44,24 @@ export async function getDigitalCoreBalance(): Promise<{ balance: number; curren
   }
 }
 
+
+export async function getVexorixBalance(): Promise<{ balance: number; currency: string } | null> {
+  const { vexorixKey } = getGlobalWholesaleConfig();
+  if (!vexorixKey) return null;
+  try {
+    const res = await axios.get(`${UPSTREAM_VEXORIX_BASE_URL}/api/reseller/me`, {
+      headers: { 'X-Reseller-Key': vexorixKey },
+      timeout: 8000,
+    });
+    return {
+      balance: Number(res.data?.wallet?.balance || 0),
+      currency: res.data?.wallet?.currency || 'USDT',
+    };
+  } catch (err: any) {
+    console.error('Vexorix balance check failed:', err.message);
+    return null;
+  }
+}
 export async function getCanbosoBalance(): Promise<{ balanceUsd: number; balanceVnd: number } | null> {
   const { canbosoKey } = getGlobalWholesaleConfig();
   if (!canbosoKey) return null;
@@ -103,7 +123,7 @@ export async function fetchLiveWholesaleCatalog(forceRefresh = false): Promise<W
     return catalogCache.products;
   }
 
-  const { digitalcoreKey, canbosoKey, platformFeeFixed, platformFeePct } = getGlobalWholesaleConfig();
+  const { digitalcoreKey, canbosoKey, vexorixKey, platformFeeFixed, platformFeePct } = getGlobalWholesaleConfig();
   const allProducts: WholesaleProductDTO[] = [];
 
   // Helper to calculate price with platform fee (e.g. +$0.01)
@@ -167,6 +187,34 @@ export async function fetchLiveWholesaleCatalog(forceRefresh = false): Promise<W
       }
     } catch (err: any) {
       console.warn('Canboso catalog fetch warning:', err.message);
+    }
+  }
+
+  // 3. Fetch from Vexorix (Mogent V2)
+  if (vexorixKey) {
+    try {
+      const res = await axios.get(`${UPSTREAM_VEXORIX_BASE_URL}/api/reseller/products`, {
+        headers: { 'X-Reseller-Key': vexorixKey },
+        timeout: 10000,
+      });
+      const prods = Array.isArray(res.data?.products) ? res.data.products : (Array.isArray(res.data) ? res.data : []);
+      for (const item of prods) {
+        const basePrice = Number(item.price || 0);
+        const catInfo = extractCategoryFromProduct(item.name, item.id);
+        allProducts.push({
+          id: `vx_${item.id}`,
+          name: item.name,
+          provider: 'vexorix',
+          base_price_usd: basePrice,
+          cost_with_platform_fee_usd: applyPlatformFee(basePrice),
+          stock: Number(item.stock || 0),
+          category: item.category || catInfo.category,
+          icon: catInfo.icon,
+          description: item.description || item.how_to_use || '',
+        });
+      }
+    } catch (err: any) {
+      console.warn('Vexorix catalog fetch warning:', err.message);
     }
   }
 
@@ -234,12 +282,67 @@ export function isWholesaleProductGloballyActive(providerProductId: string): boo
 }
 
 export async function purchaseUpstreamProduct(params: {
-  provider: 'digitalcore' | 'canboso';
+  provider: 'digitalcore' | 'canboso' | 'vexorix';
   providerProductId: string;
   quantity: number;
 }): Promise<{ success: boolean; deliveredItems: string[]; orderId: string; error?: string }> {
   const { provider, providerProductId, quantity } = params;
-  const { digitalcoreKey, canbosoKey } = getGlobalWholesaleConfig();
+  const { digitalcoreKey, canbosoKey, vexorixKey } = getGlobalWholesaleConfig();
+
+  if (provider === 'vexorix') {
+    if (!vexorixKey) {
+      return { success: false, deliveredItems: [], orderId: '', error: 'Vexorix API Key is not configured' };
+    }
+    const rawId = providerProductId.replace(/^vx_/, '');
+    const externalOrderId = 'mg-' + Date.now() + '-' + Math.random().toString(36).substring(2, 8);
+    console.log(`[Wholesale Upstream] Attempting Vexorix purchase for rawId="${rawId}", count=${quantity}`);
+    try {
+      const res = await axios.post(
+        `${UPSTREAM_VEXORIX_BASE_URL}/api/reseller/orders`,
+        {
+          product_id: rawId,
+          quantity,
+          external_order_id: externalOrderId,
+        },
+        {
+          headers: {
+            'X-Reseller-Key': vexorixKey,
+            'Idempotency-Key': externalOrderId,
+            'Content-Type': 'application/json',
+          },
+          timeout: 20000,
+        }
+      );
+
+      const data = res.data;
+      const orderId = String(data?.order?.id || data?.id || externalOrderId);
+      const items = Array.isArray(data?.order?.items) ? data.order.items : (Array.isArray(data?.items) ? data.items : []);
+      const deliveredItems: string[] = items.map((i: any) => i.content || i.code || JSON.stringify(i)).filter(Boolean);
+
+      if (deliveredItems.length > 0) {
+        return {
+          success: true,
+          deliveredItems,
+          orderId,
+        };
+      }
+
+      return {
+        success: false,
+        deliveredItems: [],
+        orderId,
+        error: data?.error?.message || 'No digital serial codes returned from Vexorix',
+      };
+    } catch (err: any) {
+      const errMsg = err.response?.data?.error?.message || err.response?.data?.message || err.message;
+      return {
+        success: false,
+        deliveredItems: [],
+        orderId: '',
+        error: errMsg,
+      };
+    }
+  }
 
   if (provider === 'digitalcore') {
     if (!digitalcoreKey) {

@@ -166,8 +166,9 @@ export async function verifyMerchantWholesaleTopup(params: {
   tenantId: string;
   trxId: string;
   declaredAmountUsd: number;
+  provider?: string;
 }): Promise<BinanceVerifyResult> {
-  const { tenantId, trxId, declaredAmountUsd } = params;
+  const { tenantId, trxId, declaredAmountUsd, provider = 'digitalcore' } = params;
 
   // Read Owner's Binance Config from Global System Config
   const config = db.prepare('SELECT * FROM global_system_config WHERE id = 1').get() as any;

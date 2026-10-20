@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS global_system_config (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     wholesale_digitalcore_key TEXT DEFAULT '',
     wholesale_canboso_key TEXT DEFAULT '',
+    wholesale_vexorix_key TEXT DEFAULT '',
     platform_fee_fixed_usd NUMERIC DEFAULT 0.01,
     platform_fee_pct NUMERIC DEFAULT 0.0,
     owner_binance_uid TEXT DEFAULT '',
@@ -50,6 +51,16 @@ CREATE TABLE IF NOT EXISTS tenants (
     subscription_expires_at TIMESTAMP,
     trial_ends_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 2.1 Tenant Wholesale Wallets Per Provider (Mogent V1, V2, etc.)
+CREATE TABLE IF NOT EXISTS tenant_api_wallets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    provider TEXT NOT NULL, -- digitalcore (Mogent V1), vexorix (Mogent V2), canboso
+    wallet_usd NUMERIC DEFAULT 0.0,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(tenant_id, provider)
 );
 
 -- 3. Admin Users (Platform Super Admin & Merchant Store Admins)
