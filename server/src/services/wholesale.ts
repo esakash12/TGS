@@ -45,7 +45,7 @@ export async function getDigitalCoreBalance(): Promise<{ balance: number; curren
 }
 
 
-export async function getVexorixBalance(): Promise<{ balance: number; currency: string } | null> {
+export async function getVexorixBalance(): Promise<{ balance: number; currency: string; username?: string } | null> {
   const { vexorixKey } = getGlobalWholesaleConfig();
   if (!vexorixKey) return null;
   try {
@@ -53,12 +53,22 @@ export async function getVexorixBalance(): Promise<{ balance: number; currency: 
       headers: { 'X-Reseller-Key': vexorixKey },
       timeout: 8000,
     });
+    const d = res.data || {};
+    const bal =
+      d.wallet?.balance !== undefined
+        ? Number(d.wallet.balance)
+        : d.balance !== undefined
+        ? Number(d.balance)
+        : 0;
+    const curr = d.wallet?.currency || d.currency || 'USDT';
+    const user = d.username || d.account?.username || d.email || '';
     return {
-      balance: Number(res.data?.wallet?.balance || 0),
-      currency: res.data?.wallet?.currency || 'USDT',
+      balance: bal,
+      currency: curr,
+      username: user,
     };
   } catch (err: any) {
-    console.error('Vexorix balance check failed:', err.message);
+    console.error('Vexorix balance check failed:', err.response?.data || err.message);
     return null;
   }
 }
@@ -197,24 +207,30 @@ export async function fetchLiveWholesaleCatalog(forceRefresh = false): Promise<W
         headers: { 'X-Reseller-Key': vexorixKey },
         timeout: 10000,
       });
-      const prods = Array.isArray(res.data?.products) ? res.data.products : (Array.isArray(res.data) ? res.data : []);
+      const prods = Array.isArray(res.data?.products)
+        ? res.data.products
+        : Array.isArray(res.data?.data)
+        ? res.data.data
+        : Array.isArray(res.data)
+        ? res.data
+        : [];
       for (const item of prods) {
-        const basePrice = Number(item.price || 0);
-        const catInfo = extractCategoryFromProduct(item.name, item.id);
+        const basePrice = Number(item.price ?? item.cost ?? 0);
+        const catInfo = extractCategoryFromProduct(item.name || '', item.id);
         allProducts.push({
           id: `vx_${item.id}`,
-          name: item.name,
+          name: item.name || 'Unnamed Wholesale Item',
           provider: 'vexorix',
           base_price_usd: basePrice,
           cost_with_platform_fee_usd: applyPlatformFee(basePrice),
-          stock: Number(item.stock || 0),
+          stock: Number(item.stock ?? item.inventory ?? item.available ?? 0),
           category: item.category || catInfo.category,
           icon: catInfo.icon,
           description: item.description || item.how_to_use || '',
         });
       }
     } catch (err: any) {
-      console.warn('Vexorix catalog fetch warning:', err.message);
+      console.warn('Vexorix catalog fetch warning:', err.response?.data || err.message);
     }
   }
 
@@ -231,6 +247,10 @@ export async function fetchLiveWholesaleCatalog(forceRefresh = false): Promise<W
     p.min_plan_tier = rule ? rule.min_plan_tier : 'starter';
     if (rule?.custom_name) {
       p.name = rule.custom_name;
+    }
+    if (rule?.custom_price_usd !== undefined && rule?.custom_price_usd !== null && Number(rule.custom_price_usd) > 0) {
+      p.cost_with_platform_fee_usd = Number(Number(rule.custom_price_usd).toFixed(2));
+      p.custom_price_usd = p.cost_with_platform_fee_usd;
     }
   }
 

@@ -242,6 +242,7 @@ godmodeRouter.get('/config', (_req: Request, res: Response) => {
 
   res.json({
     digitalcoreKey: config?.wholesale_digitalcore_key || '',
+    vexorixKey: config?.wholesale_vexorix_key || '',
     canbosoKey: config?.wholesale_canboso_key || '',
     platformFeeFixedUsd: Number(config?.platform_fee_fixed_usd ?? 0.01),
     platformFeePct: Number(config?.platform_fee_pct ?? 0.0),
@@ -256,6 +257,7 @@ godmodeRouter.get('/config', (_req: Request, res: Response) => {
 godmodeRouter.put('/config', (req: Request, res: Response) => {
   const {
     digitalcoreKey,
+    vexorixKey,
     canbosoKey,
     platformFeeFixedUsd,
     platformFeePct,
@@ -281,6 +283,7 @@ godmodeRouter.put('/config', (req: Request, res: Response) => {
   db.prepare(`
     UPDATE global_system_config
     SET wholesale_digitalcore_key = COALESCE(?, wholesale_digitalcore_key),
+        wholesale_vexorix_key = COALESCE(?, wholesale_vexorix_key),
         wholesale_canboso_key = COALESCE(?, wholesale_canboso_key),
         platform_fee_fixed_usd = COALESCE(?, platform_fee_fixed_usd),
         platform_fee_pct = COALESCE(?, platform_fee_pct),
@@ -293,6 +296,7 @@ godmodeRouter.put('/config', (req: Request, res: Response) => {
     WHERE id = 1
   `).run(
     digitalcoreKey !== undefined ? digitalcoreKey.trim() : null,
+    vexorixKey !== undefined ? vexorixKey.trim() : null,
     canbosoKey !== undefined ? canbosoKey.trim() : null,
     platformFeeFixedUsd !== undefined ? Number(platformFeeFixedUsd) : null,
     platformFeePct !== undefined ? Number(platformFeePct) : null,
@@ -303,6 +307,8 @@ godmodeRouter.put('/config', (req: Request, res: Response) => {
     godmodeTelegramId !== undefined ? (godmodeTelegramId ? Number(godmodeTelegramId) : null) : null,
     godmodeBotToken !== undefined ? godmodeBotToken.trim() : null
   );
+
+  invalidateWholesaleCache();
 
   res.json({ success: true, message: 'Global system configuration updated.' });
 });
@@ -331,28 +337,37 @@ godmodeRouter.get('/wholesale-catalog', async (req: Request, res: Response) => {
   }
 });
 
-// Update or set wholesale product rule (active status, minimum plan tier, custom name)
+// Update or set wholesale product rule (active status, minimum plan tier, custom name, custom price)
 godmodeRouter.put('/wholesale-rules/:id', (req: Request, res: Response) => {
   const providerProductId = req.params.id;
-  const { isActive, minPlanTier, customName } = req.body;
+  const { isActive, minPlanTier, customName, customPriceUsd } = req.body;
+
+  const parsedCustomPrice =
+    customPriceUsd !== undefined && customPriceUsd !== null && customPriceUsd !== ''
+      ? Number(customPriceUsd)
+      : null;
 
   db.prepare(`
     INSERT INTO platform_wholesale_rules (
-      provider_product_id, is_active, min_plan_tier, custom_name, updated_at
-    ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+      provider_product_id, is_active, min_plan_tier, custom_name, custom_price_usd, updated_at
+    ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     ON CONFLICT(provider_product_id) DO UPDATE SET
       is_active = COALESCE(?, is_active),
       min_plan_tier = COALESCE(?, min_plan_tier),
       custom_name = COALESCE(?, custom_name),
+      custom_price_usd = CASE WHEN ? IS NOT NULL THEN ? ELSE custom_price_usd END,
       updated_at = CURRENT_TIMESTAMP
   `).run(
     providerProductId,
     isActive !== undefined ? (isActive ? 1 : 0) : 1,
     minPlanTier || 'starter',
     customName || null,
+    parsedCustomPrice,
     isActive !== undefined ? (isActive ? 1 : 0) : null,
     minPlanTier || null,
-    customName || null
+    customName || null,
+    customPriceUsd !== undefined ? 1 : null,
+    parsedCustomPrice
   );
 
   invalidateWholesaleCache();

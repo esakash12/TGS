@@ -69,6 +69,8 @@ export const GodMode: React.FC = () => {
   const [wholesaleProviderFilter, setWholesaleProviderFilter] = useState<'all' | 'digitalcore' | 'canboso' | 'vexorix'>('all');
   const [wholesaleCategoryFilter, setWholesaleCategoryFilter] = useState('all');
   const [wholesaleLoading, setWholesaleLoading] = useState(false);
+  const [editingPriceProductId, setEditingPriceProductId] = useState<string | null>(null);
+  const [customPriceInput, setCustomPriceInput] = useState<string>('');
 
   // Subscription Plans & Coupons State
   const [plans, setPlans] = useState<any[]>([]);
@@ -357,6 +359,31 @@ export const GodMode: React.FC = () => {
       showNotice('Product Updated', `Product status set to ${newActive ? 'Enabled' : 'Disabled'}.`, 'success');
     } catch (err: any) {
       showNotice('Action Failed', err.response?.data?.error || 'Failed to toggle product status', 'danger');
+    }
+  };
+
+  // Custom Product Wholesale Price Override
+  const handleSaveCustomPrice = async (productId: string) => {
+    try {
+      const parsedPrice = customPriceInput.trim() !== '' ? parseFloat(customPriceInput) : null;
+      await axios.put(
+        `/api/godmode/wholesale-rules/${productId}`,
+        { customPriceUsd: parsedPrice },
+        getHeaders()
+      );
+      setWholesaleCatalog((prev) =>
+        prev.map((p) => {
+          if (p.id === productId) {
+            const newCost = parsedPrice && parsedPrice > 0 ? parsedPrice : p.cost_with_platform_fee_usd;
+            return { ...p, cost_with_platform_fee_usd: newCost, custom_price_usd: parsedPrice };
+          }
+          return p;
+        })
+      );
+      setEditingPriceProductId(null);
+      showNotice('Price Override Saved', parsedPrice ? `Wholesale price set to ${parsedPrice.toFixed(2)} for merchants.` : 'Reverted to default auto-calculated wholesale price.', 'success');
+    } catch (err: any) {
+      showNotice('Save Failed', err.response?.data?.error || 'Failed to update custom wholesale price', 'danger');
     }
   };
 
@@ -1262,8 +1289,55 @@ export const GodMode: React.FC = () => {
                               </span>
                             </td>
                             <td className="p-4 font-bold text-zinc-400">${p.base_price_usd.toFixed(2)}</td>
-                            <td className="p-4 font-bold text-emerald-400">
-                              ${p.cost_with_platform_fee_usd.toFixed(2)}
+                            <td className="p-4">
+                              {editingPriceProductId === p.id ? (
+                                <div className="flex items-center gap-1.5">
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    value={customPriceInput}
+                                    onChange={(e) => setCustomPriceInput(e.target.value)}
+                                    placeholder={p.cost_with_platform_fee_usd.toFixed(2)}
+                                    className="w-20 px-2 py-1 rounded bg-carbon-800 border border-laser-500 text-white font-mono text-xs focus:outline-none"
+                                    autoFocus
+                                  />
+                                  <button
+                                    onClick={() => handleSaveCustomPrice(p.id)}
+                                    className="px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px]"
+                                    title="Save custom wholesale price"
+                                  >
+                                    Save
+                                  </button>
+                                  <button
+                                    onClick={() => setEditingPriceProductId(null)}
+                                    className="px-2 py-1 rounded bg-carbon-800 hover:bg-carbon-700 text-zinc-400 font-bold text-[10px]"
+                                    title="Cancel"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-1.5 group">
+                                  <span className="font-bold text-emerald-400">
+                                    ${p.cost_with_platform_fee_usd.toFixed(2)}
+                                  </span>
+                                  {p.custom_price_usd !== undefined && p.custom_price_usd !== null && (
+                                    <span className="text-[9px] px-1 rounded bg-amber-500/20 text-amber-300 font-mono">
+                                      Custom
+                                    </span>
+                                  )}
+                                  <button
+                                    onClick={() => {
+                                      setEditingPriceProductId(p.id);
+                                      setCustomPriceInput(p.custom_price_usd ? String(p.custom_price_usd) : String(p.cost_with_platform_fee_usd.toFixed(2)));
+                                    }}
+                                    className="p-1 rounded hover:bg-white/10 text-zinc-400 hover:text-white text-[10px] transition-colors"
+                                    title="Customize / Increase wholesale price for this product"
+                                  >
+                                    ✎ Edit
+                                  </button>
+                                </div>
+                              )}
                             </td>
                             <td className="p-4">
                               <select

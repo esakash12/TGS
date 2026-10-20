@@ -192,6 +192,7 @@ export interface WholesaleProductDTO {
   description?: string;
   is_active_platform?: number; // 1 = available, 0 = globally disabled by owner
   min_plan_tier?: 'starter' | 'pro' | 'enterprise';
+  custom_price_usd?: number | null;
 }
 
 export interface BotRuntimeStatus {

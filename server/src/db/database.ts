@@ -72,6 +72,11 @@ export function initDatabase() {
       if (!configCols.includes('wholesale_vexorix_key')) db.exec("ALTER TABLE global_system_config ADD COLUMN wholesale_vexorix_key TEXT DEFAULT '';");
     }
 
+    if (tableNames.has('platform_wholesale_rules')) {
+      const ruleCols = (db.prepare("PRAGMA table_info(platform_wholesale_rules)").all() as any[]).map((c: any) => c.name);
+      if (!ruleCols.includes('custom_price_usd')) db.exec("ALTER TABLE platform_wholesale_rules ADD COLUMN custom_price_usd NUMERIC;");
+    }
+
         if (!tableNames.has('tenant_api_wallets')) {
       db.exec(`
         CREATE TABLE IF NOT EXISTS tenant_api_wallets (
