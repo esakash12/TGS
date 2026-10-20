@@ -756,6 +756,9 @@ merchantRouter.get('/settings', (req: AuthenticatedRequest, res: Response) => {
     welcomeText: tenant.welcome_text || '',
     categoriesEnabled: tenant.categories_enabled !== undefined && tenant.categories_enabled !== null ? Boolean(tenant.categories_enabled) : true,
     adminTelegramId: tenant.admin_telegram_id || '',
+    zinipayEnabled: Boolean(tenant.zinipay_enabled),
+    zinipayApiKey: tenant.zinipay_api_key_enc ? (decrypt(tenant.zinipay_api_key_enc) ? '••••••••' + decrypt(tenant.zinipay_api_key_enc).slice(-4) : '') : '',
+    hasZinipayKey: Boolean(tenant.zinipay_api_key_enc && decrypt(tenant.zinipay_api_key_enc)),
   });
 });
 
@@ -773,6 +776,8 @@ merchantRouter.put('/settings', async (req: AuthenticatedRequest, res: Response)
     welcomeText,
     categoriesEnabled,
     adminTelegramId,
+    zinipayEnabled,
+    zinipayApiKey,
   } = req.body;
 
   const current = db.prepare('SELECT * FROM tenants WHERE id = ?').get(tenantId) as any;
@@ -794,6 +799,16 @@ merchantRouter.put('/settings', async (req: AuthenticatedRequest, res: Response)
     newBinanceEnc = encrypt(JSON.stringify(merged));
   }
 
+  // Handle ZiniPay Config Encryption
+  let newZinipayEnc = current.zinipay_api_key_enc;
+  if (zinipayApiKey !== undefined) {
+    if (zinipayApiKey && !zinipayApiKey.includes('••••')) {
+      newZinipayEnc = encrypt(zinipayApiKey.trim());
+    } else if (zinipayApiKey === '') {
+      newZinipayEnc = '';
+    }
+  }
+
   // Update DB
   db.prepare(`
     UPDATE tenants
@@ -809,7 +824,9 @@ merchantRouter.put('/settings', async (req: AuthenticatedRequest, res: Response)
         support_text = COALESCE(?, support_text),
         welcome_text = COALESCE(?, welcome_text),
         categories_enabled = COALESCE(?, categories_enabled),
-        admin_telegram_id = COALESCE(?, admin_telegram_id)
+        admin_telegram_id = COALESCE(?, admin_telegram_id),
+        zinipay_enabled = COALESCE(?, zinipay_enabled),
+        zinipay_api_key_enc = COALESCE(?, zinipay_api_key_enc)
     WHERE id = ?
   `).run(
     storeName,
@@ -825,6 +842,8 @@ merchantRouter.put('/settings', async (req: AuthenticatedRequest, res: Response)
     welcomeText !== undefined ? String(welcomeText) : null,
     categoriesEnabled !== undefined ? (categoriesEnabled ? 1 : 0) : null,
     adminTelegramId !== undefined ? (adminTelegramId ? Number(adminTelegramId) : null) : null,
+    zinipayEnabled !== undefined ? (zinipayEnabled ? 1 : 0) : null,
+    newZinipayEnc !== undefined ? newZinipayEnc : null,
     tenantId
   );
 

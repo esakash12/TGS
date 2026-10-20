@@ -6,6 +6,7 @@ import { initDatabase, db } from './db/database';
 import { authRouter } from './routes/auth.routes';
 import { merchantRouter } from './routes/merchant.routes';
 import { godmodeRouter } from './routes/godmode.routes';
+import { zinipayRouter } from './routes/zinipay.routes';
 import { botRegistry } from '../../bot/src/registry';
 import { fetchLiveWholesaleCatalog, syncLivePricesForAllTenants } from './services/wholesale';
 
@@ -25,6 +26,7 @@ initDatabase();
 app.use('/api/auth', authRouter);
 app.use('/api/merchant', merchantRouter);
 app.use('/api/godmode', godmodeRouter);
+app.use('/api/zinipay', zinipayRouter);
 
 // Public Plans Endpoint (for Landing Page & Pricing)
 app.get('/api/public/plans', (_req: Request, res: Response) => {

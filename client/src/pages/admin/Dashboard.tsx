@@ -64,7 +64,7 @@ export const Dashboard: React.FC = () => {
     setDialog({ type: 'prompt', tone: 'info', title, message, inputLabel, defaultValue, onConfirm });
   };
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'groups' | 'custom_products' | 'wholesale' | 'store_products' | 'deposits' | 'customers' | 'bot_editor' | 'subscription' | 'settings'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'groups' | 'custom_products' | 'wholesale' | 'store_products' | 'deposits' | 'customers' | 'bot_editor' | 'payments' | 'subscription' | 'settings'>('overview');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [overview, setOverview] = useState<any>(null);
   const [products, setProducts] = useState<any[]>([]);
@@ -183,6 +183,9 @@ export const Dashboard: React.FC = () => {
     usdToBdtRate: 125,
     paymentNumbers: { bkash: '', nagad: '', rocket: '' },
     binanceConfig: { uid: '', apiKey: '', hasSecret: false },
+    zinipayEnabled: false,
+    zinipayApiKey: '',
+    hasZinipayKey: false,
     autoMarkup: { enabled: true, pct: 20, fixedUsd: 0.50 },
     welcomeText: '',
     aboutText: '',
@@ -384,7 +387,7 @@ export const Dashboard: React.FC = () => {
   useEffect(() => {
     if (activeTab === 'wholesale') loadWholesaleCatalog();
     if (activeTab === 'groups') loadGroups();
-    if (activeTab === 'settings') loadSettings();
+    if (activeTab === 'settings' || activeTab === 'payments') loadSettings();
     if (activeTab === 'customers') loadCustomers();
     if (activeTab === 'bot_editor') loadBotProfile();
     if (activeTab === 'subscription' || activeTab === 'overview') loadSubscriptionData();
@@ -873,6 +876,8 @@ export const Dashboard: React.FC = () => {
           supportText: settingsData.supportText,
           categoriesEnabled: settingsData.categoriesEnabled,
           adminTelegramId: settingsData.adminTelegramId,
+          zinipayEnabled: settingsData.zinipayEnabled,
+          zinipayApiKey: settingsData.zinipayApiKey,
         },
         authHeaders
       );
@@ -1137,6 +1142,21 @@ export const Dashboard: React.FC = () => {
             </button>
 
             <button
+              onClick={() => { setActiveTab('payments'); setMobileSidebarOpen(false); }}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all text-left ${
+                activeTab === 'payments'
+                  ? 'bg-gradient-to-r from-emerald-600/30 to-laser-600/30 text-emerald-300 border border-emerald-500/40 shadow-sm'
+                  : 'text-zinc-400 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Wallet className="w-4 h-4 text-emerald-400" />
+                <span>Payment Gateways</span>
+              </div>
+              <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold">Auto</span>
+            </button>
+
+            <button
               onClick={() => { setActiveTab('settings'); setMobileSidebarOpen(false); }}
               className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all text-left ${
                 activeTab === 'settings'
@@ -1146,7 +1166,7 @@ export const Dashboard: React.FC = () => {
             >
               <div className="flex items-center gap-2.5">
                 <Settings className="w-4 h-4" />
-                <span>Settings & Bot Token</span>
+                <span>Store Settings</span>
               </div>
             </button>
 
@@ -2522,14 +2542,279 @@ export const Dashboard: React.FC = () => {
         )}
 
         {/* ==========================================
-            TAB 7: STORE SETTINGS & BOT TOKEN
+            TAB: PAYMENT GATEWAYS & METHODS (Dedicated Clean Hub)
+           ========================================== */}
+        {activeTab === 'payments' && (
+          <form onSubmit={handleSaveSettings} className="space-y-6 max-w-4xl">
+            <div className="flex justify-between items-center">
+              <div>
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <Wallet className="w-5 h-5 text-emerald-400" /> Payment Gateways & Receiving Methods
+                </h3>
+                <p className="text-xs text-zinc-400">
+                  Manage automated payment gateways (ZiniPay, Binance Pay) and manual mobile banking numbers for customer wallet recharges.
+                </p>
+              </div>
+              {settingsSaved && (
+                <span className="text-xs text-emerald-400 font-bold flex items-center gap-1">
+                  <CheckCircle className="w-4 h-4" /> Changes Saved!
+                </span>
+              )}
+            </div>
+
+            {/* 1. ZINIPAY AUTOMATED PAYMENT GATEWAY CARD */}
+            <div className="glass-card rounded-2xl p-6 border border-emerald-500/30 bg-gradient-to-br from-emerald-950/20 to-carbon-900 space-y-5 relative overflow-hidden">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center font-bold text-emerald-400 text-lg">
+                    ⚡
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm font-bold text-white tracking-wide">ZiniPay Hosted Gateway (Auto-Recharge)</h4>
+                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-bold border ${
+                        settingsData.zinipayEnabled && settingsData.hasZinipayKey
+                          ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
+                          : 'bg-zinc-800 text-zinc-400 border-white/10'
+                      }`}>
+                        {settingsData.zinipayEnabled && settingsData.hasZinipayKey ? 'ACTIVE' : 'INACTIVE'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-zinc-400 mt-0.5">
+                      Accept automated bKash, Nagad, Rocket, Upay & Card payments with instant 24/7 wallet credit.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 self-start sm:self-auto">
+                  <label className="text-xs font-semibold text-zinc-300">Enable ZiniPay:</label>
+                  <button
+                    type="button"
+                    onClick={() => setSettingsData({ ...settingsData, zinipayEnabled: !settingsData.zinipayEnabled })}
+                    className={`p-1.5 rounded-xl border transition-all flex items-center gap-1.5 text-xs font-bold ${
+                      settingsData.zinipayEnabled
+                        ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400'
+                        : 'bg-carbon-800 border-white/10 text-zinc-400'
+                    }`}
+                  >
+                    {settingsData.zinipayEnabled ? <ToggleRight className="w-5 h-5 text-emerald-400" /> : <ToggleLeft className="w-5 h-5 text-zinc-500" />}
+                    <span>{settingsData.zinipayEnabled ? 'Enabled' : 'Disabled'}</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-4 pt-2 border-t border-white/5">
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-xs font-semibold text-zinc-300 flex items-center gap-1">
+                      <Key className="w-3.5 h-3.5 text-emerald-400" /> ZiniPay API Key (<code>zini-api-key</code>)
+                    </label>
+                    <a
+                      href="https://zinipay.com"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[11px] text-emerald-400 hover:underline flex items-center gap-1 font-semibold"
+                    >
+                      <span>Get API Key from ZiniPay Dashboard</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder={settingsData.hasZinipayKey ? '•••••••• (Configured - enter new key to update)' : 'Paste your ZiniPay API Key here'}
+                    value={settingsData.zinipayApiKey?.includes('••••') ? '' : settingsData.zinipayApiKey || ''}
+                    onChange={(e) => setSettingsData({ ...settingsData, zinipayApiKey: e.target.value.trim() })}
+                    className="w-full px-4 py-2.5 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-emerald-500"
+                  />
+                  <span className="text-[10px] text-zinc-500 mt-1 block">
+                    Your API key is securely encrypted using AES-256-GCM.
+                  </span>
+                </div>
+
+                {/* Webhook & IPN Information Box */}
+                <div className="p-3.5 rounded-xl bg-carbon-900 border border-white/10 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-zinc-300 flex items-center gap-1.5">
+                      <Shield className="w-3.5 h-3.5 text-emerald-400" /> Webhook Callback URL
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const webhookUrl = `${window.location.origin}/api/zinipay/webhook`;
+                        navigator.clipboard.writeText(webhookUrl);
+                        showNotice('Copied', 'Webhook URL copied to clipboard!', 'success');
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-carbon-800 hover:bg-carbon-700 text-[11px] font-mono text-zinc-300"
+                    >
+                      Copy URL
+                    </button>
+                  </div>
+                  <div className="font-mono text-xs text-emerald-400/90 bg-carbon-950 p-2 rounded-lg border border-white/5 break-all">
+                    {window.location.origin}/api/zinipay/webhook
+                  </div>
+                  <p className="text-[10px] text-zinc-500 leading-relaxed">
+                    Set this as your Webhook URL in your ZiniPay Merchant portal (Settings &rarr; API & Webhooks) so customer deposits auto-credit instantly even if they close their browser.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* 2. BINANCE PAY AUTOMATED GATEWAY CARD */}
+            <div className="glass-card rounded-2xl p-6 border border-yellow-500/30 bg-gradient-to-br from-yellow-950/10 to-carbon-900 space-y-5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-yellow-500/20 border border-yellow-500/40 flex items-center justify-center font-bold text-yellow-400 text-lg">
+                    🟡
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-white tracking-wide">Binance Pay (Automated USDT Recharges)</h4>
+                    <p className="text-xs text-zinc-400 mt-0.5">
+                      Instant zero-fee USDT deposits verified directly via Binance SAPI.
+                    </p>
+                  </div>
+                </div>
+                <span className="px-2.5 py-1 rounded-full text-[10px] font-mono font-bold bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">
+                  {settingsData.binanceConfig?.uid ? 'CONFIGURED' : 'OPTIONAL'}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t border-white/5">
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                    Your Binance Pay UID
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 123456789"
+                    value={settingsData.binanceConfig?.uid || ''}
+                    onChange={(e) =>
+                      setSettingsData({
+                        ...settingsData,
+                        binanceConfig: { ...settingsData.binanceConfig, uid: e.target.value.trim() },
+                      })
+                    }
+                    className="w-full px-4 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-yellow-500"
+                  />
+                  <span className="text-[10px] text-zinc-500 mt-1 block">Binance App &rarr; Pay &rarr; My Pay ID</span>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                    Binance API Key
+                  </label>
+                  <input
+                    type="text"
+                    placeholder={settingsData.binanceConfig?.apiKey || 'Paste API Key'}
+                    value={settingsData.binanceConfig?.apiKey?.includes('••••') ? '' : settingsData.binanceConfig?.apiKey || ''}
+                    onChange={(e) =>
+                      setSettingsData({
+                        ...settingsData,
+                        binanceConfig: { ...settingsData.binanceConfig, apiKey: e.target.value.trim() },
+                      })
+                    }
+                    className="w-full px-4 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-yellow-500"
+                  />
+                  <span className="text-[10px] text-zinc-500 mt-1 block">API Key with Pay Query permission</span>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                    Binance API Secret
+                  </label>
+                  <input
+                    type="password"
+                    placeholder={settingsData.binanceConfig?.hasSecret ? '•••••••• (Secret Configured)' : 'Paste API Secret'}
+                    value={settingsData.binanceConfig?.apiSecret || ''}
+                    onChange={(e) =>
+                      setSettingsData({
+                        ...settingsData,
+                        binanceConfig: { ...settingsData.binanceConfig, apiSecret: e.target.value.trim() },
+                      })
+                    }
+                    className="w-full px-4 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-yellow-500"
+                  />
+                  <span className="text-[10px] text-zinc-500 mt-1 block">Encrypted with AES-256 in database</span>
+                </div>
+              </div>
+            </div>
+
+            {/* 3. MANUAL MOBILE BANKING NUMBERS (bKash/Nagad/Rocket) */}
+            <div className="glass-card rounded-2xl p-6 border border-white/10 space-y-4">
+              <div>
+                <h4 className="text-xs font-mono font-bold text-crimson-400 uppercase">3. Manual Payment Numbers (Personal Send Money)</h4>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  Customers who prefer manual offline payment will send money to these numbers and enter their Transaction ID for your approval.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1">bKash Personal Number</label>
+                  <input
+                    type="text"
+                    placeholder="01XXXXXXXXX"
+                    value={settingsData.paymentNumbers?.bkash || ''}
+                    onChange={(e) =>
+                      setSettingsData({
+                        ...settingsData,
+                        paymentNumbers: { ...settingsData.paymentNumbers, bkash: e.target.value },
+                      })
+                    }
+                    className="w-full px-4 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-crimson-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1">Nagad Personal Number</label>
+                  <input
+                    type="text"
+                    placeholder="01XXXXXXXXX"
+                    value={settingsData.paymentNumbers?.nagad || ''}
+                    onChange={(e) =>
+                      setSettingsData({
+                        ...settingsData,
+                        paymentNumbers: { ...settingsData.paymentNumbers, nagad: e.target.value },
+                      })
+                    }
+                    className="w-full px-4 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-crimson-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1">Rocket Personal Number</label>
+                  <input
+                    type="text"
+                    placeholder="01XXXXXXXXX"
+                    value={settingsData.paymentNumbers?.rocket || ''}
+                    onChange={(e) =>
+                      setSettingsData({
+                        ...settingsData,
+                        paymentNumbers: { ...settingsData.paymentNumbers, rocket: e.target.value },
+                      })
+                    }
+                    className="w-full px-4 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-crimson-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              className="px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-500/30 transition-all flex items-center gap-2"
+            >
+              <Check className="w-4 h-4" />
+              <span>Save Payment Settings</span>
+            </button>
+          </form>
+        )}
+
+        {/* ==========================================
+            TAB 7: STORE SETTINGS & BOT TOKEN (Cleaned Up)
            ========================================== */}
         {activeTab === 'settings' && (
           <form onSubmit={handleSaveSettings} className="space-y-6 max-w-4xl">
             <div className="flex justify-between items-center">
               <div>
-                <h3 className="text-lg font-bold text-white">Store & Payment Engine Settings</h3>
-                <p className="text-xs text-zinc-400">Configure your Telegram bot token, exchange rates, and receiving payment accounts.</p>
+                <h3 className="text-lg font-bold text-white">Store & Bot Token Settings</h3>
+                <p className="text-xs text-zinc-400">Configure your Telegram bot token, exchange rate, and store text information.</p>
               </div>
               {settingsSaved && (
                 <span className="text-xs text-emerald-400 font-bold flex items-center gap-1">
@@ -2607,10 +2892,28 @@ export const Dashboard: React.FC = () => {
               </div>
             </div>
 
+            {/* Currency & Exchange Rate Card */}
+            <div className="glass-card rounded-2xl p-6 border border-white/10 space-y-4">
+              <h4 className="text-xs font-mono font-bold text-emerald-400 uppercase">2. BDT / USD Exchange Rate</h4>
+              <p className="text-xs text-zinc-400">
+                Base ledger is 100% USD ($). Customers paying via bKash/Nagad see conversions using this rate.
+              </p>
+              <div className="max-w-xs">
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">$1.00 USD Equivalent in BDT (৳)</label>
+                <input
+                  type="number"
+                  step="0.5"
+                  value={settingsData.usdToBdtRate}
+                  onChange={(e) => setSettingsData({ ...settingsData, usdToBdtRate: parseFloat(e.target.value) })}
+                  className="w-full px-4 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+            </div>
+
             {/* Bot Content & Branding Customization Card */}
             <div className="glass-card rounded-2xl p-6 border border-white/10 space-y-4">
               <div>
-                <h4 className="text-xs font-mono font-bold text-purple-400 uppercase">2. Bot Content & Branding Customization</h4>
+                <h4 className="text-xs font-mono font-bold text-purple-400 uppercase">3. Bot Content & Branding Customization</h4>
                 <p className="text-xs text-zinc-400 mt-0.5">
                   Customize the messages and information your customers see inside your Telegram bot.
                 </p>
@@ -2657,152 +2960,6 @@ export const Dashboard: React.FC = () => {
                     className="w-full px-4 py-2.5 rounded-xl bg-carbon-800 border border-white/10 text-white text-xs focus:outline-none focus:border-purple-500 resize-none"
                   />
                   <span className="text-[10px] text-zinc-500 mt-0.5 block">Custom contact information displayed when customer taps the "🗣️ Support" button in your bot.</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Currency & Exchange Rate Card */}
-            <div className="glass-card rounded-2xl p-6 border border-white/10 space-y-4">
-              <h4 className="text-xs font-mono font-bold text-emerald-400 uppercase">3. BDT / USD Exchange Rate</h4>
-              <p className="text-xs text-zinc-400">
-                Base ledger is 100% USD ($). Customers paying via bKash/Nagad see conversions using this rate.
-              </p>
-              <div className="max-w-xs">
-                <label className="block text-xs font-semibold text-zinc-300 mb-1">$1.00 USD Equivalent in BDT (৳)</label>
-                <input
-                  type="number"
-                  step="0.5"
-                  value={settingsData.usdToBdtRate}
-                  onChange={(e) => setSettingsData({ ...settingsData, usdToBdtRate: parseFloat(e.target.value) })}
-                  className="w-full px-4 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-            </div>
-
-            {/* Local Mobile Banking Numbers (bKash/Nagad/Rocket) */}
-            <div className="glass-card rounded-2xl p-6 border border-white/10 space-y-4">
-              <h4 className="text-xs font-mono font-bold text-crimson-400 uppercase">4. Local Payment Numbers (Manual Verify)</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-300 mb-1">bKash Personal</label>
-                  <input
-                    type="text"
-                    placeholder="01XXXXXXXXX"
-                    value={settingsData.paymentNumbers?.bkash || ''}
-                    onChange={(e) =>
-                      setSettingsData({
-                        ...settingsData,
-                        paymentNumbers: { ...settingsData.paymentNumbers, bkash: e.target.value },
-                      })
-                    }
-                    className="w-full px-4 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-crimson-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-300 mb-1">Nagad Personal</label>
-                  <input
-                    type="text"
-                    placeholder="01XXXXXXXXX"
-                    value={settingsData.paymentNumbers?.nagad || ''}
-                    onChange={(e) =>
-                      setSettingsData({
-                        ...settingsData,
-                        paymentNumbers: { ...settingsData.paymentNumbers, nagad: e.target.value },
-                      })
-                    }
-                    className="w-full px-4 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-crimson-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-300 mb-1">Rocket Personal</label>
-                  <input
-                    type="text"
-                    placeholder="01XXXXXXXXX"
-                    value={settingsData.paymentNumbers?.rocket || ''}
-                    onChange={(e) =>
-                      setSettingsData({
-                        ...settingsData,
-                        paymentNumbers: { ...settingsData.paymentNumbers, rocket: e.target.value },
-                      })
-                    }
-                    className="w-full px-4 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-crimson-500"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Merchant's Own Automated Binance Pay Setup */}
-            <div className="glass-card rounded-2xl p-6 border border-white/10 space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="text-xs font-mono font-bold text-yellow-400 uppercase flex items-center gap-1.5">
-                    <span>🟡</span> 5. Your Merchant Binance Pay (Automated Instant Deposits)
-                  </h4>
-                  <p className="text-xs text-zinc-400 mt-1">
-                    Allow your Telegram bot customers to deposit USDT directly to your personal Binance account with instant, zero-touch verification via Binance SAPI.
-                  </p>
-                </div>
-                <span className="px-2.5 py-1 rounded-full text-[10px] font-mono font-bold bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">
-                  {settingsData.binanceConfig?.uid ? 'CONFIGURED' : 'OPTIONAL'}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-300 mb-1">
-                    Your Binance Pay UID <span className="text-crimson-400">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 123456789"
-                    value={settingsData.binanceConfig?.uid || ''}
-                    onChange={(e) =>
-                      setSettingsData({
-                        ...settingsData,
-                        binanceConfig: { ...settingsData.binanceConfig, uid: e.target.value.trim() },
-                      })
-                    }
-                    className="w-full px-4 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-yellow-500"
-                  />
-                  <span className="text-[10px] text-zinc-500 mt-1 block">Found in Binance App &rarr; Pay &rarr; My Pay ID</span>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-300 mb-1">
-                    Binance API Key
-                  </label>
-                  <input
-                    type="text"
-                    placeholder={settingsData.binanceConfig?.apiKey || 'Paste API Key'}
-                    value={settingsData.binanceConfig?.apiKey?.includes('••••') ? '' : settingsData.binanceConfig?.apiKey || ''}
-                    onChange={(e) =>
-                      setSettingsData({
-                        ...settingsData,
-                        binanceConfig: { ...settingsData.binanceConfig, apiKey: e.target.value.trim() },
-                      })
-                    }
-                    className="w-full px-4 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-yellow-500"
-                  />
-                  <span className="text-[10px] text-zinc-500 mt-1 block">API Key with Pay Query permission</span>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-300 mb-1">
-                    Binance API Secret
-                  </label>
-                  <input
-                    type="password"
-                    placeholder={settingsData.binanceConfig?.hasSecret ? '•••••••• (Secret Configured)' : 'Paste API Secret'}
-                    value={settingsData.binanceConfig?.apiSecret || ''}
-                    onChange={(e) =>
-                      setSettingsData({
-                        ...settingsData,
-                        binanceConfig: { ...settingsData.binanceConfig, apiSecret: e.target.value.trim() },
-                      })
-                    }
-                    className="w-full px-4 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-yellow-500"
-                  />
-                  <span className="text-[10px] text-zinc-500 mt-1 block">Encrypted with AES-256 in database</span>
                 </div>
               </div>
             </div>

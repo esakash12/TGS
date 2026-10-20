@@ -4,12 +4,13 @@ import { processCustomerPurchase } from '../../server/src/services/inventory';
 import { verifyCustomerRetailBinanceDeposit } from '../../server/src/services/binance';
 import { decrypt } from '../../server/src/services/crypto';
 import { getCachedProductLiveStock } from '../../server/src/services/wholesale';
+import { createZinipayInvoice } from '../../server/src/services/zinipay';
 
 // In-memory conversation state for multi-step prompts (deposits & custom qty)
 interface UserConversationState {
-  step: 'AWAITING_LOCAL_USD_AMOUNT' | 'AWAITING_BDT_AMOUNT' | 'AWAITING_LOCAL_TRX_ID' | 'AWAITING_BINANCE_TX_ID' | 'AWAITING_BINANCE_AMOUNT' | 'AWAITING_CUSTOM_QTY';
+  step: 'AWAITING_LOCAL_USD_AMOUNT' | 'AWAITING_BDT_AMOUNT' | 'AWAITING_LOCAL_TRX_ID' | 'AWAITING_BINANCE_TX_ID' | 'AWAITING_BINANCE_AMOUNT' | 'AWAITING_CUSTOM_QTY' | 'AWAITING_ZINIPAY_AMOUNT';
   productId?: string;
-  method?: 'bKash' | 'Nagad' | 'Rocket' | 'Binance';
+  method?: 'bKash' | 'Nagad' | 'Rocket' | 'Binance' | 'ZiniPay';
   amountBdt?: number;
   amountUsd?: number;
   updatedAt: number;
@@ -677,24 +678,37 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
     const customer = getOrCreateCustomer(ctx.from);
     const rate = Number(tenant?.usd_to_bdt_rate || 125.0);
 
-    const keyboard = new InlineKeyboard()
+    const isZinipayActive = Boolean(tenant?.zinipay_enabled && tenant?.zinipay_api_key_enc && decrypt(tenant.zinipay_api_key_enc));
+
+    const keyboard = new InlineKeyboard();
+    if (isZinipayActive) {
+      keyboard.text('⚡ Instant bKash/Nagad/Rocket (ZiniPay)', 'dep_zinipay').row();
+    }
+    keyboard
       .text('🟡 Binance Pay (USDT Auto)', 'dep_binance').row()
       .text('📱 bKash (বিকাশ)', 'dep_bkash')
       .text('📱 Nagad (নগদ)', 'dep_nagad').row()
       .text('📱 Rocket (রকেট)', 'dep_rocket').row()
       .text('⬅️ Back', 'nav_start');
 
+    let methodsList = '';
+    if (isZinipayActive) {
+      methodsList += '• ⚡ <b>ZiniPay:</b> Instant automated checkout (bKash/Nagad/Rocket)\n';
+    }
+    methodsList +=
+      '• 🟡 <b>Binance Pay:</b> Instant 0% fee auto-credit (USDT)\n' +
+      '• 📱 <b>bKash:</b> Personal Send Money\n' +
+      '• 📱 <b>Nagad:</b> Personal Send Money\n' +
+      '• 📱 <b>Rocket:</b> Personal Send Money\n\n';
+
     const text =
       `💰 <b>Deposit & Recharge Wallet:</b>\n` +
       `━━━━━━━━━━━━━━━━━━\n` +
-      `👛 Your Balance: <b>$${Number(customer.balance_usd || 0).toFixed(2)} USD</b>\n` +
+      `👛 Your Balance: <b>${Number(customer.balance_usd || 0).toFixed(2)} USD</b>\n` +
       `💱 Exchange Rate: <b>$1.00 USD = ${rate.toFixed(0)} BDT</b>\n` +
       `━━━━━━━━━━━━━━━━━━\n` +
       `<b>Available Payment Methods:</b>\n` +
-      `• 🟡 <b>Binance Pay:</b> Instant 0% fee auto-credit (USDT)\n` +
-      `• 📱 <b>bKash:</b> Personal Send Money\n` +
-      `• 📱 <b>Nagad:</b> Personal Send Money\n` +
-      `• 📱 <b>Rocket:</b> Personal Send Money\n\n` +
+      methodsList +
       `Select your payment method below:`;
 
     if (ctx.callbackQuery) {
@@ -714,10 +728,41 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
   bot.command('deposit', showDepositMenu);
 
   // Handle Deposit Selection
-  bot.callbackQuery(/^dep_(bkash|nagad|rocket|binance)$/, async (ctx) => {
+  bot.callbackQuery(/^dep_(bkash|nagad|rocket|binance|zinipay)$/, async (ctx) => {
     const methodKey = ctx.match[1];
     const tenant = getTenant();
     const rate = Number(tenant?.usd_to_bdt_rate || 125.0);
+
+    // Automated ZiniPay Hosted Checkout
+    if (methodKey === 'zinipay') {
+      const apiKey = tenant?.zinipay_api_key_enc ? decrypt(tenant.zinipay_api_key_enc) : '';
+      if (!apiKey || !tenant?.zinipay_enabled) {
+        return ctx.answerCallbackQuery({
+          text: '⚠️ ZiniPay Gateway is currently unavailable for this store. Please try manual bKash/Nagad.',
+          show_alert: true,
+        });
+      }
+
+      userStates.set(ctx.from.id, {
+        step: 'AWAITING_ZINIPAY_AMOUNT',
+        method: 'ZiniPay',
+        updatedAt: Date.now(),
+      });
+
+      const ziniPrompt =
+        `⚡ <b>ZiniPay Automated Payment</b>\n` +
+        `━━━━━━━━━━━━━━━━━━\n` +
+        `Pay instantly using bKash, Nagad, Rocket, Upay or Cards with auto-confirmation.\n\n` +
+        `💱 <b>Rate:</b> $1.00 USD = ${rate.toFixed(0)} BDT\n\n` +
+        `👉 <b>How much USD do you want to deposit?</b>\n` +
+        `Enter USD amount (e.g. 1, 2, 5, or 10):`;
+
+      await ctx.editMessageText(ziniPrompt, {
+        parse_mode: 'HTML',
+        reply_markup: new InlineKeyboard().text('❌ Cancel', 'nav_deposit'),
+      });
+      return ctx.answerCallbackQuery();
+    }
 
     // Automated Binance Pay
     if (methodKey === 'binance') {
@@ -933,6 +978,82 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
         });
       }
       return;
+    }
+
+    // STEP Z: ZiniPay USD Amount
+    if (state.step === 'AWAITING_ZINIPAY_AMOUNT') {
+      const usd = parseFloat(text);
+      if (isNaN(usd) || usd <= 0) {
+        return ctx.reply('❌ Please enter a valid number for USD (e.g. 2, 5, or 10):');
+      }
+
+      const apiKey = tenant?.zinipay_api_key_enc ? decrypt(tenant.zinipay_api_key_enc) : '';
+      if (!apiKey) {
+        userStates.delete(ctx.from.id);
+        return ctx.reply('⚠️ ZiniPay Gateway configuration missing. Please contact store support.');
+      }
+
+      const calculatedBdt = Math.round(usd * rate);
+      const amountUsd = Number(usd.toFixed(2));
+      userStates.delete(ctx.from.id);
+
+      await ctx.reply('⚡ <i>Generating your secure ZiniPay payment checkout link...</i>', { parse_mode: 'HTML' });
+
+      // Host domain for webhooks & callbacks
+      const host = process.env.BASE_URL || 'https://bot.mogent.tech';
+      const redirectUrl = `${host}/api/zinipay/callback`;
+      const webhookUrl = `${host}/api/zinipay/webhook`;
+
+      const invoiceResult = await createZinipayInvoice({
+        apiKey,
+        amountBdt: calculatedBdt,
+        customerName: ctx.from.first_name || 'Customer',
+        redirectUrl,
+        webhookUrl,
+        metadata: {
+          tenantId,
+          telegramId: ctx.from.id,
+          amountUsd,
+          amountBdt: calculatedBdt,
+        },
+      });
+
+      if (!invoiceResult.success || !invoiceResult.paymentUrl) {
+        return ctx.reply(`❌ <b>Could not create payment invoice:</b>\n${invoiceResult.error || 'Please try again later'}`, { parse_mode: 'HTML' });
+      }
+
+      const invoiceId = invoiceResult.invoiceId || 'INV_' + Date.now();
+
+      // Record pending deposit
+      try {
+        db.prepare(`
+          INSERT INTO deposits (
+            tenant_id, customer_telegram_id, customer_username, method, amount_bdt, amount_usd, trx_id, status
+          ) VALUES (?, ?, ?, 'ZiniPay', ?, ?, ?, 'PENDING')
+        `).run(tenantId, ctx.from.id, ctx.from.username || null, calculatedBdt, amountUsd, invoiceId);
+      } catch (err: any) {
+        console.error('[Bot Engine] Error recording pending ZiniPay deposit:', err);
+      }
+
+      const checkoutKeyboard = new InlineKeyboard()
+        .url('💳 Click Here to Pay via bKash/Nagad/Rocket', invoiceResult.paymentUrl)
+        .row()
+        .text('⬅️ Back to Menu', 'nav_start');
+
+      const checkoutMsg =
+        `💳 <b>ZiniPay Payment Checkout Created!</b>\n` +
+        `━━━━━━━━━━━━━━━━━━\n` +
+        `💵 Amount: <b>${amountUsd.toFixed(2)} USD</b>\n` +
+        `৳ Total Payable: <b>${calculatedBdt} BDT</b>\n` +
+        `🧾 Invoice ID: <code>${invoiceId}</code>\n` +
+        `━━━━━━━━━━━━━━━━━━\n` +
+        `👉 Click the button below to complete payment via bKash, Nagad, Rocket, or Cards.\n\n` +
+        `<i>Your balance will be credited instantly upon successful payment.</i>`;
+
+      return ctx.reply(checkoutMsg, {
+        parse_mode: 'HTML',
+        reply_markup: checkoutKeyboard,
+      });
     }
 
     // STEP D: Binance Amount

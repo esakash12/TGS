@@ -42,6 +42,8 @@ CREATE TABLE IF NOT EXISTS tenants (
     welcome_text TEXT,
     categories_enabled INTEGER DEFAULT 1, -- 1 = Categories active (folders), 0 = Flat product list (no categories)
     admin_telegram_id INTEGER, -- Merchant's personal Telegram ID for instant deposit approval & notifications
+    zinipay_api_key_enc TEXT DEFAULT '', -- Encrypted ZiniPay API key
+    zinipay_enabled INTEGER DEFAULT 0, -- 1 = Enabled, 0 = Disabled
     subscription_cycle TEXT DEFAULT 'MONTHLY', -- MONTHLY, YEARLY, TRIAL
     subscription_status TEXT DEFAULT 'TRIAL', -- TRIAL, ACTIVE, GRACE, EXPIRED, SUSPENDED
     subscription_started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

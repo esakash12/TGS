@@ -44,6 +44,8 @@ export function initDatabase() {
       if (!tenantCols.includes('welcome_text')) db.exec("ALTER TABLE tenants ADD COLUMN welcome_text TEXT;");
       if (!tenantCols.includes('categories_enabled')) db.exec("ALTER TABLE tenants ADD COLUMN categories_enabled INTEGER DEFAULT 1;");
       if (!tenantCols.includes('admin_telegram_id')) db.exec("ALTER TABLE tenants ADD COLUMN admin_telegram_id INTEGER;");
+      if (!tenantCols.includes('zinipay_api_key_enc')) db.exec("ALTER TABLE tenants ADD COLUMN zinipay_api_key_enc TEXT DEFAULT '';");
+      if (!tenantCols.includes('zinipay_enabled')) db.exec("ALTER TABLE tenants ADD COLUMN zinipay_enabled INTEGER DEFAULT 0;");
       if (!tenantCols.includes('subscription_cycle')) db.exec("ALTER TABLE tenants ADD COLUMN subscription_cycle TEXT DEFAULT 'MONTHLY';");
       if (!tenantCols.includes('subscription_status')) db.exec("ALTER TABLE tenants ADD COLUMN subscription_status TEXT DEFAULT 'EXPIRED';");
       if (!tenantCols.includes('subscription_started_at')) {
