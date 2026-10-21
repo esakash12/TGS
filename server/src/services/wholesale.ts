@@ -322,8 +322,11 @@ export function getCachedProductLiveStock(providerProductId?: string | null): nu
   return match !== undefined && match.stock !== undefined ? Number(match.stock) : null;
 }
 
-export async function fetchLiveWholesaleCatalogForMerchant(merchantPlanId = 'starter', searchQuery?: string): Promise<WholesaleProductDTO[]> {
-  const fullCatalog = await fetchLiveWholesaleCatalog();
+export async function fetchLiveWholesaleCatalogForMerchant(merchantPlanId = 'starter', searchQuery?: string, forceRefresh = false): Promise<WholesaleProductDTO[]> {
+  let fullCatalog = await fetchLiveWholesaleCatalog(forceRefresh);
+  if (fullCatalog.length === 0 && !forceRefresh) {
+    fullCatalog = await fetchLiveWholesaleCatalog(true);
+  }
   const merchantRank = PLAN_TIERS_RANK[merchantPlanId.toLowerCase()] || 1;
 
   let filtered = fullCatalog.filter((item) => {

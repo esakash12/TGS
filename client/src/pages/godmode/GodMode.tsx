@@ -161,7 +161,7 @@ export const GodMode: React.FC = () => {
         axios.get('/api/godmode/overview', headers),
         axios.get('/api/godmode/merchants', headers),
         axios.get('/api/godmode/config', headers),
-        axios.get('/api/godmode/wholesale-catalog', headers),
+        axios.get('/api/godmode/wholesale-catalog?refresh=true', headers),
         axios.get('/api/godmode/plans', headers),
         axios.get('/api/godmode/coupons', headers),
         axios.get('/api/godmode/subscriptions', headers),

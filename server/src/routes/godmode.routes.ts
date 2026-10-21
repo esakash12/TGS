@@ -293,6 +293,7 @@ godmodeRouter.put('/config', (req: Request, res: Response) => {
     SET wholesale_digitalcore_key = COALESCE(?, wholesale_digitalcore_key),
         wholesale_vexorix_key = COALESCE(?, wholesale_vexorix_key),
         wholesale_canboso_key = COALESCE(?, wholesale_canboso_key),
+        wholesale_prodseller_key = COALESCE(?, wholesale_prodseller_key),
         platform_fee_fixed_usd = COALESCE(?, platform_fee_fixed_usd),
         platform_fee_pct = COALESCE(?, platform_fee_pct),
         owner_binance_uid = COALESCE(?, owner_binance_uid),
@@ -306,6 +307,7 @@ godmodeRouter.put('/config', (req: Request, res: Response) => {
     digitalcoreKey !== undefined ? digitalcoreKey.trim() : null,
     vexorixKey !== undefined ? vexorixKey.trim() : null,
     canbosoKey !== undefined ? canbosoKey.trim() : null,
+    prodsellerKey !== undefined ? prodsellerKey.trim() : null,
     platformFeeFixedUsd !== undefined ? Number(platformFeeFixedUsd) : null,
     platformFeePct !== undefined ? Number(platformFeePct) : null,
     ownerBinanceUid !== undefined ? ownerBinanceUid.trim() : null,
@@ -326,7 +328,10 @@ godmodeRouter.put('/config', (req: Request, res: Response) => {
 // ==========================================
 godmodeRouter.get('/wholesale-catalog', async (req: Request, res: Response) => {
   try {
-    const catalog = await fetchLiveWholesaleCatalog(req.query.refresh === 'true');
+    let catalog = await fetchLiveWholesaleCatalog(req.query.refresh === 'true');
+    if (catalog.length === 0 && req.query.refresh !== 'true') {
+      catalog = await fetchLiveWholesaleCatalog(true);
+    }
     const search = req.query.q ? String(req.query.q).toLowerCase().trim() : '';
 
     let result = catalog;
