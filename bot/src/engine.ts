@@ -679,27 +679,65 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
     const rate = Number(tenant?.usd_to_bdt_rate || 125.0);
 
     const isZinipayActive = Boolean(tenant?.zinipay_enabled && tenant?.zinipay_api_key_enc && decrypt(tenant.zinipay_api_key_enc));
+    const numbers = tenant?.payment_numbers_json || {};
+
+    const isBkashActive = (() => {
+      const c = numbers.bkash;
+      if (!c) return false;
+      if (typeof c === 'object') return c.enabled !== false && Boolean(c.number && c.number.trim());
+      return Boolean(c && String(c).trim());
+    })();
+
+    const isNagadActive = (() => {
+      const c = numbers.nagad;
+      if (!c) return false;
+      if (typeof c === 'object') return c.enabled !== false && Boolean(c.number && c.number.trim());
+      return Boolean(c && String(c).trim());
+    })();
+
+    const isRocketActive = (() => {
+      const c = numbers.rocket;
+      if (!c) return false;
+      if (typeof c === 'object') return c.enabled !== false && Boolean(c.number && c.number.trim());
+      return Boolean(c && String(c).trim());
+    })();
 
     const keyboard = new InlineKeyboard();
     if (isZinipayActive) {
       keyboard.text('⚡ Instant bKash/Nagad/Rocket (ZiniPay)', 'dep_zinipay').row();
     }
-    keyboard
-      .text('🟡 Binance Pay (USDT Auto)', 'dep_binance').row()
-      .text('📱 bKash (বিকাশ)', 'dep_bkash')
-      .text('📱 Nagad (নগদ)', 'dep_nagad').row()
-      .text('📱 Rocket (রকেট)', 'dep_rocket').row()
-      .text('⬅️ Back', 'nav_start');
+    keyboard.text('🟡 Binance Pay (USDT Auto)', 'dep_binance').row();
+
+    // Manual mobile banking buttons (shown only if enabled by merchant)
+    if (isBkashActive && isNagadActive) {
+      keyboard.text('📱 bKash (বিকাশ)', 'dep_bkash').text('📱 Nagad (নগদ)', 'dep_nagad').row();
+    } else {
+      if (isBkashActive) keyboard.text('📱 bKash (বিকাশ)', 'dep_bkash').row();
+      if (isNagadActive) keyboard.text('📱 Nagad (নগদ)', 'dep_nagad').row();
+    }
+    if (isRocketActive) {
+      keyboard.text('📱 Rocket (রকেট)', 'dep_rocket').row();
+    }
+    keyboard.text('⬅️ Back', 'nav_start');
 
     let methodsList = '';
     if (isZinipayActive) {
       methodsList += '• ⚡ <b>ZiniPay:</b> Instant automated checkout (bKash/Nagad/Rocket)\n';
     }
-    methodsList +=
-      '• 🟡 <b>Binance Pay:</b> Instant 0% fee auto-credit (USDT)\n' +
-      '• 📱 <b>bKash:</b> Personal Send Money\n' +
-      '• 📱 <b>Nagad:</b> Personal Send Money\n' +
-      '• 📱 <b>Rocket:</b> Personal Send Money\n\n';
+    methodsList += '• 🟡 <b>Binance Pay:</b> Instant 0% fee auto-credit (USDT)\n';
+    if (isBkashActive) {
+      const bkType = typeof numbers.bkash === 'object' && numbers.bkash?.type === 'merchant' ? 'Merchant Payment' : 'Personal Send Money';
+      methodsList += `• 📱 <b>bKash:</b> ${bkType}\n`;
+    }
+    if (isNagadActive) {
+      const ngType = typeof numbers.nagad === 'object' && numbers.nagad?.type === 'merchant' ? 'Merchant Payment' : 'Personal Send Money';
+      methodsList += `• 📱 <b>Nagad:</b> ${ngType}\n`;
+    }
+    if (isRocketActive) {
+      const rkType = typeof numbers.rocket === 'object' && numbers.rocket?.type === 'merchant' ? 'Merchant Payment' : 'Personal Send Money';
+      methodsList += `• 📱 <b>Rocket:</b> ${rkType}\n`;
+    }
+    methodsList += '\n';
 
     const text =
       `💰 <b>Deposit & Recharge Wallet:</b>\n` +
@@ -806,11 +844,12 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
     const methodName = methodNames[methodKey];
     const numbers = tenant?.payment_numbers_json || {};
     const methodConfig = numbers[methodKey];
+    const isMethodEnabled = typeof methodConfig === 'object' ? methodConfig?.enabled !== false : Boolean(methodConfig);
     const targetNumber = typeof methodConfig === 'object' ? methodConfig?.number : methodConfig;
 
-    if (!targetNumber) {
+    if (!targetNumber || !isMethodEnabled) {
       return ctx.answerCallbackQuery({
-        text: `⚠️ ${methodName} is not yet configured by the store owner. Please try another method or contact support.`,
+        text: `⚠️ ${methodName} পেমেন্ট সাময়িকভাবে বন্ধ আছে। অনুগ্রহ করে অন্য মেথড ব্যবহার করুন।`,
         show_alert: true,
       });
     }

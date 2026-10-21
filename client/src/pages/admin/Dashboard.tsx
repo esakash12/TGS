@@ -2901,192 +2901,309 @@ export const Dashboard: React.FC = () => {
               </div>
             </div>
 
-            {/* 3. MANUAL MOBILE BANKING NUMBERS (bKash/Nagad/Rocket) WITH PERSONAL / MERCHANT TOGGLE */}
+            {/* 3. MANUAL MOBILE BANKING NUMBERS (bKash/Nagad/Rocket) WITH ON/OFF TOGGLE & PERSONAL / MERCHANT TYPE */}
             <div className="glass-card rounded-2xl p-6 border border-white/10 space-y-5">
               <div>
                 <h4 className="text-xs font-mono font-bold text-crimson-400 uppercase">3. Manual Payment Receiving Numbers</h4>
                 <p className="text-xs text-zinc-400 mt-0.5">
-                  Set your manual numbers and choose whether each number is <b>Personal (Send Money)</b> or <b>Merchant (Make Payment)</b>.
+                  Set your manual numbers, toggle ON/OFF for each method, and choose whether it is <b>Personal (Send Money)</b> or <b>Merchant (Make Payment)</b>.
                 </p>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                 {/* bKash Config */}
-                <div className="p-4 rounded-xl bg-carbon-800/60 border border-white/5 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-xs text-pink-400">📱 bKash (বিকাশ)</span>
-                    <div className="flex items-center gap-1.5 text-[10px]">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const cur = typeof settingsData.paymentNumbers?.bkash === 'object' ? settingsData.paymentNumbers.bkash : { number: settingsData.paymentNumbers?.bkash || '' };
+                {(() => {
+                  const cfg = settingsData.paymentNumbers?.bkash;
+                  const isObj = typeof cfg === 'object';
+                  const isEnabled = isObj ? cfg?.enabled !== false : Boolean(cfg);
+                  const num = isObj ? cfg?.number || '' : cfg || '';
+                  const type = isObj ? cfg?.type || 'personal' : 'personal';
+
+                  return (
+                    <div className={`p-4 rounded-xl border space-y-3 transition-all ${isEnabled ? 'bg-carbon-800/60 border-pink-500/30' : 'bg-carbon-900/40 border-white/5 opacity-60'}`}>
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-xs text-pink-400 flex items-center gap-1.5">
+                          <span>📱 bKash (বিকাশ)</span>
+                        </span>
+                        
+                        {/* Enable/Disable Toggle Button */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSettingsData({
+                              ...settingsData,
+                              paymentNumbers: {
+                                ...settingsData.paymentNumbers,
+                                bkash: { number: num, type, enabled: !isEnabled },
+                              },
+                            });
+                          }}
+                          className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all ${
+                            isEnabled
+                              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                              : 'bg-zinc-800 text-zinc-500 border border-zinc-700'
+                          }`}
+                        >
+                          {isEnabled ? '● ACTIVE' : '○ DISABLED'}
+                        </button>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-1">
+                        <span className="text-[11px] text-zinc-400 font-medium">Type:</span>
+                        <div className="flex items-center gap-1.5 text-[10px]">
+                          <button
+                            type="button"
+                            disabled={!isEnabled}
+                            onClick={() => {
+                              setSettingsData({
+                                ...settingsData,
+                                paymentNumbers: { ...settingsData.paymentNumbers, bkash: { number: num, type: 'personal', enabled: isEnabled } },
+                              });
+                            }}
+                            className={`px-2 py-0.5 rounded font-bold transition-all ${
+                              type !== 'merchant'
+                                ? 'bg-pink-500/20 text-pink-300 border border-pink-500/40'
+                                : 'text-zinc-500 hover:text-white'
+                            }`}
+                          >
+                            Personal
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!isEnabled}
+                            onClick={() => {
+                              setSettingsData({
+                                ...settingsData,
+                                paymentNumbers: { ...settingsData.paymentNumbers, bkash: { number: num, type: 'merchant', enabled: isEnabled } },
+                              });
+                            }}
+                            className={`px-2 py-0.5 rounded font-bold transition-all ${
+                              type === 'merchant'
+                                ? 'bg-pink-500/20 text-pink-300 border border-pink-500/40'
+                                : 'text-zinc-500 hover:text-white'
+                            }`}
+                          >
+                            Merchant
+                          </button>
+                        </div>
+                      </div>
+
+                      <input
+                        type="text"
+                        disabled={!isEnabled}
+                        placeholder={isEnabled ? "01XXXXXXXXX" : "bKash Disabled"}
+                        value={num}
+                        onChange={(e) => {
                           setSettingsData({
                             ...settingsData,
-                            paymentNumbers: { ...settingsData.paymentNumbers, bkash: { ...cur, type: 'personal' } },
+                            paymentNumbers: { ...settingsData.paymentNumbers, bkash: { number: e.target.value.trim(), type, enabled: isEnabled } },
                           });
                         }}
-                        className={`px-2 py-0.5 rounded font-bold transition-all ${
-                          (typeof settingsData.paymentNumbers?.bkash === 'object' ? settingsData.paymentNumbers.bkash?.type : 'personal') !== 'merchant'
-                            ? 'bg-pink-500/20 text-pink-300 border border-pink-500/40'
-                            : 'text-zinc-500 hover:text-white'
-                        }`}
-                      >
-                        Personal
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const cur = typeof settingsData.paymentNumbers?.bkash === 'object' ? settingsData.paymentNumbers.bkash : { number: settingsData.paymentNumbers?.bkash || '' };
-                          setSettingsData({
-                            ...settingsData,
-                            paymentNumbers: { ...settingsData.paymentNumbers, bkash: { ...cur, type: 'merchant' } },
-                          });
-                        }}
-                        className={`px-2 py-0.5 rounded font-bold transition-all ${
-                          typeof settingsData.paymentNumbers?.bkash === 'object' && settingsData.paymentNumbers.bkash?.type === 'merchant'
-                            ? 'bg-pink-500/20 text-pink-300 border border-pink-500/40'
-                            : 'text-zinc-500 hover:text-white'
-                        }`}
-                      >
-                        Merchant
-                      </button>
+                        className="w-full px-3 py-2 rounded-xl bg-carbon-900 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-pink-500 disabled:opacity-50"
+                      />
+                      <span className="text-[10px] text-zinc-500 block">
+                        Mode: {type === 'merchant' ? 'Make Payment (মার্চেন্ট পেমেন্ট)' : 'Send Money (পার্সোনাল)'}
+                        {!isEnabled && ' • (বটে দেখানো হবে না)'}
+                      </span>
                     </div>
-                  </div>
-                  <input
-                    type="text"
-                    placeholder="01XXXXXXXXX"
-                    value={typeof settingsData.paymentNumbers?.bkash === 'object' ? settingsData.paymentNumbers.bkash?.number || '' : settingsData.paymentNumbers?.bkash || ''}
-                    onChange={(e) => {
-                      const curType = typeof settingsData.paymentNumbers?.bkash === 'object' ? (settingsData.paymentNumbers.bkash?.type || 'personal') : 'personal';
-                      setSettingsData({
-                        ...settingsData,
-                        paymentNumbers: { ...settingsData.paymentNumbers, bkash: { number: e.target.value.trim(), type: curType } },
-                      });
-                    }}
-                    className="w-full px-3 py-2 rounded-xl bg-carbon-900 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-pink-500"
-                  />
-                  <span className="text-[10px] text-zinc-500 block">
-                    Mode: {(typeof settingsData.paymentNumbers?.bkash === 'object' && settingsData.paymentNumbers.bkash?.type === 'merchant') ? 'Make Payment (মার্চেন্ট পেমেন্ট)' : 'Send Money (পার্সোনাল)'}
-                  </span>
-                </div>
+                  );
+                })()}
 
                 {/* Nagad Config */}
-                <div className="p-4 rounded-xl bg-carbon-800/60 border border-white/5 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-xs text-amber-400">📱 Nagad (নগদ)</span>
-                    <div className="flex items-center gap-1.5 text-[10px]">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const cur = typeof settingsData.paymentNumbers?.nagad === 'object' ? settingsData.paymentNumbers.nagad : { number: settingsData.paymentNumbers?.nagad || '' };
+                {(() => {
+                  const cfg = settingsData.paymentNumbers?.nagad;
+                  const isObj = typeof cfg === 'object';
+                  const isEnabled = isObj ? cfg?.enabled !== false : Boolean(cfg);
+                  const num = isObj ? cfg?.number || '' : cfg || '';
+                  const type = isObj ? cfg?.type || 'personal' : 'personal';
+
+                  return (
+                    <div className={`p-4 rounded-xl border space-y-3 transition-all ${isEnabled ? 'bg-carbon-800/60 border-amber-500/30' : 'bg-carbon-900/40 border-white/5 opacity-60'}`}>
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-xs text-amber-400 flex items-center gap-1.5">
+                          <span>📱 Nagad (নগদ)</span>
+                        </span>
+                        
+                        {/* Enable/Disable Toggle Button */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSettingsData({
+                              ...settingsData,
+                              paymentNumbers: {
+                                ...settingsData.paymentNumbers,
+                                nagad: { number: num, type, enabled: !isEnabled },
+                              },
+                            });
+                          }}
+                          className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all ${
+                            isEnabled
+                              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                              : 'bg-zinc-800 text-zinc-500 border border-zinc-700'
+                          }`}
+                        >
+                          {isEnabled ? '● ACTIVE' : '○ DISABLED'}
+                        </button>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-1">
+                        <span className="text-[11px] text-zinc-400 font-medium">Type:</span>
+                        <div className="flex items-center gap-1.5 text-[10px]">
+                          <button
+                            type="button"
+                            disabled={!isEnabled}
+                            onClick={() => {
+                              setSettingsData({
+                                ...settingsData,
+                                paymentNumbers: { ...settingsData.paymentNumbers, nagad: { number: num, type: 'personal', enabled: isEnabled } },
+                              });
+                            }}
+                            className={`px-2 py-0.5 rounded font-bold transition-all ${
+                              type !== 'merchant'
+                                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                                : 'text-zinc-500 hover:text-white'
+                            }`}
+                          >
+                            Personal
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!isEnabled}
+                            onClick={() => {
+                              setSettingsData({
+                                ...settingsData,
+                                paymentNumbers: { ...settingsData.paymentNumbers, nagad: { number: num, type: 'merchant', enabled: isEnabled } },
+                              });
+                            }}
+                            className={`px-2 py-0.5 rounded font-bold transition-all ${
+                              type === 'merchant'
+                                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                                : 'text-zinc-500 hover:text-white'
+                            }`}
+                          >
+                            Merchant
+                          </button>
+                        </div>
+                      </div>
+
+                      <input
+                        type="text"
+                        disabled={!isEnabled}
+                        placeholder={isEnabled ? "01XXXXXXXXX" : "Nagad Disabled"}
+                        value={num}
+                        onChange={(e) => {
                           setSettingsData({
                             ...settingsData,
-                            paymentNumbers: { ...settingsData.paymentNumbers, nagad: { ...cur, type: 'personal' } },
+                            paymentNumbers: { ...settingsData.paymentNumbers, nagad: { number: e.target.value.trim(), type, enabled: isEnabled } },
                           });
                         }}
-                        className={`px-2 py-0.5 rounded font-bold transition-all ${
-                          (typeof settingsData.paymentNumbers?.nagad === 'object' ? settingsData.paymentNumbers.nagad?.type : 'personal') !== 'merchant'
-                            ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                            : 'text-zinc-500 hover:text-white'
-                        }`}
-                      >
-                        Personal
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const cur = typeof settingsData.paymentNumbers?.nagad === 'object' ? settingsData.paymentNumbers.nagad : { number: settingsData.paymentNumbers?.nagad || '' };
-                          setSettingsData({
-                            ...settingsData,
-                            paymentNumbers: { ...settingsData.paymentNumbers, nagad: { ...cur, type: 'merchant' } },
-                          });
-                        }}
-                        className={`px-2 py-0.5 rounded font-bold transition-all ${
-                          typeof settingsData.paymentNumbers?.nagad === 'object' && settingsData.paymentNumbers.nagad?.type === 'merchant'
-                            ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                            : 'text-zinc-500 hover:text-white'
-                        }`}
-                      >
-                        Merchant
-                      </button>
+                        className="w-full px-3 py-2 rounded-xl bg-carbon-900 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-amber-500 disabled:opacity-50"
+                      />
+                      <span className="text-[10px] text-zinc-500 block">
+                        Mode: {type === 'merchant' ? 'Make Payment (মার্চেন্ট পেমেন্ট)' : 'Send Money (পার্সোনাল)'}
+                        {!isEnabled && ' • (বটে দেখানো হবে না)'}
+                      </span>
                     </div>
-                  </div>
-                  <input
-                    type="text"
-                    placeholder="01XXXXXXXXX"
-                    value={typeof settingsData.paymentNumbers?.nagad === 'object' ? settingsData.paymentNumbers.nagad?.number || '' : settingsData.paymentNumbers?.nagad || ''}
-                    onChange={(e) => {
-                      const curType = typeof settingsData.paymentNumbers?.nagad === 'object' ? (settingsData.paymentNumbers.nagad?.type || 'personal') : 'personal';
-                      setSettingsData({
-                        ...settingsData,
-                        paymentNumbers: { ...settingsData.paymentNumbers, nagad: { number: e.target.value.trim(), type: curType } },
-                      });
-                    }}
-                    className="w-full px-3 py-2 rounded-xl bg-carbon-900 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-amber-500"
-                  />
-                  <span className="text-[10px] text-zinc-500 block">
-                    Mode: {(typeof settingsData.paymentNumbers?.nagad === 'object' && settingsData.paymentNumbers.nagad?.type === 'merchant') ? 'Make Payment (মার্চেন্ট পেমেন্ট)' : 'Send Money (পার্সোনাল)'}
-                  </span>
-                </div>
+                  );
+                })()}
 
                 {/* Rocket Config */}
-                <div className="p-4 rounded-xl bg-carbon-800/60 border border-white/5 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-xs text-purple-400">📱 Rocket (রকেট)</span>
-                    <div className="flex items-center gap-1.5 text-[10px]">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const cur = typeof settingsData.paymentNumbers?.rocket === 'object' ? settingsData.paymentNumbers.rocket : { number: settingsData.paymentNumbers?.rocket || '' };
+                {(() => {
+                  const cfg = settingsData.paymentNumbers?.rocket;
+                  const isObj = typeof cfg === 'object';
+                  const isEnabled = isObj ? cfg?.enabled !== false : Boolean(cfg);
+                  const num = isObj ? cfg?.number || '' : cfg || '';
+                  const type = isObj ? cfg?.type || 'personal' : 'personal';
+
+                  return (
+                    <div className={`p-4 rounded-xl border space-y-3 transition-all ${isEnabled ? 'bg-carbon-800/60 border-purple-500/30' : 'bg-carbon-900/40 border-white/5 opacity-60'}`}>
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-xs text-purple-400 flex items-center gap-1.5">
+                          <span>📱 Rocket (রকেট)</span>
+                        </span>
+                        
+                        {/* Enable/Disable Toggle Button */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSettingsData({
+                              ...settingsData,
+                              paymentNumbers: {
+                                ...settingsData.paymentNumbers,
+                                rocket: { number: num, type, enabled: !isEnabled },
+                              },
+                            });
+                          }}
+                          className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all ${
+                            isEnabled
+                              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                              : 'bg-zinc-800 text-zinc-500 border border-zinc-700'
+                          }`}
+                        >
+                          {isEnabled ? '● ACTIVE' : '○ DISABLED'}
+                        </button>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-1">
+                        <span className="text-[11px] text-zinc-400 font-medium">Type:</span>
+                        <div className="flex items-center gap-1.5 text-[10px]">
+                          <button
+                            type="button"
+                            disabled={!isEnabled}
+                            onClick={() => {
+                              setSettingsData({
+                                ...settingsData,
+                                paymentNumbers: { ...settingsData.paymentNumbers, rocket: { number: num, type: 'personal', enabled: isEnabled } },
+                              });
+                            }}
+                            className={`px-2 py-0.5 rounded font-bold transition-all ${
+                              type !== 'merchant'
+                                ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+                                : 'text-zinc-500 hover:text-white'
+                            }`}
+                          >
+                            Personal
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!isEnabled}
+                            onClick={() => {
+                              setSettingsData({
+                                ...settingsData,
+                                paymentNumbers: { ...settingsData.paymentNumbers, rocket: { number: num, type: 'merchant', enabled: isEnabled } },
+                              });
+                            }}
+                            className={`px-2 py-0.5 rounded font-bold transition-all ${
+                              type === 'merchant'
+                                ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+                                : 'text-zinc-500 hover:text-white'
+                            }`}
+                          >
+                            Merchant
+                          </button>
+                        </div>
+                      </div>
+
+                      <input
+                        type="text"
+                        disabled={!isEnabled}
+                        placeholder={isEnabled ? "01XXXXXXXXX" : "Rocket Disabled"}
+                        value={num}
+                        onChange={(e) => {
                           setSettingsData({
                             ...settingsData,
-                            paymentNumbers: { ...settingsData.paymentNumbers, rocket: { ...cur, type: 'personal' } },
+                            paymentNumbers: { ...settingsData.paymentNumbers, rocket: { number: e.target.value.trim(), type, enabled: isEnabled } },
                           });
                         }}
-                        className={`px-2 py-0.5 rounded font-bold transition-all ${
-                          (typeof settingsData.paymentNumbers?.rocket === 'object' ? settingsData.paymentNumbers.rocket?.type : 'personal') !== 'merchant'
-                            ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-                            : 'text-zinc-500 hover:text-white'
-                        }`}
-                      >
-                        Personal
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const cur = typeof settingsData.paymentNumbers?.rocket === 'object' ? settingsData.paymentNumbers.rocket : { number: settingsData.paymentNumbers?.rocket || '' };
-                          setSettingsData({
-                            ...settingsData,
-                            paymentNumbers: { ...settingsData.paymentNumbers, rocket: { ...cur, type: 'merchant' } },
-                          });
-                        }}
-                        className={`px-2 py-0.5 rounded font-bold transition-all ${
-                          typeof settingsData.paymentNumbers?.rocket === 'object' && settingsData.paymentNumbers.rocket?.type === 'merchant'
-                            ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-                            : 'text-zinc-500 hover:text-white'
-                        }`}
-                      >
-                        Merchant
-                      </button>
+                        className="w-full px-3 py-2 rounded-xl bg-carbon-900 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-purple-500 disabled:opacity-50"
+                      />
+                      <span className="text-[10px] text-zinc-500 block">
+                        Mode: {type === 'merchant' ? 'Make Payment (মার্চেন্ট পেমেন্ট)' : 'Send Money (পার্সোনাল)'}
+                        {!isEnabled && ' • (বটে দেখানো হবে না)'}
+                      </span>
                     </div>
-                  </div>
-                  <input
-                    type="text"
-                    placeholder="01XXXXXXXXX"
-                    value={typeof settingsData.paymentNumbers?.rocket === 'object' ? settingsData.paymentNumbers.rocket?.number || '' : settingsData.paymentNumbers?.rocket || ''}
-                    onChange={(e) => {
-                      const curType = typeof settingsData.paymentNumbers?.rocket === 'object' ? (settingsData.paymentNumbers.rocket?.type || 'personal') : 'personal';
-                      setSettingsData({
-                        ...settingsData,
-                        paymentNumbers: { ...settingsData.paymentNumbers, rocket: { number: e.target.value.trim(), type: curType } },
-                      });
-                    }}
-                    className="w-full px-3 py-2 rounded-xl bg-carbon-900 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-purple-500"
-                  />
-                  <span className="text-[10px] text-zinc-500 block">
-                    Mode: {(typeof settingsData.paymentNumbers?.rocket === 'object' && settingsData.paymentNumbers.rocket?.type === 'merchant') ? 'Make Payment (মার্চেন্ট পেমেন্ট)' : 'Send Money (পার্সোনাল)'}
-                  </span>
-                </div>
+                  );
+                })()}
               </div>
             </div>
 
