@@ -129,7 +129,16 @@ export async function verifyZinipayInvoice(apiKey: string, invoiceId: string): P
     const rawStatus = (data.status || data.data?.status || '').toString().toUpperCase();
 
     let normalizedStatus: 'COMPLETED' | 'PENDING' | 'FAILED' = 'PENDING';
-    if (rawStatus === 'COMPLETED' || rawStatus === 'SUCCESS' || rawStatus === 'TRUE' || data.status === 'COMPLETED') {
+    if (
+      rawStatus === 'COMPLETED' ||
+      rawStatus === 'PAID' ||
+      rawStatus === 'SUCCESS' ||
+      rawStatus === 'SUCCESSFUL' ||
+      rawStatus === 'TRUE' ||
+      data.status === 'COMPLETED' ||
+      data.status === 'PAID' ||
+      String(data.status).toLowerCase() === 'true'
+    ) {
       normalizedStatus = 'COMPLETED';
     } else if (rawStatus === 'FAILED' || rawStatus === 'CANCELLED' || rawStatus === 'EXPIRED') {
       normalizedStatus = 'FAILED';

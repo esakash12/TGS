@@ -6,7 +6,7 @@ import { initDatabase, db } from './db/database';
 import { authRouter } from './routes/auth.routes';
 import { merchantRouter } from './routes/merchant.routes';
 import { godmodeRouter } from './routes/godmode.routes';
-import { zinipayRouter } from './routes/zinipay.routes';
+import { zinipayRouter, approveZinipayInvoice } from './routes/zinipay.routes';
 import { botRegistry } from '../../bot/src/registry';
 import { fetchLiveWholesaleCatalog, syncLivePricesForAllTenants } from './services/wholesale';
 
@@ -129,6 +129,32 @@ app.listen(PORT, async () => {
       // background refresh silent fail
     }
   }, 3 * 60 * 1000);
+
+  // Background Auto-Reconciliation Poller for ZiniPay Deposits (every 30 seconds)
+  // Ensures any completed payment is credited even if the user closed the popup before redirect
+  // or if the external webhook failed to reach the server.
+  setInterval(async () => {
+    try {
+      const pendingDeposits = db.prepare(`
+        SELECT trx_id FROM deposits 
+        WHERE method = 'ZiniPay' 
+          AND status = 'PENDING'
+          AND created_at >= datetime('now', '-45 minutes')
+        ORDER BY id DESC LIMIT 20
+      `).all() as { trx_id: string }[];
+
+      for (const row of pendingDeposits) {
+        if (!row.trx_id) continue;
+        try {
+          await approveZinipayInvoice(row.trx_id);
+        } catch (itemErr: any) {
+          // ignore individual item verify errors
+        }
+      }
+    } catch (pollErr: any) {
+      // silent background poller catch
+    }
+  }, 30 * 1000);
 
   // Initialize and run all registered tenant Telegram bots
   await botRegistry.initAllActiveBots();

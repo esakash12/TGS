@@ -1053,7 +1053,7 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
         `🧾 Invoice ID: <code>${invoiceId}</code>\n` +
         `━━━━━━━━━━━━━━━━━━\n` +
         `👉 Click the button below to complete payment via bKash, Nagad, Rocket, or Cards.\n\n` +
-        `<i>Your balance will be credited instantly upon successful payment.</i>`;
+        `<i>Payment complete হলে টেলিগ্রামের পপ-আপটি কেটে দিন, আপনার একাউন্টে স্বয়ংক্রিয়ভাবে ডলার জমা হয়ে যাবে।</i>`;
 
       return ctx.reply(checkoutMsg, {
         parse_mode: 'HTML',
