@@ -6,6 +6,8 @@ import { db } from '../db/database';
 import { encrypt, decrypt } from '../services/crypto';
 import {
   getDigitalCoreBalance,
+  getVexorixBalance,
+  getProdSellerBalance,
   getCanbosoBalance,
   fetchLiveWholesaleCatalog,
   invalidateWholesaleCache,
@@ -46,9 +48,11 @@ godmodeRouter.get('/overview', async (_req: Request, res: Response) => {
   const freeSystemMem = os.freemem();
 
   // Fetch Live Wholesale Balances concurrently
-  const [digitalCoreBal, canbosoBal] = await Promise.all([
+  const [digitalCoreBal, canbosoBal, vexorixBal, prodsellerBal] = await Promise.all([
     getDigitalCoreBalance(),
     getCanbosoBalance(),
+    getVexorixBalance(),
+    getProdSellerBalance(),
   ]);
 
   // Aggregate stats across all stores
@@ -80,7 +84,9 @@ godmodeRouter.get('/overview', async (_req: Request, res: Response) => {
     },
     wholesaleBalances: {
       digitalcore: digitalCoreBal,
+      vexorix: vexorixBal,
       canboso: canbosoBal,
+      prodseller: prodsellerBal,
     },
     fleet: {
       totalMerchants: Number(storeStats.total_merchants || 0),
@@ -244,6 +250,7 @@ godmodeRouter.get('/config', (_req: Request, res: Response) => {
     digitalcoreKey: config?.wholesale_digitalcore_key || '',
     vexorixKey: config?.wholesale_vexorix_key || '',
     canbosoKey: config?.wholesale_canboso_key || '',
+    prodsellerKey: config?.wholesale_prodseller_key || '',
     platformFeeFixedUsd: Number(config?.platform_fee_fixed_usd ?? 0.01),
     platformFeePct: Number(config?.platform_fee_pct ?? 0.0),
     ownerBinanceUid: config?.owner_binance_uid || '',
@@ -259,6 +266,7 @@ godmodeRouter.put('/config', (req: Request, res: Response) => {
     digitalcoreKey,
     vexorixKey,
     canbosoKey,
+    prodsellerKey,
     platformFeeFixedUsd,
     platformFeePct,
     ownerBinanceUid,

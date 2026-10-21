@@ -66,7 +66,7 @@ export const GodMode: React.FC = () => {
   const [merchants, setMerchants] = useState<any[]>([]);
   const [wholesaleCatalog, setWholesaleCatalog] = useState<any[]>([]);
   const [wholesaleSearch, setWholesaleSearch] = useState('');
-  const [wholesaleProviderFilter, setWholesaleProviderFilter] = useState<'all' | 'digitalcore' | 'canboso' | 'vexorix'>('all');
+  const [wholesaleProviderFilter, setWholesaleProviderFilter] = useState<'all' | 'digitalcore' | 'vexorix' | 'canboso' | 'prodseller'>('all');
   const [wholesaleCategoryFilter, setWholesaleCategoryFilter] = useState('all');
   const [wholesaleLoading, setWholesaleLoading] = useState(false);
   const [editingPriceProductId, setEditingPriceProductId] = useState<string | null>(null);
@@ -123,6 +123,7 @@ export const GodMode: React.FC = () => {
     digitalcoreKey: '',
     vexorixKey: '',
     canbosoKey: '',
+    prodsellerKey: '',
     platformFeeFixedUsd: 0.01,
     platformFeePct: 0.0,
     ownerBinanceUid: '',
@@ -843,7 +844,7 @@ export const GodMode: React.FC = () => {
             </span>
           </div>
 
-          {/* Card 4: Canboso Balance */}
+          {/* Card 3: Canboso Balance */}
           <div className="glass-card-cyber rounded-2xl p-5 border border-white/10 space-y-2">
             <div className="flex justify-between items-center text-xs text-zinc-400">
               <span className="font-mono">CANBOSO LIVE</span>
@@ -854,6 +855,20 @@ export const GodMode: React.FC = () => {
             </div>
             <span className="text-[10px] text-zinc-500 font-mono">
               VND: {overview?.wholesaleBalances?.canboso?.balanceVnd?.toLocaleString() || '0'}
+            </span>
+          </div>
+
+          {/* Card 4: ProdSeller (Mogent V4) Live */}
+          <div className="glass-card-cyber rounded-2xl p-5 border border-white/10 space-y-2">
+            <div className="flex justify-between items-center text-xs text-zinc-400">
+              <span className="font-mono">PRODSELLER (V4) LIVE</span>
+              <Zap className="w-4 h-4 text-indigo-400" />
+            </div>
+            <div className="text-2xl font-mono font-extrabold text-indigo-400">
+              ${overview?.wholesaleBalances?.prodseller?.balance?.toFixed(2) || '0.00'} <span className="text-xs text-zinc-500">USD</span>
+            </div>
+            <span className="text-[10px] text-zinc-500 font-mono">
+              Account: {overview?.wholesaleBalances?.prodseller?.username || 'Active'}
             </span>
           </div>
 
@@ -1185,6 +1200,23 @@ export const GodMode: React.FC = () => {
                   {wholesaleCatalog.filter((i) => i.provider?.toLowerCase() === 'canboso').length}
                 </span>
               </button>
+              <button
+                onClick={() => {
+                  setWholesaleProviderFilter('prodseller');
+                  setWholesaleCategoryFilter('all');
+                }}
+                className={`px-4 py-2 rounded-xl text-xs font-mono font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
+                  wholesaleProviderFilter === 'prodseller'
+                    ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30'
+                    : 'bg-carbon-900 text-zinc-400 hover:text-white border border-white/5'
+                }`}
+              >
+                <Zap className="w-3.5 h-3.5 text-indigo-400" />
+                <span>PRODSELLER (V4) API</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] bg-black/40">
+                  {wholesaleCatalog.filter((i) => i.provider?.toLowerCase() === 'prodseller').length}
+                </span>
+              </button>
             </div>
 
             {/* Search Input & Category Filters */}
@@ -1446,6 +1478,17 @@ export const GodMode: React.FC = () => {
                     value={config.canbosoKey}
                     onChange={(e) => setConfig({ ...config, canbosoKey: e.target.value })}
                     className="w-full px-4 py-2 rounded-xl bg-carbon-900 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-crimson-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1">ProdSeller (Mogent V4) Reseller API Key</label>
+                  <input
+                    type="text"
+                    placeholder="Paste prodseller.com API Key (psk_...)"
+                    value={config.prodsellerKey || ''}
+                    onChange={(e) => setConfig({ ...config, prodsellerKey: e.target.value })}
+                    className="w-full px-4 py-2 rounded-xl bg-carbon-900 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-indigo-500"
                   />
                 </div>
 

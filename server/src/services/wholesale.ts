@@ -4,6 +4,7 @@ import {
   UPSTREAM_DIGITALCORE_BASE_URL,
   UPSTREAM_CANBOSO_BASE_URL,
   UPSTREAM_VEXORIX_BASE_URL,
+  UPSTREAM_PRODSELLER_BASE_URL,
 } from '../../../shared/constants';
 import { WholesaleProductDTO } from '../../../shared/types';
 
@@ -21,6 +22,7 @@ export function getGlobalWholesaleConfig() {
     digitalcoreKey: config?.wholesale_digitalcore_key || '',
     canbosoKey: config?.wholesale_canboso_key || '',
     vexorixKey: config?.wholesale_vexorix_key || '',
+    prodsellerKey: config?.wholesale_prodseller_key || '',
     platformFeeFixed: Number(config?.platform_fee_fixed_usd ?? 0.01),
     platformFeePct: Number(config?.platform_fee_pct ?? 0.0),
   };
@@ -72,6 +74,26 @@ export async function getVexorixBalance(): Promise<{ balance: number; currency: 
     return null;
   }
 }
+export async function getProdSellerBalance(): Promise<{ balance: number; currency: string; username?: string } | null> {
+  const { prodsellerKey } = getGlobalWholesaleConfig();
+  if (!prodsellerKey) return null;
+  try {
+    const res = await axios.get(`${UPSTREAM_PRODSELLER_BASE_URL}/v1/balance`, {
+      headers: { 'X-API-Key': prodsellerKey },
+      timeout: 8000,
+    });
+    const d = res.data || {};
+    return {
+      balance: Number(d.balance || 0),
+      currency: 'USD',
+      username: d.username || (d.telegramId ? String(d.telegramId) : ''),
+    };
+  } catch (err: any) {
+    console.error('ProdSeller balance check failed:', err.response?.data || err.message);
+    return null;
+  }
+}
+
 export async function getCanbosoBalance(): Promise<{ balanceUsd: number; balanceVnd: number } | null> {
   const { canbosoKey } = getGlobalWholesaleConfig();
   if (!canbosoKey) return null;
@@ -133,7 +155,7 @@ export async function fetchLiveWholesaleCatalog(forceRefresh = false): Promise<W
     return catalogCache.products;
   }
 
-  const { digitalcoreKey, canbosoKey, vexorixKey, platformFeeFixed, platformFeePct } = getGlobalWholesaleConfig();
+  const { digitalcoreKey, canbosoKey, vexorixKey, prodsellerKey, platformFeeFixed, platformFeePct } = getGlobalWholesaleConfig();
   const allProducts: WholesaleProductDTO[] = [];
 
   // Helper to calculate price with platform fee (e.g. +$0.01)
@@ -234,6 +256,34 @@ export async function fetchLiveWholesaleCatalog(forceRefresh = false): Promise<W
     }
   }
 
+  // 4. Fetch from ProdSeller (Mogent V4)
+  if (prodsellerKey) {
+    try {
+      const res = await axios.get(`${UPSTREAM_PRODSELLER_BASE_URL}/v1/products`, {
+        headers: { 'X-API-Key': prodsellerKey },
+        timeout: 10000,
+      });
+      const prods = Array.isArray(res.data?.products) ? res.data.products : [];
+      for (const item of prods) {
+        const basePrice = Number(item.price ?? item.finalPrice ?? item.publicPrice ?? 0);
+        const catInfo = extractCategoryFromProduct(item.name || '', item.id);
+        allProducts.push({
+          id: `ps_${item.id}`,
+          name: item.name || 'Unnamed Wholesale Item',
+          provider: 'prodseller',
+          base_price_usd: basePrice,
+          cost_with_platform_fee_usd: applyPlatformFee(basePrice),
+          stock: item.inStock !== false ? 999 : 0,
+          category: catInfo.category,
+          icon: catInfo.icon,
+          description: item.description || '',
+        });
+      }
+    } catch (err: any) {
+      console.warn('ProdSeller catalog fetch warning:', err.response?.data || err.message);
+    }
+  }
+
   // 3. Augment with God-Mode Platform Wholesale Governance Rules
   const rules = db.prepare('SELECT * FROM platform_wholesale_rules').all() as any[];
   const rulesMap = new Map<string, any>();
@@ -302,12 +352,79 @@ export function isWholesaleProductGloballyActive(providerProductId: string): boo
 }
 
 export async function purchaseUpstreamProduct(params: {
-  provider: 'digitalcore' | 'canboso' | 'vexorix';
+  provider: 'digitalcore' | 'canboso' | 'vexorix' | 'prodseller';
   providerProductId: string;
   quantity: number;
 }): Promise<{ success: boolean; deliveredItems: string[]; orderId: string; error?: string }> {
   const { provider, providerProductId, quantity } = params;
-  const { digitalcoreKey, canbosoKey, vexorixKey } = getGlobalWholesaleConfig();
+  const { digitalcoreKey, canbosoKey, vexorixKey, prodsellerKey } = getGlobalWholesaleConfig();
+
+  if (provider === 'prodseller') {
+    if (!prodsellerKey) {
+      return { success: false, deliveredItems: [], orderId: '', error: 'ProdSeller API Key is not configured' };
+    }
+    const rawId = providerProductId.replace(/^ps_/, '');
+    const idempotencyKey = 'mg-' + Date.now() + '-' + Math.random().toString(36).substring(2, 8);
+    console.log(`[Wholesale Upstream] Attempting ProdSeller purchase for rawId="${rawId}", count=${quantity}`);
+    try {
+      const res = await axios.post(
+        `${UPSTREAM_PRODSELLER_BASE_URL}/v1/orders`,
+        {
+          productId: rawId,
+          quantity,
+        },
+        {
+          headers: {
+            'X-API-Key': prodsellerKey,
+            'Idempotency-Key': idempotencyKey,
+            'Content-Type': 'application/json',
+          },
+          timeout: 25000,
+        }
+      );
+
+      const data = res.data;
+      const orderId = String(data?.orderId || data?.id || idempotencyKey);
+      let deliveredItems: string[] = [];
+
+      if (Array.isArray(data?.deliveredKeys)) {
+        deliveredItems = data.deliveredKeys.filter(Boolean);
+      } else if (data?.deliveredKey) {
+        deliveredItems = [String(data.deliveredKey)];
+      }
+
+      if (deliveredItems.length > 0) {
+        return {
+          success: true,
+          deliveredItems,
+          orderId,
+        };
+      }
+
+      if (data?.status === 'paid' && data?.activation) {
+        return {
+          success: true,
+          deliveredItems: [`Order Submitted for Activation (ID: ${orderId}). Status: Processing ASAP.`],
+          orderId,
+        };
+      }
+
+      return {
+        success: false,
+        deliveredItems: [],
+        orderId,
+        error: data?.error || 'No digital serial keys delivered by ProdSeller',
+      };
+    } catch (err: any) {
+      const errMsg = err.response?.data?.error || err.response?.data?.message || err.message;
+      return {
+        success: false,
+        deliveredItems: [],
+        orderId: '',
+        error: errMsg,
+      };
+    }
+  }
 
   if (provider === 'vexorix') {
     if (!vexorixKey) {

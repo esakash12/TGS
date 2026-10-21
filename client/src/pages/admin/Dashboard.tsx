@@ -122,7 +122,7 @@ export const Dashboard: React.FC = () => {
   // Filter & Search states
   const [storeFilter, setStoreFilter] = useState<'all' | 'custom' | 'wholesale'>('all');
   const [wholesaleSearch, setWholesaleSearch] = useState('');
-  const [wholesaleProviderFilter, setWholesaleProviderFilter] = useState<'all' | 'digitalcore' | 'canboso' | 'vexorix'>('all');
+  const [wholesaleProviderFilter, setWholesaleProviderFilter] = useState<'all' | 'digitalcore' | 'vexorix' | 'canboso' | 'prodseller'>('all');
   const [wholesaleCategoryFilter, setWholesaleCategoryFilter] = useState('all');
 
   // Clear Store / Products Modal
@@ -182,7 +182,7 @@ export const Dashboard: React.FC = () => {
   const [stockEditLoading, setStockEditLoading] = useState(false);
 
   // Topup Provider Selection
-  const [topupProvider, setTopupProvider] = useState<'digitalcore' | 'vexorix' | 'canboso'>('vexorix');
+  const [topupProvider, setTopupProvider] = useState<'digitalcore' | 'vexorix' | 'canboso' | 'prodseller'>('digitalcore');
   const [addStockProdId, setAddStockProdId] = useState<string | null>(null);
   const [addStockKeys, setAddStockKeys] = useState('');
 
@@ -1788,16 +1788,6 @@ export const Dashboard: React.FC = () => {
                     <span>⚡ All Providers</span>
                   </button>
                   <button
-                    onClick={() => setWholesaleProviderFilter('vexorix')}
-                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
-                      wholesaleProviderFilter === 'vexorix'
-                        ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow'
-                        : 'bg-carbon-800 text-zinc-400 hover:text-white border border-white/5'
-                    }`}
-                  >
-                    <span>🚀 Mogent V2</span>
-                  </button>
-                  <button
                     onClick={() => setWholesaleProviderFilter('digitalcore')}
                     className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
                       wholesaleProviderFilter === 'digitalcore'
@@ -1806,6 +1796,16 @@ export const Dashboard: React.FC = () => {
                     }`}
                   >
                     <span>📦 Mogent V1</span>
+                  </button>
+                  <button
+                    onClick={() => setWholesaleProviderFilter('vexorix')}
+                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                      wholesaleProviderFilter === 'vexorix'
+                        ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow'
+                        : 'bg-carbon-800 text-zinc-400 hover:text-white border border-white/5'
+                    }`}
+                  >
+                    <span>🚀 Mogent V2</span>
                   </button>
                   <button
                     onClick={() => setWholesaleProviderFilter('canboso')}
@@ -1817,7 +1817,16 @@ export const Dashboard: React.FC = () => {
                   >
                     <span>🌐 Mogent V3</span>
                   </button>
-                </div>
+                  <button
+                    onClick={() => setWholesaleProviderFilter('prodseller')}
+                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                      wholesaleProviderFilter === 'prodseller'
+                        ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow'
+                        : 'bg-carbon-800 text-zinc-400 hover:text-white border border-white/5'
+                    }`}
+                  >
+                    <span>🔥 Mogent V4</span>
+                  </button></div>
               </div>
 
               {/* Category Filter Chips (Brand & Service Folders) */}
@@ -1882,7 +1891,7 @@ export const Dashboard: React.FC = () => {
                     <div className="space-y-2">
                       <div className="flex justify-between items-start gap-2">
                         <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-carbon-800 text-laser-400 border border-laser-500/20 uppercase flex items-center gap-1">
-                          <span>{item.icon || '⚡'}</span> {item.provider === 'vexorix' ? 'Mogent V2' : item.provider === 'digitalcore' ? 'Mogent V1' : item.provider === 'canboso' ? 'Mogent V3' : item.provider}
+                          <span>{item.icon || '⚡'}</span> {item.provider === 'digitalcore' ? 'Mogent V1' : item.provider === 'vexorix' ? 'Mogent V2' : item.provider === 'canboso' ? 'Mogent V3' : item.provider === 'prodseller' ? 'Mogent V4' : item.provider}
                         </span>
                         <span className="text-xs font-mono text-emerald-400 font-bold">
                           In Stock ({item.stock})
@@ -3963,18 +3972,22 @@ export const Dashboard: React.FC = () => {
             {/* Per-Provider Balance Badges */}
             <div className="p-3 rounded-2xl bg-carbon-950 border border-white/5 space-y-2">
               <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">Your API Provider Balances:</span>
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <div className="p-2 rounded-xl bg-carbon-900 border border-emerald-500/20">
-                  <span className="text-[10px] text-emerald-400 block font-bold">Mogent V2</span>
-                  <span className="font-mono text-xs font-extrabold text-white">${Number(topupInfo?.walletsByProvider?.vexorix || 0).toFixed(2)}</span>
-                </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
                 <div className="p-2 rounded-xl bg-carbon-900 border border-crimson-500/20">
                   <span className="text-[10px] text-crimson-400 block font-bold">Mogent V1</span>
                   <span className="font-mono text-xs font-extrabold text-white">${Number(topupInfo?.walletsByProvider?.digitalcore || 0).toFixed(2)}</span>
                 </div>
+                <div className="p-2 rounded-xl bg-carbon-900 border border-emerald-500/20">
+                  <span className="text-[10px] text-emerald-400 block font-bold">Mogent V2</span>
+                  <span className="font-mono text-xs font-extrabold text-white">${Number(topupInfo?.walletsByProvider?.vexorix || 0).toFixed(2)}</span>
+                </div>
                 <div className="p-2 rounded-xl bg-carbon-900 border border-blue-500/20">
                   <span className="text-[10px] text-blue-400 block font-bold">Mogent V3</span>
                   <span className="font-mono text-xs font-extrabold text-white">${Number(topupInfo?.walletsByProvider?.canboso || 0).toFixed(2)}</span>
+                </div>
+                <div className="p-2 rounded-xl bg-carbon-900 border border-purple-500/20">
+                  <span className="text-[10px] text-purple-400 block font-bold">Mogent V4</span>
+                  <span className="font-mono text-xs font-extrabold text-white">${Number(topupInfo?.walletsByProvider?.prodseller || 0).toFixed(2)}</span>
                 </div>
               </div>
             </div>
@@ -3998,9 +4011,10 @@ export const Dashboard: React.FC = () => {
                   onChange={(e: any) => setTopupProvider(e.target.value)}
                   className="w-full px-4 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white text-xs font-semibold focus:outline-none focus:border-laser-500"
                 >
-                  <option value="vexorix">🚀 Mogent V2 Wholesale</option>
                   <option value="digitalcore">📦 Mogent V1 Wholesale</option>
+                  <option value="vexorix">🚀 Mogent V2 Wholesale</option>
                   <option value="canboso">🌐 Mogent V3 Wholesale</option>
+                  <option value="prodseller">🔥 Mogent V4 Wholesale</option>
                 </select>
               </div>
 
