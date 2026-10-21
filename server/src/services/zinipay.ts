@@ -52,13 +52,13 @@ export async function createZinipayInvoice(params: CreateZinipayInvoiceParams): 
   try {
     const payload: Record<string, any> = {
       amount: Number(params.amountBdt),
+      cus_name: params.customerName || 'Customer',
+      cus_email: params.customerEmail || 'customer@bot.mogent.tech',
       redirect_url: params.redirectUrl,
+      cancel_url: params.cancelUrl || params.redirectUrl,
     };
 
-    if (params.customerName) payload.cus_name = params.customerName;
-    if (params.customerEmail) payload.cus_email = params.customerEmail;
     if (params.metadata) payload.metadata = params.metadata;
-    if (params.cancelUrl) payload.cancel_url = params.cancelUrl;
     if (params.webhookUrl) payload.webhook_url = params.webhookUrl;
 
     const response = await axios.post<ZinipayCreateResponse>(
