@@ -66,7 +66,7 @@ export const GodMode: React.FC = () => {
   const [merchants, setMerchants] = useState<any[]>([]);
   const [wholesaleCatalog, setWholesaleCatalog] = useState<any[]>([]);
   const [wholesaleSearch, setWholesaleSearch] = useState('');
-  const [wholesaleProviderFilter, setWholesaleProviderFilter] = useState<'all' | 'digitalcore' | 'vexorix' | 'canboso' | 'prodseller'>('all');
+  const [wholesaleProviderFilter, setWholesaleProviderFilter] = useState<'all' | 'digitalcore' | 'vexorix' | 'canboso' | 'prodseller' | 'ssondigital'>('all');
   const [wholesaleCategoryFilter, setWholesaleCategoryFilter] = useState('all');
   const [wholesaleLoading, setWholesaleLoading] = useState(false);
   const [editingPriceProductId, setEditingPriceProductId] = useState<string | null>(null);
@@ -124,6 +124,7 @@ export const GodMode: React.FC = () => {
     vexorixKey: '',
     canbosoKey: '',
     prodsellerKey: '',
+    ssondigitalKey: '',
     platformFeeFixedUsd: 0.01,
     platformFeePct: 0.0,
     ownerBinanceUid: '',

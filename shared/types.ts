@@ -6,7 +6,7 @@
 
 export type TenantStatus = 'ACTIVE' | 'SUSPENDED';
 export type UserRole = 'super_admin' | 'merchant_admin';
-export type ProviderType = 'custom' | 'digitalcore' | 'canboso' | 'vexorix' | 'prodseller';
+export type ProviderType = 'custom' | 'digitalcore' | 'canboso' | 'vexorix' | 'prodseller' | 'ssondigital';
 export type InventoryStatus = 'AVAILABLE' | 'DELIVERED';
 export type DepositMethod = 'bKash' | 'Nagad' | 'Rocket' | 'Binance';
 export type DepositStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
@@ -152,6 +152,7 @@ export interface GlobalSystemConfig {
   wholesale_canboso_key?: string;
   wholesale_vexorix_key?: string;
   wholesale_prodseller_key?: string;
+  wholesale_ssondigital_key?: string;
   platform_fee_fixed_usd: number; // default $0.01
   platform_fee_pct: number; // default 0.0%
   owner_binance_uid?: string;
@@ -184,7 +185,7 @@ export interface PlatformWholesaleRule {
 export interface WholesaleProductDTO {
   id: string;
   name: string;
-  provider: 'digitalcore' | 'canboso' | 'vexorix' | 'prodseller';
+  provider: 'digitalcore' | 'canboso' | 'vexorix' | 'prodseller' | 'ssondigital';
   base_price_usd: number;
   cost_with_platform_fee_usd: number; // Merchant sees this
   stock: number;

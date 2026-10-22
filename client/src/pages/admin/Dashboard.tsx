@@ -122,7 +122,7 @@ export const Dashboard: React.FC = () => {
   // Filter & Search states
   const [storeFilter, setStoreFilter] = useState<'all' | 'custom' | 'wholesale'>('all');
   const [wholesaleSearch, setWholesaleSearch] = useState('');
-  const [wholesaleProviderFilter, setWholesaleProviderFilter] = useState<'all' | 'digitalcore' | 'vexorix' | 'canboso' | 'prodseller'>('all');
+  const [wholesaleProviderFilter, setWholesaleProviderFilter] = useState<'all' | 'digitalcore' | 'vexorix' | 'canboso' | 'prodseller' | 'ssondigital'>('all');
   const [wholesaleCategoryFilter, setWholesaleCategoryFilter] = useState('all');
 
   // Clear Store / Products Modal
@@ -182,7 +182,7 @@ export const Dashboard: React.FC = () => {
   const [stockEditLoading, setStockEditLoading] = useState(false);
 
   // Topup Provider Selection
-  const [topupProvider, setTopupProvider] = useState<'digitalcore' | 'vexorix' | 'canboso' | 'prodseller'>('digitalcore');
+  const [topupProvider, setTopupProvider] = useState<'digitalcore' | 'vexorix' | 'canboso' | 'prodseller' | 'ssondigital'>('digitalcore');
   const [addStockProdId, setAddStockProdId] = useState<string | null>(null);
   const [addStockKeys, setAddStockKeys] = useState('');
 
@@ -1891,7 +1891,7 @@ export const Dashboard: React.FC = () => {
                     <div className="space-y-2">
                       <div className="flex justify-between items-start gap-2">
                         <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-carbon-800 text-laser-400 border border-laser-500/20 uppercase flex items-center gap-1">
-                          <span>{item.icon || '⚡'}</span> {item.provider === 'digitalcore' ? 'Mogent V1' : item.provider === 'vexorix' ? 'Mogent V2' : item.provider === 'canboso' ? 'Mogent V3' : item.provider === 'prodseller' ? 'Mogent V4' : item.provider}
+                          <span>{item.icon || '⚡'}</span> {item.provider === 'digitalcore' ? 'Mogent V1' : item.provider === 'vexorix' ? 'Mogent V2' : item.provider === 'canboso' ? 'Mogent V3' : item.provider === 'prodseller' ? 'Mogent V4' : item.provider === 'ssondigital' ? 'Mogent V5' : item.provider}
                         </span>
                         <span className="text-xs font-mono text-emerald-400 font-bold">
                           In Stock ({item.stock})
@@ -4015,6 +4015,7 @@ export const Dashboard: React.FC = () => {
                   <option value="vexorix">🚀 Mogent V2 Wholesale</option>
                   <option value="canboso">🌐 Mogent V3 Wholesale</option>
                   <option value="prodseller">🔥 Mogent V4 Wholesale</option>
+                  <option value="ssondigital">⚡ Mogent V5 Wholesale</option>
                 </select>
               </div>
 

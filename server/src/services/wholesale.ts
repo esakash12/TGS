@@ -5,6 +5,7 @@ import {
   UPSTREAM_CANBOSO_BASE_URL,
   UPSTREAM_VEXORIX_BASE_URL,
   UPSTREAM_PRODSELLER_BASE_URL,
+  UPSTREAM_SSON_BASE_URL,
 } from '../../../shared/constants';
 import { WholesaleProductDTO } from '../../../shared/types';
 
@@ -23,6 +24,7 @@ export function getGlobalWholesaleConfig() {
     canbosoKey: config?.wholesale_canboso_key || '',
     vexorixKey: config?.wholesale_vexorix_key || '',
     prodsellerKey: config?.wholesale_prodseller_key || '',
+    ssondigitalKey: config?.wholesale_ssondigital_key || '',
     platformFeeFixed: Number(config?.platform_fee_fixed_usd ?? 0.01),
     platformFeePct: Number(config?.platform_fee_pct ?? 0.0),
   };
@@ -94,6 +96,36 @@ export async function getProdSellerBalance(): Promise<{ balance: number; currenc
   }
 }
 
+export async function getSsonDigitalBalance(): Promise<{ balance: number; currency: string; username?: string } | null> {
+  const { ssondigitalKey } = getGlobalWholesaleConfig();
+  if (!ssondigitalKey) return null;
+  try {
+    const res = await axios.get(`${UPSTREAM_SSON_BASE_URL}?action=balance`, {
+      headers: { 'Authorization': `Bearer ${ssondigitalKey}` },
+      timeout: 8000,
+    });
+    const d = res.data || {};
+    const bal =
+      d.balance !== undefined
+        ? Number(d.balance)
+        : d.data?.balance !== undefined
+        ? Number(d.data.balance)
+        : d.wallet?.balance !== undefined
+        ? Number(d.wallet.balance)
+        : 0;
+    const curr = d.currency || d.data?.currency || 'USD';
+    const user = d.username || d.email || d.data?.username || '';
+    return {
+      balance: isNaN(bal) ? 0 : bal,
+      currency: curr,
+      username: user,
+    };
+  } catch (err: any) {
+    console.error('SsonDigital balance check failed:', err.response?.data || err.message);
+    return null;
+  }
+}
+
 export async function getCanbosoBalance(): Promise<{ balanceUsd: number; balanceVnd: number } | null> {
   const { canbosoKey } = getGlobalWholesaleConfig();
   if (!canbosoKey) return null;
@@ -155,7 +187,7 @@ export async function fetchLiveWholesaleCatalog(forceRefresh = false): Promise<W
     return catalogCache.products;
   }
 
-  const { digitalcoreKey, canbosoKey, vexorixKey, prodsellerKey, platformFeeFixed, platformFeePct } = getGlobalWholesaleConfig();
+  const { digitalcoreKey, canbosoKey, vexorixKey, prodsellerKey, ssondigitalKey, platformFeeFixed, platformFeePct } = getGlobalWholesaleConfig();
   const allProducts: WholesaleProductDTO[] = [];
 
   // Helper to calculate price with platform fee (e.g. +$0.01)
@@ -284,6 +316,42 @@ export async function fetchLiveWholesaleCatalog(forceRefresh = false): Promise<W
     }
   }
 
+  // 5. Fetch from SsonDigital (Mogent V5)
+  if (ssondigitalKey) {
+    try {
+      const res = await axios.get(`${UPSTREAM_SSON_BASE_URL}?action=products`, {
+        headers: { 'Authorization': `Bearer ${ssondigitalKey}` },
+        timeout: 10000,
+      });
+      const prods = Array.isArray(res.data)
+        ? res.data
+        : Array.isArray(res.data?.products)
+        ? res.data.products
+        : Array.isArray(res.data?.data)
+        ? res.data.data
+        : [];
+      for (const item of prods) {
+        const prodId = String(item.id || item.product_id || item._id);
+        const basePrice = Number(item.price ?? item.cost ?? item.wholesale_price ?? 0);
+        const catInfo = extractCategoryFromProduct(item.name || item.title || '', prodId);
+        const stockCount = item.stock !== undefined ? Number(item.stock) : (item.in_stock === false ? 0 : 999);
+        allProducts.push({
+          id: `sd_${prodId}`,
+          name: item.name || item.title || 'Unnamed Wholesale Item',
+          provider: 'ssondigital',
+          base_price_usd: basePrice,
+          cost_with_platform_fee_usd: applyPlatformFee(basePrice),
+          stock: isNaN(stockCount) ? 999 : stockCount,
+          category: item.category || catInfo.category,
+          icon: catInfo.icon,
+          description: item.description || item.details || '',
+        });
+      }
+    } catch (err: any) {
+      console.warn('SsonDigital catalog fetch warning:', err.response?.data || err.message);
+    }
+  }
+
   // 3. Augment with God-Mode Platform Wholesale Governance Rules
   const rules = db.prepare('SELECT * FROM platform_wholesale_rules').all() as any[];
   const rulesMap = new Map<string, any>();
@@ -355,12 +423,87 @@ export function isWholesaleProductGloballyActive(providerProductId: string): boo
 }
 
 export async function purchaseUpstreamProduct(params: {
-  provider: 'digitalcore' | 'canboso' | 'vexorix' | 'prodseller';
+  provider: 'digitalcore' | 'canboso' | 'vexorix' | 'prodseller' | 'ssondigital';
   providerProductId: string;
   quantity: number;
 }): Promise<{ success: boolean; deliveredItems: string[]; orderId: string; error?: string }> {
   const { provider, providerProductId, quantity } = params;
-  const { digitalcoreKey, canbosoKey, vexorixKey, prodsellerKey } = getGlobalWholesaleConfig();
+  const { digitalcoreKey, canbosoKey, vexorixKey, prodsellerKey, ssondigitalKey } = getGlobalWholesaleConfig();
+
+  if (provider === 'ssondigital') {
+    if (!ssondigitalKey) {
+      return { success: false, deliveredItems: [], orderId: '', error: 'SsonDigital API Key is not configured' };
+    }
+    const rawId = providerProductId.replace(/^sd_/, '');
+    const externalOrderId = 'mg-' + Date.now() + '-' + Math.random().toString(36).substring(2, 8);
+    console.log(`[Wholesale Upstream] Attempting SsonDigital purchase for rawId="${rawId}", count=${quantity}`);
+    try {
+      const res = await axios.post(
+        `${UPSTREAM_SSON_BASE_URL}?action=order`,
+        {
+          product_id: rawId,
+          quantity,
+          external_order_id: externalOrderId,
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${ssondigitalKey}`,
+            'Content-Type': 'application/json',
+          },
+          timeout: 25000,
+        }
+      );
+
+      const data = res.data;
+      const orderId = String(data?.order_id || data?.orderId || data?.id || externalOrderId);
+      let deliveredItems: string[] = [];
+
+      if (Array.isArray(data?.items)) {
+        deliveredItems = data.items.map((i: any) => typeof i === 'string' ? i : (i.content || i.code || i.key || i.serial || JSON.stringify(i))).filter(Boolean);
+      } else if (Array.isArray(data?.delivered_items)) {
+        deliveredItems = data.delivered_items.map((i: any) => typeof i === 'string' ? i : (i.content || i.code || i.key || JSON.stringify(i))).filter(Boolean);
+      } else if (Array.isArray(data?.deliveredKeys)) {
+        deliveredItems = data.deliveredKeys.filter(Boolean);
+      } else if (Array.isArray(data?.keys)) {
+        deliveredItems = data.keys.filter(Boolean);
+      } else if (data?.code || data?.serial || data?.key || data?.account || data?.delivered_data) {
+        deliveredItems = [String(data.code || data.serial || data.key || data.account || data.delivered_data)];
+      } else if (data?.order?.items && Array.isArray(data.order.items)) {
+        deliveredItems = data.order.items.map((i: any) => typeof i === 'string' ? i : (i.content || i.code || i.key || JSON.stringify(i))).filter(Boolean);
+      }
+
+      if (deliveredItems.length > 0) {
+        return {
+          success: true,
+          deliveredItems,
+          orderId,
+        };
+      }
+
+      if (data?.status === 'success' || data?.status === 'completed' || data?.success === true) {
+        return {
+          success: true,
+          deliveredItems: [`Order Submitted (ID: ${orderId}). Status: Processing ASAP.`],
+          orderId,
+        };
+      }
+
+      return {
+        success: false,
+        deliveredItems: [],
+        orderId,
+        error: data?.error || data?.message || data?.detail || 'No digital serial keys delivered by SsonDigital',
+      };
+    } catch (err: any) {
+      const errMsg = err.response?.data?.error || err.response?.data?.message || err.response?.data?.detail || err.message;
+      return {
+        success: false,
+        deliveredItems: [],
+        orderId: '',
+        error: errMsg,
+      };
+    }
+  }
 
   if (provider === 'prodseller') {
     if (!prodsellerKey) {

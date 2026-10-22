@@ -115,7 +115,7 @@ export async function processCustomerPurchase(params: {
   // ==========================================
   // CASE B: Wholesale Provider Product (DigitalCore / Canboso)
   // ==========================================
-  if (product.provider === 'digitalcore' || product.provider === 'vexorix' || product.provider === 'canboso' || product.provider === 'prodseller') {
+  if (product.provider === 'digitalcore' || product.provider === 'vexorix' || product.provider === 'canboso' || product.provider === 'prodseller' || product.provider === 'ssondigital') {
     const tenant = db.prepare('SELECT wallet_usd FROM tenants WHERE id = ?').get(tenantId) as any;
     const { platformFeeFixed, platformFeePct } = getGlobalWholesaleConfig();
 

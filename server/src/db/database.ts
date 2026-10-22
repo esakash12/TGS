@@ -71,6 +71,7 @@ export function initDatabase() {
       if (!configCols.includes('godmode_bot_token')) db.exec("ALTER TABLE global_system_config ADD COLUMN godmode_bot_token TEXT DEFAULT '';");
       if (!configCols.includes('wholesale_vexorix_key')) db.exec("ALTER TABLE global_system_config ADD COLUMN wholesale_vexorix_key TEXT DEFAULT '';");
       if (!configCols.includes('wholesale_prodseller_key')) db.exec("ALTER TABLE global_system_config ADD COLUMN wholesale_prodseller_key TEXT DEFAULT '';");
+      if (!configCols.includes('wholesale_ssondigital_key')) db.exec("ALTER TABLE global_system_config ADD COLUMN wholesale_ssondigital_key TEXT DEFAULT '';");
     }
 
     if (tableNames.has('platform_wholesale_rules')) {
