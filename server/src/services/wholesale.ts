@@ -158,8 +158,64 @@ export function invalidateWholesaleCache() {
   catalogCache = null;
 }
 
+export function cleanUpstreamText(raw?: string | null): string {
+  if (!raw || typeof raw !== 'string') return '';
+
+  return raw
+    .replace(/\{pe:\d+\}/gi, '')
+    .replace(/\{emoji:\d+\}/gi, '')
+    .replace(/\[pe:\d+\]/gi, '')
+    .replace(/\[emoji:\d+\]/gi, '')
+    .replace(/<tg-emoji[^>]*>(.*?)<\/tg-emoji>/gi, '$1')
+    .replace(/<tg-emoji[^>]*\/>/gi, '')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&#039;/gi, "'")
+    .replace(/[ \t]+/g, ' ')
+    .trim();
+}
+
+export function cleanUpstreamDescription(raw?: string | null): string {
+  if (!raw || typeof raw !== 'string') return '';
+
+  let text = raw
+    .replace(/\{pe:\d+\}/gi, '')
+    .replace(/\{emoji:\d+\}/gi, '')
+    .replace(/\[pe:\d+\]/gi, '')
+    .replace(/\[emoji:\d+\]/gi, '')
+    .replace(/<tg-emoji[^>]*>(.*?)<\/tg-emoji>/gi, '$1')
+    .replace(/<tg-emoji[^>]*\/>/gi, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<\/div>/gi, '\n')
+    .replace(/<\/li>/gi, '\n')
+    .replace(/<li>/gi, '• ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&#039;/gi, "'")
+    .replace(/&ndash;/gi, '–')
+    .replace(/&mdash;/gi, '—')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/\n{3,}/g, '\n\n');
+
+  const lines = text.split('\n').map(l => l.trim());
+  return lines.join('\n').trim();
+}
+
 export function extractCategoryFromProduct(name: string, idOrSlug?: string, emoji?: string): { category: string; icon: string } {
-  const combined = `${name || ''} ${idOrSlug || ''} ${emoji || ''}`.toLowerCase();
+  const cleanName = cleanUpstreamText(name);
+  const combined = `${cleanName} ${idOrSlug || ''} ${emoji || ''}`.toLowerCase();
 
   if (/gemini/i.test(combined)) return { category: 'Gemini', icon: '🇬' };
   if (/chatgpt|openai|gpt/i.test(combined)) return { category: 'ChatGPT', icon: '🤖' };
@@ -173,7 +229,9 @@ export function extractCategoryFromProduct(name: string, idOrSlug?: string, emoj
   if (/telegram|tg\s*prem/i.test(combined)) return { category: 'Telegram Premium', icon: '✈️' };
   if (/vpn|nord|express|surfshark/i.test(combined)) return { category: 'VPN', icon: '🛡️' };
   if (/youtube/i.test(combined)) return { category: 'YouTube', icon: '▶️' };
-  if (/email|gmail|mail/i.test(combined)) return { category: 'Email', icon: '✉️' };
+  if (/email|gmail|mail|hotmail|outlook/i.test(combined)) return { category: 'Email', icon: '✉️' };
+  if (/elevenlabs|voice/i.test(combined)) return { category: 'ElevenLabs', icon: '🗣️' };
+  if (/elite\s*methods|vip/i.test(combined)) return { category: 'VIP & Methods', icon: '👑' };
   if (/figma/i.test(combined)) return { category: 'Figma', icon: '🖋️' };
   if (/duolingo/i.test(combined)) return { category: 'Doulingo', icon: '🦉' };
   if (/leonardo/i.test(combined)) return { category: 'Leonardo AI', icon: '🎨' };
@@ -320,17 +378,18 @@ export async function fetchLiveWholesaleCatalog(forceRefresh = false): Promise<W
       if (Array.isArray(res.data)) {
         for (const item of res.data) {
           const basePrice = Number(item.price || 0);
-          const catInfo = extractCategoryFromProduct(item.name, item.id);
+          const cleanName = cleanUpstreamText(item.name);
+          const catInfo = extractCategoryFromProduct(cleanName, item.id);
           allProducts.push({
             id: `dc_${item.id}`,
-            name: item.name,
+            name: cleanName,
             provider: 'digitalcore',
             base_price_usd: basePrice,
             cost_with_platform_fee_usd: applyPlatformFee(basePrice),
             stock: Number(item.stock || 0),
-            category: catInfo.category,
+            category: cleanUpstreamText(item.category) || catInfo.category,
             icon: catInfo.icon,
-            description: item.description || '',
+            description: cleanUpstreamDescription(item.description),
           });
         }
       }
@@ -349,18 +408,19 @@ export async function fetchLiveWholesaleCatalog(forceRefresh = false): Promise<W
       if (res.data?.success && Array.isArray(res.data.products)) {
         for (const item of res.data.products) {
           const basePrice = Number(item.price?.amount || 0);
-          const catInfo = extractCategoryFromProduct(item.name, String(item.productId), item.emoji);
+          const cleanName = cleanUpstreamText(item.name);
+          const catInfo = extractCategoryFromProduct(cleanName, String(item.productId), item.emoji);
           const stock = parseCanbosoStock(item);
           allProducts.push({
             id: `cb_${item.productId}`,
-            name: item.name,
+            name: cleanName,
             provider: 'canboso',
             base_price_usd: basePrice,
             cost_with_platform_fee_usd: applyPlatformFee(basePrice),
             stock,
-            category: catInfo.category,
+            category: cleanUpstreamText(item.category) || catInfo.category,
             icon: catInfo.icon,
-            description: item.description || '',
+            description: cleanUpstreamDescription(item.description),
           });
         }
       }
@@ -385,17 +445,18 @@ export async function fetchLiveWholesaleCatalog(forceRefresh = false): Promise<W
         : [];
       for (const item of prods) {
         const basePrice = Number(item.price ?? item.cost ?? 0);
-        const catInfo = extractCategoryFromProduct(item.name || '', item.id);
+        const cleanName = cleanUpstreamText(item.name);
+        const catInfo = extractCategoryFromProduct(cleanName, item.id);
         allProducts.push({
           id: `vx_${item.id}`,
-          name: item.name || 'Unnamed Wholesale Item',
+          name: cleanName || 'Unnamed Wholesale Item',
           provider: 'vexorix',
           base_price_usd: basePrice,
           cost_with_platform_fee_usd: applyPlatformFee(basePrice),
           stock: Number(item.stock ?? item.inventory ?? item.available ?? 0),
-          category: item.category || catInfo.category,
+          category: cleanUpstreamText(item.category) || catInfo.category,
           icon: catInfo.icon,
-          description: item.description || item.how_to_use || '',
+          description: cleanUpstreamDescription(item.description || item.how_to_use),
         });
       }
     } catch (err: any) {
@@ -438,18 +499,19 @@ export async function fetchLiveWholesaleCatalog(forceRefresh = false): Promise<W
 
       for (const item of prods) {
         const basePrice = Number(item.price ?? item.finalPrice ?? item.publicPrice ?? 0);
-        const catInfo = extractCategoryFromProduct(item.name || '', item.id);
+        const cleanName = cleanUpstreamText(item.name);
+        const catInfo = extractCategoryFromProduct(cleanName, item.id);
         const stock = item.inStock === false ? 0 : (stockMap.get(item.id) ?? 0);
         allProducts.push({
           id: `ps_${item.id}`,
-          name: item.name || 'Unnamed Wholesale Item',
+          name: cleanName || 'Unnamed Wholesale Item',
           provider: 'prodseller',
           base_price_usd: basePrice,
           cost_with_platform_fee_usd: applyPlatformFee(basePrice),
           stock,
           category: catInfo.category,
           icon: catInfo.icon,
-          description: item.description || '',
+          description: cleanUpstreamDescription(item.description),
         });
       }
     } catch (err: any) {
@@ -493,9 +555,14 @@ export async function fetchLiveWholesaleCatalog(forceRefresh = false): Promise<W
       for (const item of prods) {
         const prodId = String(item.id || item.product_id || item.productId || item._id || item.code || '');
         if (!prodId) continue;
-        const prodName = item.name || item.title || item.product_name || item.productName || 'Unnamed Wholesale Item';
+        const rawName = item.name || item.title || item.product_name || item.productName || 'Unnamed Wholesale Item';
+        const prodName = cleanUpstreamText(rawName);
         const basePrice = Number(item.price ?? item.cost ?? item.wholesale_price ?? item.rate ?? item.amount ?? 0);
         const catInfo = extractCategoryFromProduct(prodName, prodId);
+        const rawCat = item.category || item.category_name || item.folder || '';
+        const cleanCat = rawCat ? cleanUpstreamText(rawCat) : catInfo.category;
+        const rawDesc = item.description || item.details || item.desc || item.info || '';
+        const cleanDesc = cleanUpstreamDescription(rawDesc);
         const stock = parseSsonDigitalStock(item);
         allProducts.push({
           id: `sd_${prodId}`,
@@ -504,9 +571,9 @@ export async function fetchLiveWholesaleCatalog(forceRefresh = false): Promise<W
           base_price_usd: basePrice,
           cost_with_platform_fee_usd: applyPlatformFee(basePrice),
           stock,
-          category: item.category || catInfo.category,
+          category: cleanCat || catInfo.category,
           icon: catInfo.icon,
-          description: item.description || item.details || item.desc || '',
+          description: cleanDesc,
         });
       }
     } catch (err: any) {

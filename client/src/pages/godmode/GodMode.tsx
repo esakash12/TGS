@@ -1342,9 +1342,9 @@ export const GodMode: React.FC = () => {
                             }`}
                           >
                             <td className="p-4">
-                              <span className="font-bold text-white block">{p.name}</span>
+                              <span className="font-bold text-white block">{p.name?.replace(/\{pe:\d+\}/gi, '').trim()}</span>
                               <span className="text-[10px] text-zinc-500">
-                                {p.category} · {p.id}
+                                {p.category?.replace(/\{pe:\d+\}/gi, '').trim()} · {p.id}
                               </span>
                             </td>
                             <td className="p-4">

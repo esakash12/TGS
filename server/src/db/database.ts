@@ -190,6 +190,23 @@ export function initDatabase() {
     console.warn('Subscription plans sync notice:', err.message);
   }
 
+  // Clean any legacy {pe:...} emoji codes from existing imported products
+  try {
+    const dirtyProducts = db.prepare("SELECT id, name, category, description FROM products WHERE name LIKE '%pe:%' OR category LIKE '%pe:%' OR description LIKE '%pe:%'").all() as any[];
+    if (dirtyProducts.length > 0) {
+      const updateStmt = db.prepare("UPDATE products SET name = ?, category = ?, description = ? WHERE id = ?");
+      for (const p of dirtyProducts) {
+        const cleanN = (p.name || '').replace(/\{pe:\d+\}/gi, '').replace(/[ \t]+/g, ' ').trim();
+        const cleanC = (p.category || '').replace(/\{pe:\d+\}/gi, '').replace(/[ \t]+/g, ' ').trim();
+        const cleanD = (p.description || '').replace(/\{pe:\d+\}/gi, '').trim();
+        updateStmt.run(cleanN, cleanC, cleanD, p.id);
+      }
+      console.log(`✅ Cleaned ${dirtyProducts.length} products with {pe:...} tags in database`);
+    }
+  } catch (e: any) {
+    console.warn('Product emoji cleanup check warning:', e.message);
+  }
+
   console.log('✅ SQLite WAL Database initialized successfully at:', DB_PATH);
 }
 

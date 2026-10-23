@@ -7,6 +7,8 @@ import {
   fetchLiveWholesaleCatalog,
   fetchLiveWholesaleCatalogForMerchant,
   syncLivePricesForTenant,
+  cleanUpstreamText,
+  cleanUpstreamDescription,
 } from '../services/wholesale';
 import { verifyMerchantWholesaleTopup, verifyMerchantSubscriptionPayment } from '../services/binance';
 import { botRegistry } from '../../../bot/src/registry';
@@ -537,7 +539,9 @@ merchantRouter.post('/wholesale/import', async (req: AuthenticatedRequest, res: 
   const catalog = await fetchLiveWholesaleCatalog();
   const catalogItem = catalog.find(c => c.id === wholesaleProductId);
   const realStock = stock !== undefined && stock !== null ? Number(stock) : (catalogItem?.stock !== undefined ? Number(catalogItem.stock) : 0);
-  const realDesc = description || catalogItem?.description || '';
+  const realDesc = cleanUpstreamDescription(description || catalogItem?.description || '');
+  const cleanName = cleanUpstreamText(name);
+  const cleanCat = cleanUpstreamText(category || 'Wholesale');
 
   // Check if already imported
   const existing = db.prepare(`
@@ -578,8 +582,8 @@ merchantRouter.post('/wholesale/import', async (req: AuthenticatedRequest, res: 
     productId,
     tenantId,
     groupId || null,
-    name.trim(),
-    category || 'Wholesale',
+    cleanName,
+    cleanCat,
     provider || 'digitalcore',
     wholesaleProductId,
     Number(wholesaleCostUsd),
@@ -627,14 +631,14 @@ merchantRouter.post('/wholesale/bulk-enable', async (req: AuthenticatedRequest, 
           `).run(
             productId,
             tenantId,
-            item.name,
-            item.category,
+            cleanUpstreamText(item.name),
+            cleanUpstreamText(item.category),
             item.provider,
             item.id,
             cost,
             retail,
             item.stock ?? 0,
-            item.description || ''
+            cleanUpstreamDescription(item.description)
           );
         }
         imported++;

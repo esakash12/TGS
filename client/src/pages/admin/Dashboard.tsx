@@ -774,13 +774,13 @@ export const Dashboard: React.FC = () => {
         '/api/merchant/wholesale/import',
         {
           wholesaleProductId: importModalItem.id,
-          name: importModalItem.name,
-          category: importModalItem.category,
+          name: (importModalItem.name || '').replace(/\{pe:\d+\}/gi, '').trim(),
+          category: (importModalItem.category || '').replace(/\{pe:\d+\}/gi, '').trim(),
           wholesaleCostUsd: importModalItem.cost_with_platform_fee_usd,
           retailPriceUsd: parseFloat(importRetailPrice),
           provider: importModalItem.provider,
           groupId: finalGroupId,
-          description: importModalItem.description || '',
+          description: (importModalItem.description || '').replace(/\{pe:\d+\}/gi, '').trim(),
           stock: importModalItem.stock ?? 0,
         },
         authHeaders
@@ -1907,8 +1907,13 @@ export const Dashboard: React.FC = () => {
                           In Stock ({item.stock})
                         </span>
                       </div>
-                      <h4 className="font-bold text-sm text-white">{item.name}</h4>
-                      <div className="text-xs text-zinc-400">Folder: {item.category}</div>
+                      <h4 className="font-bold text-sm text-white">{item.name?.replace(/\{pe:\d+\}/gi, '').trim()}</h4>
+                      <div className="text-xs text-zinc-400">Folder: {item.category?.replace(/\{pe:\d+\}/gi, '').trim()}</div>
+                      {item.description && (
+                        <p className="text-[11px] text-zinc-400 line-clamp-2 leading-relaxed bg-black/20 p-2 rounded-lg border border-white/5 whitespace-pre-line">
+                          {item.description.replace(/\{pe:\d+\}/gi, '').trim()}
+                        </p>
+                      )}
                     </div>
 
                     <div className="border-t border-white/10 pt-3 flex items-center justify-between">
@@ -4428,13 +4433,19 @@ export const Dashboard: React.FC = () => {
             </div>
 
             <div className="bg-carbon-800/80 p-4 rounded-2xl border border-white/5 space-y-2">
-              <h4 className="font-bold text-sm text-white">{importModalItem.name}</h4>
+              <h4 className="font-bold text-sm text-white">{importModalItem.name?.replace(/\{pe:\d+\}/gi, '').trim()}</h4>
               <div className="flex items-center justify-between text-xs text-zinc-400">
                 <span>Wholesale Base Cost:</span>
                 <span className="font-mono font-bold text-white">
                   ${importModalItem.cost_with_platform_fee_usd.toFixed(2)} USD
                 </span>
               </div>
+              {importModalItem.description && (
+                <div className="mt-2 p-2.5 rounded-xl bg-carbon-900 border border-white/5 text-[11px] text-zinc-300 max-h-28 overflow-y-auto whitespace-pre-line leading-relaxed">
+                  <span className="text-[10px] uppercase font-bold text-zinc-500 block mb-1">Product Description / Instructions:</span>
+                  {importModalItem.description.replace(/\{pe:\d+\}/gi, '').trim()}
+                </div>
+              )}
             </div>
 
             <form onSubmit={handleConfirmImport} className="space-y-4">

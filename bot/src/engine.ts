@@ -419,7 +419,7 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
       // Telegram buttons can visually truncate if too long, cutting off price & stock.
       // We guarantee price & stock are 100% visible by truncating the product name when long.
       const maxNameLen = 22;
-      const cleanName = p.name ? p.name.trim() : 'Product';
+      const cleanName = p.name ? p.name.replace(/\{pe:\d+\}/gi, '').replace(/[ \t]+/g, ' ').trim() : 'Product';
       const truncatedName = cleanName.length > maxNameLen
         ? `${cleanName.substring(0, maxNameLen).trim()}…`
         : cleanName;
@@ -495,9 +495,12 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
       ? product.description.trim()
       : `Access via Instant API Gateway\n\nFast • Simple • Ready to use in minutes\n\nInstructions: This is an automated code / license. Redeem directly upon receipt.`;
 
+    const cleanProdName = (product.name || '').replace(/\{pe:\d+\}/gi, '').replace(/[<>]/g, '').trim();
+    const cleanDesc = (descContent || '').replace(/\{pe:\d+\}/gi, '').trim();
+
     const text =
-      `<b>${product.name}</b>\n\n` +
-      `<blockquote>${descContent}</blockquote>\n\n` +
+      `<b>${cleanProdName}</b>\n\n` +
+      `<blockquote>${cleanDesc}</blockquote>\n\n` +
       `💵 <b>Unit Price:</b> $${price}\n` +
       `🎁 <b>Stock:</b> ${stock > 0 ? `${stock} available` : '❌ Out of stock'}`;
 
