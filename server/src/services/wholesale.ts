@@ -99,9 +99,17 @@ export async function getProdSellerBalance(): Promise<{ balance: number; currenc
 export async function getSsonDigitalBalance(): Promise<{ balance: number; currency: string; username?: string } | null> {
   const { ssondigitalKey } = getGlobalWholesaleConfig();
   if (!ssondigitalKey) return null;
+  const cleanKey = ssondigitalKey.trim().replace(/^Bearer\s+/i, '');
   try {
     const res = await axios.get(`${UPSTREAM_SSON_BASE_URL}?action=balance`, {
-      headers: { 'Authorization': `Bearer ${ssondigitalKey}` },
+      headers: {
+        'Authorization': `Bearer ${cleanKey}`,
+        'X-API-Key': cleanKey,
+      },
+      params: {
+        action: 'balance',
+        api_key: cleanKey,
+      },
       timeout: 8000,
     });
     const d = res.data || {};
@@ -112,16 +120,18 @@ export async function getSsonDigitalBalance(): Promise<{ balance: number; curren
         ? Number(d.data.balance)
         : d.wallet?.balance !== undefined
         ? Number(d.wallet.balance)
+        : d.wallet_balance !== undefined
+        ? Number(d.wallet_balance)
         : 0;
     const curr = d.currency || d.data?.currency || 'USD';
-    const user = d.username || d.email || d.data?.username || '';
+    const user = d.username || d.email || d.data?.username || d.account?.username || 'Active';
     return {
       balance: isNaN(bal) ? 0 : bal,
       currency: curr,
       username: user,
     };
   } catch (err: any) {
-    console.error('SsonDigital balance check failed:', err.response?.data || err.message);
+    console.error('SsonDigital balance check failed:', err.response?.status, err.response?.data || err.message);
     return null;
   }
 }
@@ -450,36 +460,57 @@ export async function fetchLiveWholesaleCatalog(forceRefresh = false): Promise<W
   // 5. Fetch from SsonDigital (Mogent V5)
   if (ssondigitalKey) {
     try {
+      const cleanKey = ssondigitalKey.trim().replace(/^Bearer\s+/i, '');
       const res = await axios.get(`${UPSTREAM_SSON_BASE_URL}?action=products`, {
-        headers: { 'Authorization': `Bearer ${ssondigitalKey}` },
+        headers: {
+          'Authorization': `Bearer ${cleanKey}`,
+          'X-API-Key': cleanKey,
+        },
+        params: {
+          action: 'products',
+          api_key: cleanKey,
+        },
         timeout: 10000,
       });
-      const prods = Array.isArray(res.data)
-        ? res.data
-        : Array.isArray(res.data?.products)
-        ? res.data.products
-        : Array.isArray(res.data?.data)
-        ? res.data.data
-        : [];
+
+      let prods: any[] = [];
+      if (Array.isArray(res.data)) {
+        prods = res.data;
+      } else if (Array.isArray(res.data?.products)) {
+        prods = res.data.products;
+      } else if (Array.isArray(res.data?.data)) {
+        prods = res.data.data;
+      } else if (Array.isArray(res.data?.data?.products)) {
+        prods = res.data.data.products;
+      } else if (Array.isArray(res.data?.items)) {
+        prods = res.data.items;
+      } else if (Array.isArray(res.data?.result)) {
+        prods = res.data.result;
+      }
+
+      console.log(`[SsonDigital] Fetched ${prods.length} products`);
+
       for (const item of prods) {
-        const prodId = String(item.id || item.product_id || item._id);
-        const basePrice = Number(item.price ?? item.cost ?? item.wholesale_price ?? 0);
-        const catInfo = extractCategoryFromProduct(item.name || item.title || '', prodId);
+        const prodId = String(item.id || item.product_id || item.productId || item._id || item.code || '');
+        if (!prodId) continue;
+        const prodName = item.name || item.title || item.product_name || item.productName || 'Unnamed Wholesale Item';
+        const basePrice = Number(item.price ?? item.cost ?? item.wholesale_price ?? item.rate ?? item.amount ?? 0);
+        const catInfo = extractCategoryFromProduct(prodName, prodId);
         const stock = parseSsonDigitalStock(item);
         allProducts.push({
           id: `sd_${prodId}`,
-          name: item.name || item.title || 'Unnamed Wholesale Item',
+          name: prodName,
           provider: 'ssondigital',
           base_price_usd: basePrice,
           cost_with_platform_fee_usd: applyPlatformFee(basePrice),
           stock,
           category: item.category || catInfo.category,
           icon: catInfo.icon,
-          description: item.description || item.details || '',
+          description: item.description || item.details || item.desc || '',
         });
       }
     } catch (err: any) {
-      console.warn('SsonDigital catalog fetch warning:', err.response?.data || err.message);
+      console.warn('SsonDigital catalog fetch warning:', err.response?.status, err.response?.data || err.message);
     }
   }
 
@@ -565,6 +596,7 @@ export async function purchaseUpstreamProduct(params: {
     if (!ssondigitalKey) {
       return { success: false, deliveredItems: [], orderId: '', error: 'SsonDigital API Key is not configured' };
     }
+    const cleanKey = ssondigitalKey.trim().replace(/^Bearer\s+/i, '');
     const rawId = providerProductId.replace(/^sd_/, '');
     const externalOrderId = 'mg-' + Date.now() + '-' + Math.random().toString(36).substring(2, 8);
     console.log(`[Wholesale Upstream] Attempting SsonDigital purchase for rawId="${rawId}", count=${quantity}`);
@@ -578,8 +610,13 @@ export async function purchaseUpstreamProduct(params: {
         },
         {
           headers: {
-            'Authorization': `Bearer ${ssondigitalKey}`,
+            'Authorization': `Bearer ${cleanKey}`,
+            'X-API-Key': cleanKey,
             'Content-Type': 'application/json',
+          },
+          params: {
+            action: 'order',
+            api_key: cleanKey,
           },
           timeout: 25000,
         }

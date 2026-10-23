@@ -873,6 +873,20 @@ export const GodMode: React.FC = () => {
             </span>
           </div>
 
+          {/* Card 5: SsonDigital (Mogent V5) Live */}
+          <div className="glass-card-cyber rounded-2xl p-5 border border-white/10 space-y-2">
+            <div className="flex justify-between items-center text-xs text-zinc-400">
+              <span className="font-mono">SSONDIGITAL (V5) LIVE</span>
+              <Zap className="w-4 h-4 text-amber-400" />
+            </div>
+            <div className="text-2xl font-mono font-extrabold text-amber-400">
+              ${overview?.wholesaleBalances?.ssondigital?.balance?.toFixed(2) || '0.00'} <span className="text-xs text-zinc-500">USD</span>
+            </div>
+            <span className="text-[10px] text-zinc-500 font-mono">
+              Account: {overview?.wholesaleBalances?.ssondigital?.username || 'Active'}
+            </span>
+          </div>
+
           {/* Card 4: Fleet Overview */}
           <div className="glass-card-cyber rounded-2xl p-5 border border-white/10 space-y-2">
             <div className="flex justify-between items-center text-xs text-zinc-400">
@@ -1216,6 +1230,23 @@ export const GodMode: React.FC = () => {
                 <span>PRODSELLER (V4) API</span>
                 <span className="px-2 py-0.5 rounded-full text-[10px] bg-black/40">
                   {wholesaleCatalog.filter((i) => i.provider?.toLowerCase() === 'prodseller').length}
+                </span>
+              </button>
+              <button
+                onClick={() => {
+                  setWholesaleProviderFilter('ssondigital');
+                  setWholesaleCategoryFilter('all');
+                }}
+                className={`px-4 py-2 rounded-xl text-xs font-mono font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
+                  wholesaleProviderFilter === 'ssondigital'
+                    ? 'bg-amber-600 text-white shadow-md shadow-amber-600/30'
+                    : 'bg-carbon-900 text-zinc-400 hover:text-white border border-white/5'
+                }`}
+              >
+                <Zap className="w-3.5 h-3.5 text-amber-400" />
+                <span>SSONDIGITAL (V5) API</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] bg-black/40">
+                  {wholesaleCatalog.filter((i) => i.provider?.toLowerCase() === 'ssondigital').length}
                 </span>
               </button>
             </div>

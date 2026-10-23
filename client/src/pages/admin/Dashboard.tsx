@@ -1826,6 +1826,16 @@ export const Dashboard: React.FC = () => {
                     }`}
                   >
                     <span>🔥 Mogent V4</span>
+                  </button>
+                  <button
+                    onClick={() => setWholesaleProviderFilter('ssondigital')}
+                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                      wholesaleProviderFilter === 'ssondigital'
+                        ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-white shadow'
+                        : 'bg-carbon-800 text-zinc-400 hover:text-white border border-white/5'
+                    }`}
+                  >
+                    <span>⚡ Mogent V5</span>
                   </button></div>
               </div>
 
@@ -3972,7 +3982,7 @@ export const Dashboard: React.FC = () => {
             {/* Per-Provider Balance Badges */}
             <div className="p-3 rounded-2xl bg-carbon-950 border border-white/5 space-y-2">
               <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">Your API Provider Balances:</span>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center">
                 <div className="p-2 rounded-xl bg-carbon-900 border border-crimson-500/20">
                   <span className="text-[10px] text-crimson-400 block font-bold">Mogent V1</span>
                   <span className="font-mono text-xs font-extrabold text-white">${Number(topupInfo?.walletsByProvider?.digitalcore || 0).toFixed(2)}</span>
@@ -3988,6 +3998,10 @@ export const Dashboard: React.FC = () => {
                 <div className="p-2 rounded-xl bg-carbon-900 border border-purple-500/20">
                   <span className="text-[10px] text-purple-400 block font-bold">Mogent V4</span>
                   <span className="font-mono text-xs font-extrabold text-white">${Number(topupInfo?.walletsByProvider?.prodseller || 0).toFixed(2)}</span>
+                </div>
+                <div className="p-2 rounded-xl bg-carbon-900 border border-amber-500/20">
+                  <span className="text-[10px] text-amber-400 block font-bold">Mogent V5</span>
+                  <span className="font-mono text-xs font-extrabold text-white">${Number(topupInfo?.walletsByProvider?.ssondigital || 0).toFixed(2)}</span>
                 </div>
               </div>
             </div>
