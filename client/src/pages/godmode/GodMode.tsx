@@ -2014,8 +2014,8 @@ export const GodMode: React.FC = () => {
 
         {/* Modal: Create / Edit Subscription Plan */}
         {showPlanModal && (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="glass-card rounded-2xl max-w-lg w-full p-6 border border-white/10 space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+            <div className="glass-card rounded-2xl max-w-lg w-full p-6 border border-white/10 space-y-4 max-h-[92vh] overflow-y-auto my-auto shadow-2xl">
               <div className="flex justify-between items-center border-b border-white/10 pb-3">
                 <h3 className="text-base font-mono font-bold text-white">
                   {editingPlan ? `Edit Plan "${editingPlan.name}"` : 'Create New Subscription Plan'}
@@ -2195,8 +2195,8 @@ export const GodMode: React.FC = () => {
 
         {/* Modal: Create Discount Coupon */}
         {showCouponModal && (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="glass-card rounded-2xl max-w-md w-full p-6 border border-white/10 space-y-4">
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+            <div className="glass-card rounded-2xl max-w-md w-full p-6 border border-white/10 space-y-4 max-h-[92vh] overflow-y-auto my-auto shadow-2xl">
               <div className="flex justify-between items-center border-b border-white/10 pb-3">
                 <h3 className="text-base font-mono font-bold text-white">Create New Discount Coupon</h3>
                 <button onClick={() => setShowCouponModal(false)} className="text-zinc-400 hover:text-white">✕</button>
@@ -2312,8 +2312,8 @@ export const GodMode: React.FC = () => {
 
         {/* Merchant Wholesale Wallet Adjustment Modal */}
         {adjustingMerchant && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="relative w-full max-w-md bg-carbon-900 border border-white/10 rounded-2xl p-6 shadow-2xl space-y-5">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200 overflow-y-auto">
+            <div className="relative w-full max-w-md bg-carbon-900 border border-white/10 rounded-2xl p-6 shadow-2xl space-y-5 max-h-[92vh] overflow-y-auto my-auto">
               <div className="flex items-center justify-between border-b border-white/5 pb-4">
                 <div className="flex items-center gap-2.5">
                   <div className="w-9 h-9 rounded-xl bg-laser-600/20 text-laser-400 flex items-center justify-center font-bold">

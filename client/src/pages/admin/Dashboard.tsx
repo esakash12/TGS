@@ -44,6 +44,9 @@ import {
   X,
 } from 'lucide-react';
 import { CyberDialog, CyberDialogOptions } from '../../components/CyberDialog';
+import { TopupWholesaleModal } from '../../components/admin/modals/TopupWholesaleModal';
+import { ImportProductModal } from '../../components/admin/modals/ImportProductModal';
+import { WholesaleCatalogView } from '../../components/admin/wholesale/WholesaleCatalogView';
 
 export const Dashboard: React.FC = () => {
   const { user, tenant, token, logout, refreshSession } = useAuth();
@@ -147,10 +150,6 @@ export const Dashboard: React.FC = () => {
   // Wholesale Topup Modal
   const [showTopupModal, setShowTopupModal] = useState(false);
   const [topupInfo, setTopupInfo] = useState<any>(null);
-  const [topupTrxId, setTopupTrxId] = useState('');
-  const [topupAmountUsd, setTopupAmountUsd] = useState('');
-  const [topupLoading, setTopupLoading] = useState(false);
-  const [topupMsg, setTopupMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
   // Group Management Modal
   const [showAddGroupModal, setShowAddGroupModal] = useState(false);
@@ -181,18 +180,11 @@ export const Dashboard: React.FC = () => {
   const [stockEditText, setStockEditText] = useState('');
   const [stockEditLoading, setStockEditLoading] = useState(false);
 
-  // Topup Provider Selection
-  const [topupProvider, setTopupProvider] = useState<'digitalcore' | 'vexorix' | 'canboso' | 'prodseller' | 'ssondigital'>('digitalcore');
   const [addStockProdId, setAddStockProdId] = useState<string | null>(null);
   const [addStockKeys, setAddStockKeys] = useState('');
 
   // Wholesale Import Modal
   const [importModalItem, setImportModalItem] = useState<any | null>(null);
-  const [importGroupId, setImportGroupId] = useState('');
-  const [importRetailPrice, setImportRetailPrice] = useState('');
-  const [importLoading, setImportLoading] = useState(false);
-  const [showNewCatInputInImport, setShowNewCatInputInImport] = useState(false);
-  const [importNewCategoryName, setImportNewCategoryName] = useState('');
 
   // Settings State
   const [settingsData, setSettingsData] = useState<any>({
@@ -414,39 +406,11 @@ export const Dashboard: React.FC = () => {
   // Open Topup Modal
   const handleOpenTopup = async () => {
     setShowTopupModal(true);
-    setTopupMsg(null);
     try {
       const res = await axios.get('/api/merchant/wholesale-wallet/info', authHeaders);
       setTopupInfo(res.data);
     } catch (err) {
       console.error('Failed to load wholesale wallet info:', err);
-    }
-  };
-
-  // Verify Wholesale Topup
-  const handleVerifyTopup = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setTopupLoading(true);
-    setTopupMsg(null);
-    try {
-      const res = await axios.post(
-        '/api/merchant/wholesale-wallet/verify',
-        {
-          trxId: topupTrxId,
-          amountUsd: parseFloat(topupAmountUsd),
-          provider: topupProvider,
-        },
-        authHeaders
-      );
-      setTopupMsg({ text: res.data.message, type: 'success' });
-      setTopupTrxId('');
-      setTopupAmountUsd('');
-      loadDashboardData();
-      refreshSession();
-    } catch (err: any) {
-      setTopupMsg({ text: err.response?.data?.error || 'Verification failed', type: 'error' });
-    } finally {
-      setTopupLoading(false);
     }
   };
 
@@ -743,56 +707,6 @@ export const Dashboard: React.FC = () => {
   const handleOpenImportModal = (item: any) => {
     if (!requireActiveSubscription()) return;
     setImportModalItem(item);
-    const defaultMargin = parseFloat(marginFixedUsd) || 0.20;
-    const calculatedPrice = (item.cost_with_platform_fee_usd + defaultMargin).toFixed(2);
-    setImportRetailPrice(calculatedPrice);
-    setImportGroupId(groups.length > 0 ? groups[0].id : '');
-    setShowNewCatInputInImport(false);
-    setImportNewCategoryName('');
-  };
-
-  // Confirm Wholesale Import
-  const handleConfirmImport = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!importModalItem) return;
-    if (!requireActiveSubscription()) return;
-    setImportLoading(true);
-    try {
-      let finalGroupId = importGroupId || null;
-
-      if (showNewCatInputInImport && importNewCategoryName.trim()) {
-        const catRes = await axios.post(
-          '/api/merchant/groups',
-          { name: importNewCategoryName.trim(), icon: '📁', sortOrder: 0 },
-          authHeaders
-        );
-        finalGroupId = catRes.data?.id || null;
-        loadGroups();
-      }
-
-      await axios.post(
-        '/api/merchant/wholesale/import',
-        {
-          wholesaleProductId: importModalItem.id,
-          name: (importModalItem.name || '').replace(/\{pe:\d+\}/gi, '').trim(),
-          category: (importModalItem.category || '').replace(/\{pe:\d+\}/gi, '').trim(),
-          wholesaleCostUsd: importModalItem.cost_with_platform_fee_usd,
-          retailPriceUsd: parseFloat(importRetailPrice),
-          provider: importModalItem.provider,
-          groupId: finalGroupId,
-          description: (importModalItem.description || '').replace(/\{pe:\d+\}/gi, '').trim(),
-          stock: importModalItem.stock ?? 0,
-        },
-        authHeaders
-      );
-      setImportModalItem(null);
-      loadDashboardData();
-      showNotice('Wholesale Import', 'Product imported successfully to your store catalog!', 'success');
-    } catch (err: any) {
-      showNotice('Import Failed', err.response?.data?.error || 'Failed to import product', 'danger');
-    } finally {
-      setImportLoading(false);
-    }
   };
 
   // 1-Click Clear All / Partial Store Products
@@ -1716,227 +1630,21 @@ export const Dashboard: React.FC = () => {
             TAB 4: WHOLESALE SOURCING (SEARCH & DISCOVER)
            ========================================== */}
         {activeTab === 'wholesale' && (
-          <div className="space-y-6">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div>
-                <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <Zap className="w-5 h-5 text-crimson-400" /> Cloud Wholesale Sourcing Catalog
-                </h3>
-                <p className="text-xs text-zinc-400">
-                  Search live digital products across global cloud providers. Filter by brand folders, set profit margins, and import to your bot with 1 click!
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2.5">
-                <button
-                  onClick={() => setShowMarginModal(true)}
-                  className="px-3.5 py-2 rounded-xl bg-laser-600/20 hover:bg-laser-600/30 border border-laser-500/40 text-laser-300 text-xs font-bold shadow-md flex items-center gap-1.5 transition-all"
-                  title="Configure global profit margin"
-                >
-                  <Sliders className="w-3.5 h-3.5" /> Set Profit Margin
-                </button>
-                <button
-                  onClick={handleBulkImport}
-                  className="px-3.5 py-2 rounded-xl bg-laser-600 hover:bg-laser-500 text-white text-xs font-bold shadow-md flex items-center gap-1.5 transition-all"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" /> Auto-Import All (+Margin)
-                </button>
-                <button
-                  onClick={loadWholesaleCatalog}
-                  className="p-2 rounded-xl bg-carbon-800 hover:bg-carbon-700 text-zinc-300"
-                  title="Refresh Catalog"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-
-            {/* Search Input & Category Folders */}
-            <div className="glass-card rounded-2xl p-4 border border-white/10 space-y-3">
-              <div className="relative">
-                <Search className="w-4 h-4 text-zinc-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="Instant search by product name, category folder, or ID..."
-                  value={wholesaleSearch}
-                  onChange={(e) => setWholesaleSearch(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-carbon-800 border border-white/10 text-white text-xs focus:outline-none focus:border-crimson-500 transition-colors"
-                />
-                {wholesaleSearch && (
-                  <button
-                    onClick={() => setWholesaleSearch('')}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white text-xs font-bold"
-                  >
-                    Clear
-                  </button>
-                )}
-              </div>
-
-              {/* API Provider Switcher (Mogent V1, Mogent V2, etc.) */}
-              <div className="space-y-1.5 pb-2 border-b border-white/5">
-                <div className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <Zap className="w-3.5 h-3.5 text-amber-400" /> Wholesale API Provider:
-                </div>
-                <div className="flex items-center gap-2 overflow-x-auto">
-                  <button
-                    onClick={() => setWholesaleProviderFilter('all')}
-                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
-                      wholesaleProviderFilter === 'all'
-                        ? 'bg-gradient-to-r from-laser-600 to-purple-600 text-white shadow'
-                        : 'bg-carbon-800 text-zinc-400 hover:text-white border border-white/5'
-                    }`}
-                  >
-                    <span>⚡ All Providers</span>
-                  </button>
-                  <button
-                    onClick={() => setWholesaleProviderFilter('digitalcore')}
-                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
-                      wholesaleProviderFilter === 'digitalcore'
-                        ? 'bg-gradient-to-r from-crimson-600 to-rose-600 text-white shadow'
-                        : 'bg-carbon-800 text-zinc-400 hover:text-white border border-white/5'
-                    }`}
-                  >
-                    <span>📦 Mogent V1</span>
-                  </button>
-                  <button
-                    onClick={() => setWholesaleProviderFilter('vexorix')}
-                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
-                      wholesaleProviderFilter === 'vexorix'
-                        ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow'
-                        : 'bg-carbon-800 text-zinc-400 hover:text-white border border-white/5'
-                    }`}
-                  >
-                    <span>🚀 Mogent V2</span>
-                  </button>
-                  <button
-                    onClick={() => setWholesaleProviderFilter('canboso')}
-                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
-                      wholesaleProviderFilter === 'canboso'
-                        ? 'bg-gradient-to-r from-blue-600 to-cyan-600 text-white shadow'
-                        : 'bg-carbon-800 text-zinc-400 hover:text-white border border-white/5'
-                    }`}
-                  >
-                    <span>🌐 Mogent V3</span>
-                  </button>
-                  <button
-                    onClick={() => setWholesaleProviderFilter('prodseller')}
-                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
-                      wholesaleProviderFilter === 'prodseller'
-                        ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow'
-                        : 'bg-carbon-800 text-zinc-400 hover:text-white border border-white/5'
-                    }`}
-                  >
-                    <span>🔥 Mogent V4</span>
-                  </button>
-                  <button
-                    onClick={() => setWholesaleProviderFilter('ssondigital')}
-                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
-                      wholesaleProviderFilter === 'ssondigital'
-                        ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-white shadow'
-                        : 'bg-carbon-800 text-zinc-400 hover:text-white border border-white/5'
-                    }`}
-                  >
-                    <span>⚡ Mogent V5</span>
-                  </button></div>
-              </div>
-
-              {/* Category Filter Chips (Brand & Service Folders) */}
-              <div className="space-y-1.5">
-                <div className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <FolderOpen className="w-3.5 h-3.5 text-laser-400" /> Product Folders:
-                </div>
-                <div className="flex items-center gap-2 overflow-x-auto pt-0.5 pb-1">
-                  <button
-                    onClick={() => setWholesaleCategoryFilter('all')}
-                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 whitespace-nowrap ${
-                      wholesaleCategoryFilter === 'all'
-                        ? 'bg-crimson-500 text-white shadow'
-                        : 'bg-carbon-800 text-zinc-400 hover:text-white border border-white/5'
-                    }`}
-                  >
-                    <span>📁 All Folders</span>
-                    <span className="text-[10px] opacity-80">
-                      ({wholesaleCatalog.length})
-                    </span>
-                  </button>
-                  {wholesaleCategories.map((cat) => {
-                    const catCount = wholesaleCatalog.filter(
-                      (i) => i.category?.toLowerCase() === cat.toLowerCase()
-                    ).length;
-                    return (
-                      <button
-                        key={cat}
-                        onClick={() => setWholesaleCategoryFilter(cat)}
-                        className={`px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
-                          wholesaleCategoryFilter.toLowerCase() === cat.toLowerCase()
-                            ? 'bg-crimson-500 text-white shadow'
-                            : 'bg-carbon-800 text-zinc-400 hover:text-white border border-white/5'
-                        }`}
-                      >
-                        <Folder className="w-3 h-3 opacity-60" />
-                        <span>{cat}</span>
-                        <span className="text-[10px] opacity-75 font-mono">({catCount})</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
-            {/* Wholesale Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {filteredWholesale.length === 0 ? (
-                <div className="col-span-full glass-card rounded-2xl p-12 text-center text-zinc-500 space-y-3">
-                  <AlertCircle className="w-8 h-8 text-zinc-600 mx-auto" />
-                  <p className="text-white font-semibold">No matching wholesale products found.</p>
-                  <p className="text-xs text-zinc-400">
-                    Try adjusting your search query or check if upstream catalog is active.
-                  </p>
-                </div>
-              ) : (
-                filteredWholesale.map((item) => (
-                  <div
-                    key={item.id}
-                    className="glass-card rounded-2xl p-5 border border-white/10 flex flex-col justify-between space-y-4 hover:border-white/20 transition-all"
-                  >
-                    <div className="space-y-2">
-                      <div className="flex justify-between items-start gap-2">
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-carbon-800 text-laser-400 border border-laser-500/20 uppercase flex items-center gap-1">
-                          <span>{item.icon || '⚡'}</span> {item.provider === 'digitalcore' ? 'Mogent V1' : item.provider === 'vexorix' ? 'Mogent V2' : item.provider === 'canboso' ? 'Mogent V3' : item.provider === 'prodseller' ? 'Mogent V4' : item.provider === 'ssondigital' ? 'Mogent V5' : item.provider}
-                        </span>
-                        <span className="text-xs font-mono text-emerald-400 font-bold">
-                          In Stock ({item.stock})
-                        </span>
-                      </div>
-                      <h4 className="font-bold text-sm text-white">{item.name?.replace(/\{pe:\d+\}/gi, '').trim()}</h4>
-                      <div className="text-xs text-zinc-400">Folder: {item.category?.replace(/\{pe:\d+\}/gi, '').trim()}</div>
-                      {item.description && (
-                        <p className="text-[11px] text-zinc-400 line-clamp-2 leading-relaxed bg-black/20 p-2 rounded-lg border border-white/5 whitespace-pre-line">
-                          {item.description.replace(/\{pe:\d+\}/gi, '').trim()}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="border-t border-white/10 pt-3 flex items-center justify-between">
-                      <div>
-                        <span className="text-[10px] text-zinc-500 block">Wholesale Cost:</span>
-                        <span className="font-mono text-base font-bold text-white">
-                          ${item.cost_with_platform_fee_usd.toFixed(2)} USD
-                        </span>
-                      </div>
-                      <button
-                        onClick={() => handleOpenImportModal(item)}
-                        className="px-3.5 py-1.5 rounded-xl bg-crimson-600 hover:bg-crimson-500 text-white text-xs font-bold shadow-md active:scale-95 transition-all flex items-center gap-1"
-                      >
-                        <Plus className="w-3.5 h-3.5" /> Import to Bot
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
+          <WholesaleCatalogView
+            wholesaleCatalog={wholesaleCatalog}
+            wholesaleCategories={wholesaleCategories}
+            wholesaleSearch={wholesaleSearch}
+            setWholesaleSearch={setWholesaleSearch}
+            wholesaleProviderFilter={wholesaleProviderFilter}
+            setWholesaleProviderFilter={setWholesaleProviderFilter}
+            wholesaleCategoryFilter={wholesaleCategoryFilter}
+            setWholesaleCategoryFilter={setWholesaleCategoryFilter}
+            onOpenMarginModal={() => setShowMarginModal(true)}
+            onBulkImport={handleBulkImport}
+            onRefreshCatalog={loadWholesaleCatalog}
+            onOpenImportModal={handleOpenImportModal}
+          />
         )}
-
         {/* ==========================================
             TAB 5: MY ACTIVE STORE (ALL BOT PRODUCTS & 1-CLICK TOGGLE)
            ========================================== */}
@@ -2369,8 +2077,8 @@ export const Dashboard: React.FC = () => {
 
             {/* Customer Wallet Adjustment Modal */}
             {balanceModalCustomer && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-                <div className="relative w-full max-w-md bg-carbon-900 border border-white/10 rounded-2xl p-6 shadow-2xl space-y-5">
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200 overflow-y-auto">
+                <div className="relative w-full max-w-md bg-carbon-900 border border-white/10 rounded-2xl p-6 shadow-2xl space-y-5 max-h-[92vh] overflow-y-auto my-auto">
                   <div className="flex items-center justify-between border-b border-white/5 pb-4">
                     <div className="flex items-center gap-2.5">
                       <div className="w-9 h-9 rounded-xl bg-laser-600/20 text-laser-400 flex items-center justify-center font-bold">
@@ -3724,18 +3432,21 @@ export const Dashboard: React.FC = () => {
           MODAL: BINANCE PAY SUBSCRIPTION CHECKOUT
          ========================================== */}
       {showSubModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="glass-card rounded-3xl p-6 sm:p-8 max-w-lg w-full space-y-5 border border-white/10 relative max-h-[90vh] overflow-y-auto">
-            <button
-              onClick={() => setShowSubModal(false)}
-              className="absolute top-5 right-5 text-zinc-400 hover:text-white"
-            >
-              <XCircle className="w-5 h-5" />
-            </button>
-
-            <div className="flex items-center gap-2 text-crimson-400 font-bold text-base">
-              <Shield className="w-5 h-5" />
-              <span>Purchase Subscription with Binance Pay</span>
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+          <div className="glass-card rounded-3xl p-5 sm:p-7 max-w-lg w-full max-h-[92vh] overflow-y-auto space-y-5 border border-white/10 relative my-auto shadow-2xl">
+            <div className="flex items-center justify-between border-b border-white/5 pb-3">
+              <div className="flex items-center gap-2 text-crimson-400 font-bold text-base">
+                <Shield className="w-5 h-5" />
+                <span>Purchase Subscription with Binance Pay</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSubModal(false)}
+                className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-white/5 transition-colors"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
             {/* Billing Cycle Switcher */}
@@ -3954,130 +3665,19 @@ export const Dashboard: React.FC = () => {
       )}
 
       {/* ==========================================
-          MODAL 1: WHOLESALE TOPUP (WALLET)
+          MODAL 1: WHOLESALE TOPUP (WALLET) - EXTRACTED
          ========================================== */}
-      {showTopupModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
-          <div className="glass-card rounded-3xl p-5 sm:p-6 max-w-lg w-full max-h-[92vh] overflow-y-auto space-y-4 border border-white/10 relative my-auto shadow-2xl">
-            <div className="flex items-center justify-between border-b border-white/5 pb-3">
-              <div className="flex items-center gap-2 text-crimson-400 font-bold text-base">
-                <Zap className="w-5 h-5" /> Top Up Wholesale Wallet
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowTopupModal(false)}
-                className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-white/5 transition-colors"
-                title="Close"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <p className="text-xs text-zinc-400">
-              Transfer USDT to the platform owner via Binance Pay. Enter the 17-digit Transaction ID for automated verification.
-            </p>
-
-            {topupMsg && (
-              <div
-                className={`p-3 rounded-xl text-xs font-semibold ${
-                  topupMsg.type === 'success' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-crimson-500/20 text-crimson-400'
-                }`}
-              >
-                {topupMsg.text}
-              </div>
-            )}
-
-            {/* Per-Provider Balance Badges */}
-            <div className="p-2.5 rounded-2xl bg-carbon-950 border border-white/5 space-y-1.5">
-              <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">Your API Provider Balances:</span>
-              <div className="grid grid-cols-5 gap-1.5 text-center">
-                <div className="p-1.5 rounded-xl bg-carbon-900 border border-crimson-500/20">
-                  <span className="text-[9px] text-crimson-400 block font-bold leading-none">Mogent V1</span>
-                  <span className="font-mono text-[11px] font-extrabold text-white mt-1 block">${Number(topupInfo?.walletsByProvider?.digitalcore || 0).toFixed(2)}</span>
-                </div>
-                <div className="p-1.5 rounded-xl bg-carbon-900 border border-emerald-500/20">
-                  <span className="text-[9px] text-emerald-400 block font-bold leading-none">Mogent V2</span>
-                  <span className="font-mono text-[11px] font-extrabold text-white mt-1 block">${Number(topupInfo?.walletsByProvider?.vexorix || 0).toFixed(2)}</span>
-                </div>
-                <div className="p-1.5 rounded-xl bg-carbon-900 border border-blue-500/20">
-                  <span className="text-[9px] text-blue-400 block font-bold leading-none">Mogent V3</span>
-                  <span className="font-mono text-[11px] font-extrabold text-white mt-1 block">${Number(topupInfo?.walletsByProvider?.canboso || 0).toFixed(2)}</span>
-                </div>
-                <div className="p-1.5 rounded-xl bg-carbon-900 border border-purple-500/20">
-                  <span className="text-[9px] text-purple-400 block font-bold leading-none">Mogent V4</span>
-                  <span className="font-mono text-[11px] font-extrabold text-white mt-1 block">${Number(topupInfo?.walletsByProvider?.prodseller || 0).toFixed(2)}</span>
-                </div>
-                <div className="p-1.5 rounded-xl bg-carbon-900 border border-amber-500/20">
-                  <span className="text-[9px] text-amber-400 block font-bold leading-none">Mogent V5</span>
-                  <span className="font-mono text-[11px] font-extrabold text-white mt-1 block">${Number(topupInfo?.walletsByProvider?.ssondigital || 0).toFixed(2)}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-carbon-900/90 p-4 rounded-2xl border border-white/10 space-y-2">
-              <span className="text-[11px] text-zinc-400 block font-semibold">1. Send USDT to Platform Owner UID:</span>
-              <div className="flex items-center justify-between bg-carbon-800 p-2.5 rounded-xl font-mono text-xs text-white">
-                <span className="font-bold text-laser-400 select-all">{topupInfo?.platformOwnerBinanceUid}</span>
-                <span className="text-[10px] text-zinc-400">Binance Pay</span>
-              </div>
-              <p className="text-[10px] text-zinc-500">
-                Open Binance App &rarr; Pay &rarr; Send &rarr; Enter UID above and transfer USDT.
-              </p>
-            </div>
-
-            <form onSubmit={handleVerifyTopup} className="space-y-3">
-              <div>
-                <label className="block text-xs font-semibold text-zinc-300 mb-1">Select API Provider to Credit</label>
-                <select
-                  value={topupProvider}
-                  onChange={(e: any) => setTopupProvider(e.target.value)}
-                  className="w-full px-4 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white text-xs font-semibold focus:outline-none focus:border-laser-500"
-                >
-                  <option value="digitalcore">📦 Mogent V1 Wholesale</option>
-                  <option value="vexorix">🚀 Mogent V2 Wholesale</option>
-                  <option value="canboso">🌐 Mogent V3 Wholesale</option>
-                  <option value="prodseller">🔥 Mogent V4 Wholesale</option>
-                  <option value="ssondigital">⚡ Mogent V5 Wholesale</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-zinc-300 mb-1">Amount Sent (USDT)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  required
-                  placeholder="e.g. 20"
-                  value={topupAmountUsd}
-                  onChange={(e) => setTopupAmountUsd(e.target.value)}
-                  className="w-full px-4 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white text-xs font-mono focus:outline-none focus:border-crimson-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-zinc-300 mb-1">Transaction ID / Order ID</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Paste 17-digit TxID from Binance"
-                  value={topupTrxId}
-                  onChange={(e) => setTopupTrxId(e.target.value)}
-                  className="w-full px-4 py-2 rounded-xl bg-carbon-800 border border-white/10 text-white text-xs font-mono focus:outline-none focus:border-crimson-500"
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={topupLoading}
-                className="w-full py-3 rounded-xl bg-gradient-to-r from-crimson-600 to-crimson-500 hover:from-crimson-500 text-white font-bold text-xs shadow-lg shadow-crimson-500/30 transition-all flex items-center justify-center gap-2 active:scale-98 disabled:opacity-50"
-              >
-                {topupLoading ? 'Verifying with Binance...' : 'Verify & Credit Balance Instant ⚡'}
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
-
+      <TopupWholesaleModal
+        isOpen={showTopupModal}
+        onClose={() => setShowTopupModal(false)}
+        topupInfo={topupInfo}
+        authHeaders={authHeaders}
+        showNotice={showNotice}
+        onSuccess={() => {
+          loadDashboardData();
+          refreshSession();
+        }}
+      />
       {/* ==========================================
           MODAL 2: ADD CATEGORY / GROUP
          ========================================== */}
@@ -4434,146 +4034,42 @@ export const Dashboard: React.FC = () => {
       )}
 
       {/* ==========================================
-          MODAL 5: IMPORT WHOLESALE PRODUCT WITH GROUP
+          MODAL 5: IMPORT WHOLESALE PRODUCT - MODULAR COMPONENT
          ========================================== */}
-      {importModalItem && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
-          <div className="glass-card rounded-3xl p-5 sm:p-6 max-w-md w-full max-h-[92vh] overflow-y-auto space-y-4 border border-white/10 relative my-auto shadow-2xl">
-            <div className="flex items-center justify-between border-b border-white/5 pb-3">
-              <div className="flex items-center gap-2 text-crimson-400 font-bold text-base">
-                <Plus className="w-5 h-5" /> Import to Store
-              </div>
-              <button
-                type="button"
-                onClick={() => setImportModalItem(null)}
-                className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-white/5 transition-colors"
-                title="Close"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="bg-carbon-800/80 p-4 rounded-2xl border border-white/5 space-y-2">
-              <h4 className="font-bold text-sm text-white">{importModalItem.name?.replace(/\{pe:\d+\}/gi, '').trim()}</h4>
-              <div className="flex items-center justify-between text-xs text-zinc-400">
-                <span>Wholesale Base Cost:</span>
-                <span className="font-mono font-bold text-white">
-                  ${importModalItem.cost_with_platform_fee_usd.toFixed(2)} USD
-                </span>
-              </div>
-              {importModalItem.description && (
-                <div className="mt-2 p-2.5 rounded-xl bg-carbon-900 border border-white/5 text-[11px] text-zinc-300 max-h-28 overflow-y-auto whitespace-pre-line leading-relaxed">
-                  <span className="text-[10px] uppercase font-bold text-zinc-500 block mb-1">Product Description / Instructions:</span>
-                  {importModalItem.description.replace(/\{pe:\d+\}/gi, '').trim()}
-                </div>
-              )}
-            </div>
-
-            <form onSubmit={handleConfirmImport} className="space-y-4">
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-semibold text-zinc-300">
-                    Assign to Category / Folder
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setShowNewCatInputInImport(!showNewCatInputInImport)}
-                    className="text-[11px] text-laser-400 hover:underline flex items-center gap-1 font-semibold"
-                  >
-                    {showNewCatInputInImport ? 'Select Existing' : '+ New Category'}
-                  </button>
-                </div>
-
-                {showNewCatInputInImport ? (
-                  <div className="space-y-1">
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. 🎬 OTT & Streaming, 🛡️ VPNs..."
-                      value={importNewCategoryName}
-                      onChange={(e) => setImportNewCategoryName(e.target.value)}
-                      className="w-full px-4 py-2.5 rounded-xl bg-carbon-800 border border-laser-500/50 text-white text-xs focus:outline-none focus:border-laser-400"
-                    />
-                    <span className="text-[10px] text-laser-400 block">
-                      This folder will be automatically created and assigned to this product!
-                    </span>
-                  </div>
-                ) : (
-                  <div>
-                    <select
-                      value={importGroupId}
-                      onChange={(e) => setImportGroupId(e.target.value)}
-                      className="w-full px-4 py-2.5 rounded-xl bg-carbon-800 border border-white/10 text-white text-xs focus:outline-none focus:border-crimson-500"
-                    >
-                      <option value="">📁 General (No Category Folder)</option>
-                      {groups.map((g) => (
-                        <option key={g.id} value={g.id}>
-                          {g.icon || '📁'} {g.name}
-                        </option>
-                      ))}
-                    </select>
-                    <span className="text-[10px] text-zinc-500">
-                      Customers will find this product inside this folder in Telegram.
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-zinc-300 mb-1">
-                  Your Retail Selling Price ($ USD)
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  required
-                  placeholder="e.g. 5.99"
-                  value={importRetailPrice}
-                  onChange={(e) => setImportRetailPrice(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-crimson-500"
-                />
-                {parseFloat(importRetailPrice) > 0 && (
-                  <div className="flex justify-between items-center text-[11px] font-mono text-zinc-400 mt-1">
-                    <span>
-                      Estimated Profit:{' '}
-                      <strong className="text-emerald-400">
-                        +${(parseFloat(importRetailPrice) - importModalItem.cost_with_platform_fee_usd).toFixed(2)} USD
-                      </strong>
-                    </span>
-                    <span>
-                      ~ ৳ {(parseFloat(importRetailPrice) * (overview?.usdToBdtRate || 125)).toFixed(0)} BDT
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              <button
-                type="submit"
-                disabled={importLoading}
-                className="w-full py-3 rounded-xl bg-gradient-to-r from-crimson-600 to-crimson-500 hover:from-crimson-500 text-white font-bold text-xs shadow-md active:scale-98 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
-              >
-                {importLoading ? 'Importing...' : 'Confirm & Add to Bot 🚀'}
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
+      <ImportProductModal
+        isOpen={!!importModalItem}
+        onClose={() => setImportModalItem(null)}
+        item={importModalItem}
+        groups={groups}
+        authHeaders={authHeaders}
+        overview={overview}
+        showNotice={showNotice}
+        onSuccess={() => {
+          loadDashboardData();
+        }}
+        onCategoryCreated={() => {
+          loadGroups();
+        }}
+      />
 
       {/* ==========================================
           MODAL 6: CLEAR STORE CATALOG (1-CLICK CLEAR)
          ========================================== */}
       {showClearModal && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="glass-card rounded-3xl p-6 sm:p-8 max-w-md w-full space-y-4 border border-crimson-500/30 relative">
-            <button
-              onClick={() => setShowClearModal(false)}
-              className="absolute top-5 right-5 text-zinc-400 hover:text-white"
-            >
-              <XCircle className="w-5 h-5" />
-            </button>
-
-            <div className="flex items-center gap-2 text-crimson-400 font-bold text-base">
-              <Trash2 className="w-5 h-5" /> Bulk Delete / Clear Store Catalog
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+          <div className="glass-card rounded-3xl p-5 sm:p-7 max-w-md w-full max-h-[92vh] overflow-y-auto space-y-4 border border-crimson-500/30 relative my-auto shadow-2xl">
+            <div className="flex items-center justify-between border-b border-white/5 pb-3">
+              <div className="flex items-center gap-2 text-crimson-400 font-bold text-base">
+                <Trash2 className="w-5 h-5" /> Bulk Delete / Clear Store Catalog
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowClearModal(false)}
+                className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-white/5 transition-colors"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
             <p className="text-xs text-zinc-400">
