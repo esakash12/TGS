@@ -115,6 +115,7 @@ export const GodMode: React.FC = () => {
   // Merchant Wallet Adjustment Modal State
   const [adjustingMerchant, setAdjustingMerchant] = useState<any | null>(null);
   const [walletAdjustAction, setWalletAdjustAction] = useState<'ADD' | 'DEDUCT'>('ADD');
+  const [walletAdjustProvider, setWalletAdjustProvider] = useState<string>('digitalcore');
   const [walletAdjustAmount, setWalletAdjustAmount] = useState('');
   const [walletAdjustNote, setWalletAdjustNote] = useState('');
   const [walletAdjustLoading, setWalletAdjustLoading] = useState(false);
@@ -258,6 +259,7 @@ export const GodMode: React.FC = () => {
   const handleOpenAdjustWalletModal = (merchant: any) => {
     setAdjustingMerchant(merchant);
     setWalletAdjustAction('ADD');
+    setWalletAdjustProvider('digitalcore');
     setWalletAdjustAmount('');
     setWalletAdjustNote('');
   };
@@ -272,24 +274,27 @@ export const GodMode: React.FC = () => {
       return;
     }
 
-    const currentBal = Number(adjustingMerchant.wallet_usd || 0);
+    const currentBal = Number(
+      adjustingMerchant.walletsByProvider?.[walletAdjustProvider] ??
+      (walletAdjustProvider === 'digitalcore' ? adjustingMerchant.wallet_usd || 0 : 0)
+    );
     if (walletAdjustAction === 'DEDUCT' && currentBal < numAmount) {
       showNotice(
         'Insufficient Balance',
-        `Cannot deduct $${numAmount.toFixed(2)} USD. Merchant currently has $${currentBal.toFixed(2)} USD in wallet.`,
+        `Cannot deduct $${numAmount.toFixed(2)} USD. Merchant currently has $${currentBal.toFixed(2)} USD in ${walletAdjustProvider.toUpperCase()} wallet.`,
         'danger'
       );
       return;
     }
 
     const delta = walletAdjustAction === 'ADD' ? numAmount : -numAmount;
-    const finalNote = walletAdjustNote.trim() || (walletAdjustAction === 'ADD' ? 'Manual GodMode credit' : 'Manual GodMode debit');
+    const finalNote = walletAdjustNote.trim() || (walletAdjustAction === 'ADD' ? `Manual GodMode credit (${walletAdjustProvider.toUpperCase()})` : `Manual GodMode debit (${walletAdjustProvider.toUpperCase()})`);
 
     setWalletAdjustLoading(true);
     try {
       await axios.post(
         `/api/godmode/merchants/${adjustingMerchant.id}/adjust-wallet`,
-        { amountDeltaUsd: delta, note: finalNote },
+        { amountDeltaUsd: delta, note: finalNote, provider: walletAdjustProvider },
         getHeaders()
       );
       setAdjustingMerchant(null);
@@ -298,7 +303,7 @@ export const GodMode: React.FC = () => {
       loadGodModeData();
       showNotice(
         'Balance Updated',
-        `Successfully ${walletAdjustAction === 'ADD' ? 'credited' : 'deducted'} $${numAmount.toFixed(2)} USD for ${adjustingMerchant.name}.`,
+        `Successfully ${walletAdjustAction === 'ADD' ? 'credited' : 'deducted'} $${numAmount.toFixed(2)} USD (${walletAdjustProvider.toUpperCase()}) for ${adjustingMerchant.name}.`,
         'success'
       );
     } catch (err: any) {
@@ -1059,7 +1064,23 @@ export const GodMode: React.FC = () => {
                               <span className="text-zinc-600 text-[10px]">No Token</span>
                             )}
                           </td>
-                          <td className="p-4 font-bold text-laser-400 font-mono">${Number(m.wallet_usd).toFixed(2)}</td>
+                          <td className="p-4 font-mono">
+                            <div className="font-bold text-laser-400">${Number(m.wallet_usd || 0).toFixed(2)}</div>
+                            {m.walletsByProvider && (
+                              <div className="text-[10px] text-zinc-500 font-mono flex flex-wrap gap-1 mt-0.5">
+                                {['vexorix', 'canboso', 'prodseller', 'ssondigital'].map(k => {
+                                  const val = Number(m.walletsByProvider[k] || 0);
+                                  if (val <= 0) return null;
+                                  const tag = k === 'vexorix' ? 'V2' : k === 'canboso' ? 'V3' : k === 'prodseller' ? 'V4' : 'V5';
+                                  return (
+                                    <span key={k} className="px-1 py-0.2 rounded bg-carbon-800 text-zinc-300 border border-white/5">
+                                      {tag}: ${val.toFixed(1)}
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </td>
                           <td className="p-4">{m.orders_count || 0}</td>
                           <td className="p-4">
                             <span
@@ -2290,11 +2311,62 @@ export const GodMode: React.FC = () => {
                 </button>
               </div>
 
+              {/* Provider Selection */}
+              <div>
+                <label className="block text-xs font-mono font-medium text-zinc-300 mb-1.5">
+                  Select Provider Wallet
+                </label>
+                <div className="grid grid-cols-5 gap-1 p-1 bg-carbon-800 rounded-xl border border-white/5">
+                  {[
+                    { id: 'digitalcore', label: 'V1', name: 'DigitalCore' },
+                    { id: 'vexorix', label: 'V2', name: 'Vexorix' },
+                    { id: 'canboso', label: 'V3', name: 'Canboso' },
+                    { id: 'prodseller', label: 'V4', name: 'ProdSeller' },
+                    { id: 'ssondigital', label: 'V5', name: 'SsonDigital' },
+                  ].map((p) => {
+                    const isSelected = walletAdjustProvider === p.id;
+                    const bal = Number(
+                      adjustingMerchant.walletsByProvider?.[p.id] ??
+                      (p.id === 'digitalcore' ? adjustingMerchant.wallet_usd || 0 : 0)
+                    );
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => setWalletAdjustProvider(p.id)}
+                        className={`py-1.5 px-1 rounded-lg text-center transition-all ${
+                          isSelected
+                            ? 'bg-laser-600 text-white font-bold shadow-md shadow-laser-600/30'
+                            : 'text-zinc-400 hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        <div className="text-[11px] font-mono leading-none">{p.label}</div>
+                        <div className="text-[9px] font-mono truncate mt-0.5 opacity-80">${bal.toFixed(1)}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* Current Balance Display */}
               <div className="p-3.5 rounded-xl bg-carbon-800/80 border border-white/5 flex items-center justify-between">
-                <span className="text-xs text-zinc-400 font-mono">Current Wallet Balance:</span>
+                <div>
+                  <span className="text-xs text-zinc-400 font-mono">Current {walletAdjustProvider.toUpperCase()} Balance:</span>
+                  <div className="text-[10px] text-zinc-500 font-mono">
+                    {[
+                      { id: 'digitalcore', tag: 'V1' },
+                      { id: 'vexorix', tag: 'V2' },
+                      { id: 'canboso', tag: 'V3' },
+                      { id: 'prodseller', tag: 'V4' },
+                      { id: 'ssondigital', tag: 'V5' },
+                    ].map(x => `${x.tag}: $${Number(adjustingMerchant.walletsByProvider?.[x.id] ?? (x.id === 'digitalcore' ? adjustingMerchant.wallet_usd || 0 : 0)).toFixed(2)}`).join(' | ')}
+                  </div>
+                </div>
                 <span className="text-sm font-bold font-mono text-laser-400">
-                  ${Number(adjustingMerchant.wallet_usd || 0).toFixed(2)} USD
+                  ${Number(
+                    adjustingMerchant.walletsByProvider?.[walletAdjustProvider] ??
+                    (walletAdjustProvider === 'digitalcore' ? adjustingMerchant.wallet_usd || 0 : 0)
+                  ).toFixed(2)} USD
                 </span>
               </div>
 
@@ -2330,7 +2402,7 @@ export const GodMode: React.FC = () => {
                 {/* Amount Input */}
                 <div>
                   <label className="block text-xs font-mono font-medium text-zinc-300 mb-1.5">
-                    Amount to {walletAdjustAction === 'ADD' ? 'Credit' : 'Debit'} (USD $)
+                    Amount to {walletAdjustAction === 'ADD' ? 'Credit' : 'Debit'} ({walletAdjustProvider.toUpperCase()}) (USD $)
                   </label>
                   <div className="relative">
                     <span className="absolute left-3 top-2.5 text-zinc-400 font-mono text-xs">$</span>
@@ -2348,14 +2420,14 @@ export const GodMode: React.FC = () => {
                   </div>
                   {walletAdjustAmount && !isNaN(parseFloat(walletAdjustAmount)) && (
                     <p className="text-[11px] font-mono text-zinc-400 mt-1">
-                      Resulting Balance:{' '}
+                      Resulting {walletAdjustProvider.toUpperCase()} Balance:{' '}
                       <span className="font-bold text-white">
                         $
                         {Math.max(
                           0,
                           walletAdjustAction === 'ADD'
-                            ? Number(adjustingMerchant.wallet_usd || 0) + parseFloat(walletAdjustAmount)
-                            : Number(adjustingMerchant.wallet_usd || 0) - parseFloat(walletAdjustAmount)
+                            ? Number(adjustingMerchant.walletsByProvider?.[walletAdjustProvider] ?? (walletAdjustProvider === 'digitalcore' ? adjustingMerchant.wallet_usd || 0 : 0)) + parseFloat(walletAdjustAmount)
+                            : Number(adjustingMerchant.walletsByProvider?.[walletAdjustProvider] ?? (walletAdjustProvider === 'digitalcore' ? adjustingMerchant.wallet_usd || 0 : 0)) - parseFloat(walletAdjustAmount)
                         ).toFixed(2)}{' '}
                         USD
                       </span>

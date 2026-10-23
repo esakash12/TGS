@@ -118,13 +118,30 @@ godmodeRouter.get('/merchants', (_req: Request, res: Response) => {
     ORDER BY t.created_at DESC
   `).all() as any[];
 
-  // Attach live bot health
+  // Attach live bot health and provider wallets
   const enriched = merchants.map(m => {
     const status = botRegistry.getBotStatus(m.id);
+    const apiWallets = db.prepare('SELECT provider, wallet_usd FROM tenant_api_wallets WHERE tenant_id = ?').all(m.id) as any[];
+    const walletMap: Record<string, number> = {
+      digitalcore: Number(m.wallet_usd || 0),
+      vexorix: 0,
+      canboso: 0,
+      prodseller: 0,
+      ssondigital: 0,
+    };
+    for (const w of apiWallets) {
+      if (w.provider) {
+        walletMap[w.provider.toLowerCase()] = Number(w.wallet_usd || 0);
+      }
+    }
+    // digitalcore legacy fallback
+    walletMap.digitalcore = Math.max(Number(m.wallet_usd || 0), walletMap.digitalcore);
+
     return {
       ...m,
       botOnline: status.is_online,
       botHasToken: Boolean(m.bot_token),
+      walletsByProvider: walletMap,
     };
   });
 
@@ -152,23 +169,48 @@ godmodeRouter.post('/merchants/:id/status', async (req: Request, res: Response) 
   res.json({ success: true, tenantId, newStatus: status });
 });
 
-// Adjust Merchant Wholesale Wallet Balance
+// Adjust Merchant Wholesale Wallet Balance (Supports Multi-API V1-V5)
 godmodeRouter.post('/merchants/:id/adjust-wallet', (req: Request, res: Response) => {
   const tenantId = String(req.params.id);
-  const { amountDeltaUsd, note } = req.body;
+  const { amountDeltaUsd, note, provider = 'digitalcore' } = req.body;
+  const targetProvider = String(provider || 'digitalcore').trim().toLowerCase();
 
   if (amountDeltaUsd === undefined || isNaN(Number(amountDeltaUsd))) {
     return res.status(400).json({ error: 'Valid amount delta is required' });
   }
 
-  db.prepare(`
-    UPDATE tenants SET wallet_usd = wallet_usd + ? WHERE id = ?
-  `).run(Number(amountDeltaUsd), tenantId);
+  const delta = Number(amountDeltaUsd);
 
-  const updated = db.prepare('SELECT id, name, wallet_usd FROM tenants WHERE id = ?').get(tenantId);
-  console.log(`[GodMode Audit] Merchant ${tenantId} wallet adjusted by $${amountDeltaUsd}. Note: ${note || 'None'}`);
+  const tx = db.transaction(() => {
+    // 1. Update provider wallet in tenant_api_wallets
+    db.prepare(`
+      INSERT INTO tenant_api_wallets (tenant_id, provider, wallet_usd, updated_at)
+      VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(tenant_id, provider) DO UPDATE SET
+        wallet_usd = tenant_api_wallets.wallet_usd + excluded.wallet_usd,
+        updated_at = CURRENT_TIMESTAMP
+    `).run(tenantId, targetProvider, delta);
 
-  res.json({ success: true, updated });
+    // 2. If provider is digitalcore, sync legacy wallet_usd
+    if (targetProvider === 'digitalcore') {
+      db.prepare(`
+        UPDATE tenants SET wallet_usd = wallet_usd + ? WHERE id = ?
+      `).run(delta, tenantId);
+    }
+  });
+
+  tx();
+
+  const updatedTenant = db.prepare('SELECT id, name, wallet_usd FROM tenants WHERE id = ?').get(tenantId) as any;
+  const updatedWallet = db.prepare('SELECT wallet_usd FROM tenant_api_wallets WHERE tenant_id = ? AND provider = ?').get(tenantId, targetProvider) as any;
+  console.log(`[GodMode Audit] Merchant ${tenantId} (${targetProvider.toUpperCase()}) wallet adjusted by $${amountDeltaUsd}. Note: ${note || 'None'}`);
+
+  res.json({
+    success: true,
+    provider: targetProvider,
+    newProviderBalance: Number(updatedWallet?.wallet_usd || 0),
+    updated: updatedTenant,
+  });
 });
 
 // Delete Single Merchant Store (God-Mode)

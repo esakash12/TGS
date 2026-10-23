@@ -196,6 +196,8 @@ export async function verifyMerchantWholesaleTopup(params: {
     return result;
   }
 
+  const selectedProvider = String(provider || 'digitalcore').trim().toLowerCase();
+
   // Atomic ledger commit: Credit merchant wallet and register verified tx
   const topupTx = db.transaction(() => {
     // 1. Record in crypto_verified_transactions
@@ -212,10 +214,21 @@ export async function verifyMerchantWholesaleTopup(params: {
       tenantId
     );
 
-    // 2. Increment merchant wallet_usd
+    // 2. Increment merchant provider wallet in tenant_api_wallets
     db.prepare(`
-      UPDATE tenants SET wallet_usd = wallet_usd + ? WHERE id = ?
-    `).run(result.amountUsd, tenantId);
+      INSERT INTO tenant_api_wallets (tenant_id, provider, wallet_usd, updated_at)
+      VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(tenant_id, provider) DO UPDATE SET
+        wallet_usd = tenant_api_wallets.wallet_usd + excluded.wallet_usd,
+        updated_at = CURRENT_TIMESTAMP
+    `).run(tenantId, selectedProvider, result.amountUsd);
+
+    // 3. Keep tenants.wallet_usd in sync for Mogent V1 (digitalcore) legacy compatibility
+    if (selectedProvider === 'digitalcore') {
+      db.prepare(`
+        UPDATE tenants SET wallet_usd = wallet_usd + ? WHERE id = ?
+      `).run(result.amountUsd, tenantId);
+    }
   });
 
   topupTx();
@@ -225,9 +238,10 @@ export async function verifyMerchantWholesaleTopup(params: {
     const godTelegramId = config.godmode_telegram_id;
     if (godTelegramId) {
       const tenant = db.prepare('SELECT name, slug, wallet_usd, bot_token FROM tenants WHERE id = ?').get(tenantId) as any;
+      const apiWallet = db.prepare('SELECT wallet_usd FROM tenant_api_wallets WHERE tenant_id = ? AND provider = ?').get(tenantId, selectedProvider) as any;
       const merchantName = tenant?.name || 'Unknown Store';
       const merchantSlug = tenant?.slug || tenantId;
-      const newWalletBal = Number(tenant?.wallet_usd || 0).toFixed(2);
+      const newProviderBal = Number(apiWallet?.wallet_usd || 0).toFixed(2);
       const creditedAmount = Number(result.amountUsd).toFixed(2);
       const payerId = result.payerId || 'N/A';
 
@@ -235,8 +249,9 @@ export async function verifyMerchantWholesaleTopup(params: {
         `💎 <b>Wholesale API Wallet Top-Up Alert!</b>\n` +
         `━━━━━━━━━━━━━━━━━━\n` +
         `🏪 <b>Merchant:</b> ${merchantName} (@${merchantSlug})\n` +
+        `🔌 <b>Provider:</b> <code>${selectedProvider.toUpperCase()}</code>\n` +
         `💵 <b>Amount Credited:</b> $${creditedAmount} USDT\n` +
-        `👛 <b>New Wallet Balance:</b> $${newWalletBal} USD\n` +
+        `👛 <b>Provider Balance:</b> $${newProviderBal} USD\n` +
         `🧾 <b>Binance TxID:</b> <code>${trxId}</code>\n` +
         `👤 <b>Payer ID:</b> <code>${payerId}</code>\n` +
         `━━━━━━━━━━━━━━━━━━\n` +
