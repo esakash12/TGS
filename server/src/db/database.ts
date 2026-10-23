@@ -16,6 +16,7 @@ export const db: Database.Database = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
 db.pragma('synchronous = NORMAL');
 db.pragma('foreign_keys = ON');
+db.pragma('busy_timeout = 10000');
 db.pragma('temp_store = MEMORY');
 db.pragma('cache_size = -32000'); // 32MB cache limit to stay well within memory budget
 
