@@ -1,5 +1,5 @@
 import { db } from '../db/database';
-import { purchaseUpstreamProduct, getGlobalWholesaleConfig } from './wholesale';
+import { purchaseUpstreamProduct, getGlobalWholesaleConfig, getCachedProductLiveStock } from './wholesale';
 
 export interface PurchaseResult {
   success: boolean;
@@ -136,6 +136,16 @@ export async function processCustomerPurchase(params: {
         currentProviderBalance = legacyBal;
         useLegacyWalletDeduction = true;
       }
+    }
+
+    // Live Stock Pre-Check: Guard against placing orders on depleted inventory
+    const liveStock = getCachedProductLiveStock(product.provider_product_id);
+    if (liveStock !== null && liveStock <= 0) {
+      db.prepare('UPDATE products SET stock = 0 WHERE id = ?').run(product.id);
+      return {
+        success: false,
+        error: 'This wholesale product is currently out of stock at the upstream provider.',
+      };
     }
 
     // Two-Phase Precheck: Merchant must have enough USD in the dedicated wholesale wallet

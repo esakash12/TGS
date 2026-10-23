@@ -136,6 +136,7 @@ export const GodMode: React.FC = () => {
   });
 
   const [loading, setLoading] = useState(false);
+  const [syncLoading, setSyncLoading] = useState(false);
   const [configSaved, setConfigSaved] = useState(false);
 
   // Check existing session token on mount (strictly from memory, NO auto-login via URL)
@@ -226,6 +227,20 @@ export const GodMode: React.FC = () => {
       setAuthError(err.response?.data?.error || 'INVALID MASTER TOKEN. ACCESS DENIED.');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  // Trigger Live Price & Stock Synchronization (Cross-store)
+  const handleTriggerLiveSync = async () => {
+    setSyncLoading(true);
+    try {
+      const res = await axios.post('/api/godmode/sync-now', {}, getHeaders());
+      showNotice('Sync Successful', res.data.message || 'Live price & stock synchronization completed.', 'success');
+      loadGodModeData();
+    } catch (err: any) {
+      showNotice('Sync Failed', err.response?.data?.error || err.message, 'danger');
+    } finally {
+      setSyncLoading(false);
     }
   };
 
@@ -1156,6 +1171,15 @@ export const GodMode: React.FC = () => {
                   title="1-Click Enable All wholesale items currently filtered"
                 >
                   <CheckCircle className="w-3.5 h-3.5" /> 1-Click Enable All
+                </button>
+                <button
+                  onClick={handleTriggerLiveSync}
+                  disabled={syncLoading}
+                  className="px-3.5 py-2 rounded-xl bg-laser-600/20 hover:bg-laser-600/30 border border-laser-500/40 text-laser-300 text-xs font-mono font-bold flex items-center gap-1.5 transition-all shadow-sm disabled:opacity-50"
+                  title="Force immediate synchronization of upstream prices and stock across all stores"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${syncLoading ? 'animate-spin' : ''}`} />
+                  {syncLoading ? 'Syncing...' : '⚡ Sync Live Now (15s Auto)'}
                 </button>
                 <button
                   onClick={loadWholesaleCatalog}

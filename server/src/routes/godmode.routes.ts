@@ -15,6 +15,7 @@ import {
 } from '../services/wholesale';
 import { botRegistry } from '../../../bot/src/registry';
 import { GODMODE_SECRET_TOKEN } from '../../../shared/constants';
+import { wholesaleSyncDaemon } from '../modules/wholesale/sync-daemon';
 
 export const godmodeRouter = Router();
 
@@ -504,8 +505,28 @@ godmodeRouter.post('/wholesale-rules/bulk', async (req: Request, res: Response) 
 });
 
 // ==========================================
-// 6. Subscription Plans Management (God-Mode)
+// 5.1 High-Frequency Price & Stock Sync Telemetry
 // ==========================================
+godmodeRouter.get('/sync-status', (_req: Request, res: Response) => {
+  res.json({
+    success: true,
+    stats: wholesaleSyncDaemon.getStats(),
+  });
+});
+
+godmodeRouter.post('/sync-now', async (_req: Request, res: Response) => {
+  try {
+    const result = await wholesaleSyncDaemon.syncAll(true);
+    res.json({
+      success: true,
+      message: `Sync completed: checked ${result.totalWholesaleChecked} products, updated ${result.updatedCount} items in ${result.durationMs}ms.`,
+      result,
+      stats: wholesaleSyncDaemon.getStats(),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Manual sync failed: ' + err.message });
+  }
+});
 godmodeRouter.get('/plans', (_req: Request, res: Response) => {
   try {
     const plans = db.prepare('SELECT * FROM subscription_plans ORDER BY sort_order ASC, created_at ASC').all() as any[];

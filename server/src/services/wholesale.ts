@@ -25,7 +25,7 @@ interface CachedCatalog {
 }
 
 let catalogCache: CachedCatalog | null = null;
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL_MS = 15 * 1000; // 15 seconds high-frequency freshness (was 5 minutes)
 
 export function getGlobalWholesaleConfig() {
   const config = db.prepare('SELECT * FROM global_system_config WHERE id = 1').get() as any;
@@ -306,21 +306,14 @@ export async function syncLivePricesForTenant(tenantId: string): Promise<{ updat
   return { updatedCount, totalWholesale: wholesaleProducts.length };
 }
 
-export async function syncLivePricesForAllTenants(): Promise<number> {
-  const tenants = db.prepare(`
-    SELECT id FROM tenants 
-    WHERE status = 'ACTIVE' 
-      AND subscription_status = 'ACTIVE'
-  `).all() as any[];
+export async function getLiveUpstreamProductQuote(providerProductId: string): Promise<WholesaleProductDTO | null> {
+  if (!providerProductId) return null;
+  const catalog = await fetchLiveWholesaleCatalog(false);
+  return catalog.find(p => p.id === providerProductId) || null;
+}
 
-  let totalUpdated = 0;
-  for (const t of tenants) {
-    try {
-      const res = await syncLivePricesForTenant(t.id);
-      totalUpdated += res.updatedCount;
-    } catch (err: any) {
-      console.warn(`[Auto-Sync] Warning syncing tenant ${t.id}:`, err.message);
-    }
-  }
-  return totalUpdated;
+export async function syncLivePricesForAllTenants(): Promise<number> {
+  const { wholesaleSyncDaemon } = await import('../modules/wholesale/sync-daemon.js');
+  const res = await wholesaleSyncDaemon.syncAll(true);
+  return res.updatedCount;
 }
