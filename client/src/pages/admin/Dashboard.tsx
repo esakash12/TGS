@@ -3957,17 +3957,20 @@ export const Dashboard: React.FC = () => {
           MODAL 1: WHOLESALE TOPUP (WALLET)
          ========================================== */}
       {showTopupModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="glass-card rounded-3xl p-6 sm:p-8 max-w-md w-full space-y-4 border border-white/10 relative">
-            <button
-              onClick={() => setShowTopupModal(false)}
-              className="absolute top-5 right-5 text-zinc-400 hover:text-white"
-            >
-              <XCircle className="w-5 h-5" />
-            </button>
-
-            <div className="flex items-center gap-2 text-crimson-400 font-bold text-base">
-              <Zap className="w-5 h-5" /> Top Up Wholesale Wallet
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+          <div className="glass-card rounded-3xl p-5 sm:p-6 max-w-lg w-full max-h-[92vh] overflow-y-auto space-y-4 border border-white/10 relative my-auto shadow-2xl">
+            <div className="flex items-center justify-between border-b border-white/5 pb-3">
+              <div className="flex items-center gap-2 text-crimson-400 font-bold text-base">
+                <Zap className="w-5 h-5" /> Top Up Wholesale Wallet
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowTopupModal(false)}
+                className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-white/5 transition-colors"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
             <p className="text-xs text-zinc-400">
@@ -3985,28 +3988,28 @@ export const Dashboard: React.FC = () => {
             )}
 
             {/* Per-Provider Balance Badges */}
-            <div className="p-3 rounded-2xl bg-carbon-950 border border-white/5 space-y-2">
+            <div className="p-2.5 rounded-2xl bg-carbon-950 border border-white/5 space-y-1.5">
               <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">Your API Provider Balances:</span>
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center">
-                <div className="p-2 rounded-xl bg-carbon-900 border border-crimson-500/20">
-                  <span className="text-[10px] text-crimson-400 block font-bold">Mogent V1</span>
-                  <span className="font-mono text-xs font-extrabold text-white">${Number(topupInfo?.walletsByProvider?.digitalcore || 0).toFixed(2)}</span>
+              <div className="grid grid-cols-5 gap-1.5 text-center">
+                <div className="p-1.5 rounded-xl bg-carbon-900 border border-crimson-500/20">
+                  <span className="text-[9px] text-crimson-400 block font-bold leading-none">Mogent V1</span>
+                  <span className="font-mono text-[11px] font-extrabold text-white mt-1 block">${Number(topupInfo?.walletsByProvider?.digitalcore || 0).toFixed(2)}</span>
                 </div>
-                <div className="p-2 rounded-xl bg-carbon-900 border border-emerald-500/20">
-                  <span className="text-[10px] text-emerald-400 block font-bold">Mogent V2</span>
-                  <span className="font-mono text-xs font-extrabold text-white">${Number(topupInfo?.walletsByProvider?.vexorix || 0).toFixed(2)}</span>
+                <div className="p-1.5 rounded-xl bg-carbon-900 border border-emerald-500/20">
+                  <span className="text-[9px] text-emerald-400 block font-bold leading-none">Mogent V2</span>
+                  <span className="font-mono text-[11px] font-extrabold text-white mt-1 block">${Number(topupInfo?.walletsByProvider?.vexorix || 0).toFixed(2)}</span>
                 </div>
-                <div className="p-2 rounded-xl bg-carbon-900 border border-blue-500/20">
-                  <span className="text-[10px] text-blue-400 block font-bold">Mogent V3</span>
-                  <span className="font-mono text-xs font-extrabold text-white">${Number(topupInfo?.walletsByProvider?.canboso || 0).toFixed(2)}</span>
+                <div className="p-1.5 rounded-xl bg-carbon-900 border border-blue-500/20">
+                  <span className="text-[9px] text-blue-400 block font-bold leading-none">Mogent V3</span>
+                  <span className="font-mono text-[11px] font-extrabold text-white mt-1 block">${Number(topupInfo?.walletsByProvider?.canboso || 0).toFixed(2)}</span>
                 </div>
-                <div className="p-2 rounded-xl bg-carbon-900 border border-purple-500/20">
-                  <span className="text-[10px] text-purple-400 block font-bold">Mogent V4</span>
-                  <span className="font-mono text-xs font-extrabold text-white">${Number(topupInfo?.walletsByProvider?.prodseller || 0).toFixed(2)}</span>
+                <div className="p-1.5 rounded-xl bg-carbon-900 border border-purple-500/20">
+                  <span className="text-[9px] text-purple-400 block font-bold leading-none">Mogent V4</span>
+                  <span className="font-mono text-[11px] font-extrabold text-white mt-1 block">${Number(topupInfo?.walletsByProvider?.prodseller || 0).toFixed(2)}</span>
                 </div>
-                <div className="p-2 rounded-xl bg-carbon-900 border border-amber-500/20">
-                  <span className="text-[10px] text-amber-400 block font-bold">Mogent V5</span>
-                  <span className="font-mono text-xs font-extrabold text-white">${Number(topupInfo?.walletsByProvider?.ssondigital || 0).toFixed(2)}</span>
+                <div className="p-1.5 rounded-xl bg-carbon-900 border border-amber-500/20">
+                  <span className="text-[9px] text-amber-400 block font-bold leading-none">Mogent V5</span>
+                  <span className="font-mono text-[11px] font-extrabold text-white mt-1 block">${Number(topupInfo?.walletsByProvider?.ssondigital || 0).toFixed(2)}</span>
                 </div>
               </div>
             </div>
@@ -4079,17 +4082,20 @@ export const Dashboard: React.FC = () => {
           MODAL 2: ADD CATEGORY / GROUP
          ========================================== */}
       {showAddGroupModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="glass-card rounded-3xl p-6 sm:p-8 max-w-md w-full space-y-4 border border-white/10 relative">
-            <button
-              onClick={() => setShowAddGroupModal(false)}
-              className="absolute top-5 right-5 text-zinc-400 hover:text-white"
-            >
-              <XCircle className="w-5 h-5" />
-            </button>
-
-            <div className="flex items-center gap-2 text-laser-400 font-bold text-base">
-              <FolderPlus className="w-5 h-5" /> Create Custom Category / Folder
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+          <div className="glass-card rounded-3xl p-5 sm:p-7 max-w-md w-full max-h-[92vh] overflow-y-auto space-y-4 border border-white/10 relative my-auto shadow-2xl">
+            <div className="flex items-center justify-between border-b border-white/5 pb-3">
+              <div className="flex items-center gap-2 text-laser-400 font-bold text-base">
+                <FolderPlus className="w-5 h-5" /> Create Custom Category / Folder
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddGroupModal(false)}
+                className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-white/5 transition-colors"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
             <p className="text-xs text-zinc-400">
               Group your products into clean folders so your Telegram bot displays them in a 2-tap menu.
@@ -4147,16 +4153,19 @@ export const Dashboard: React.FC = () => {
           MODAL 3: ADD CUSTOM PRODUCT
          ========================================== */}
       {showAddProductModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="glass-card rounded-3xl p-6 sm:p-8 max-w-lg w-full space-y-4 border border-white/10 relative">
-            <button
-              onClick={() => setShowAddProductModal(false)}
-              className="absolute top-5 right-5 text-zinc-400 hover:text-white"
-            >
-              <XCircle className="w-5 h-5" />
-            </button>
-
-            <h3 className="font-bold text-base text-white">Create Custom Product</h3>
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+          <div className="glass-card rounded-3xl p-5 sm:p-7 max-w-lg w-full max-h-[92vh] overflow-y-auto space-y-4 border border-white/10 relative my-auto shadow-2xl">
+            <div className="flex items-center justify-between border-b border-white/5 pb-3">
+              <h3 className="font-bold text-base text-white">Create Custom Product</h3>
+              <button
+                type="button"
+                onClick={() => setShowAddProductModal(false)}
+                className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-white/5 transition-colors"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
             <form onSubmit={handleCreateProduct} className="space-y-3">
               <div>
@@ -4242,16 +4251,19 @@ export const Dashboard: React.FC = () => {
           MODAL 4: ADD STOCK KEYS
          ========================================== */}
       {addStockProdId && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="glass-card rounded-3xl p-6 sm:p-8 max-w-md w-full space-y-4 border border-white/10 relative">
-            <button
-              onClick={() => setAddStockProdId(null)}
-              className="absolute top-5 right-5 text-zinc-400 hover:text-white"
-            >
-              <XCircle className="w-5 h-5" />
-            </button>
-
-            <h3 className="font-bold text-base text-white">Add Stock Items</h3>
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+          <div className="glass-card rounded-3xl p-5 sm:p-7 max-w-md w-full max-h-[92vh] overflow-y-auto space-y-4 border border-white/10 relative my-auto shadow-2xl">
+            <div className="flex items-center justify-between border-b border-white/5 pb-3">
+              <h3 className="font-bold text-base text-white">Add Stock Items</h3>
+              <button
+                type="button"
+                onClick={() => setAddStockProdId(null)}
+                className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-white/5 transition-colors"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
             <p className="text-xs text-zinc-400">Paste digital serials, links or accounts (one per line):</p>
 
             <form onSubmit={handleAddStock} className="space-y-3">
@@ -4279,17 +4291,20 @@ export const Dashboard: React.FC = () => {
           MODAL 6: EDIT CUSTOM PRODUCT DETAILS
          ========================================== */}
       {editProductModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="glass-card rounded-3xl p-6 sm:p-8 max-w-lg w-full space-y-4 border border-white/10 relative">
-            <button
-              onClick={() => setEditProductModal(null)}
-              className="absolute top-5 right-5 text-zinc-400 hover:text-white"
-            >
-              <XCircle className="w-5 h-5" />
-            </button>
-
-            <div className="flex items-center gap-2 text-laser-400 font-bold text-base">
-              <Edit3 className="w-5 h-5" /> Edit Product Details
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+          <div className="glass-card rounded-3xl p-5 sm:p-7 max-w-lg w-full max-h-[92vh] overflow-y-auto space-y-4 border border-white/10 relative my-auto shadow-2xl">
+            <div className="flex items-center justify-between border-b border-white/5 pb-3">
+              <div className="flex items-center gap-2 text-laser-400 font-bold text-base">
+                <Edit3 className="w-5 h-5" /> Edit Product Details
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditProductModal(null)}
+                className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-white/5 transition-colors"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
             <form onSubmit={handleSaveEditProduct} className="space-y-4">
@@ -4359,17 +4374,20 @@ export const Dashboard: React.FC = () => {
           MODAL 7: VIEW & EDIT EXISTING STOCK INVENTORY
          ========================================== */}
       {manageStockProduct && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="glass-card rounded-3xl p-6 sm:p-8 max-w-xl w-full space-y-4 border border-white/10 relative">
-            <button
-              onClick={() => setManageStockProduct(null)}
-              className="absolute top-5 right-5 text-zinc-400 hover:text-white"
-            >
-              <XCircle className="w-5 h-5" />
-            </button>
-
-            <div className="flex items-center gap-2 text-emerald-400 font-bold text-base">
-              <Layers className="w-5 h-5" /> Manage & Edit Stock for "{manageStockProduct.name}"
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+          <div className="glass-card rounded-3xl p-5 sm:p-7 max-w-xl w-full max-h-[92vh] overflow-y-auto space-y-4 border border-white/10 relative my-auto shadow-2xl">
+            <div className="flex items-center justify-between border-b border-white/5 pb-3">
+              <div className="flex items-center gap-2 text-emerald-400 font-bold text-base">
+                <Layers className="w-5 h-5" /> Manage & Edit Stock for "{manageStockProduct.name}"
+              </div>
+              <button
+                type="button"
+                onClick={() => setManageStockProduct(null)}
+                className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-white/5 transition-colors"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
             <p className="text-xs text-zinc-400">
@@ -4419,17 +4437,20 @@ export const Dashboard: React.FC = () => {
           MODAL 5: IMPORT WHOLESALE PRODUCT WITH GROUP
          ========================================== */}
       {importModalItem && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="glass-card rounded-3xl p-6 sm:p-8 max-w-md w-full space-y-4 border border-white/10 relative">
-            <button
-              onClick={() => setImportModalItem(null)}
-              className="absolute top-5 right-5 text-zinc-400 hover:text-white"
-            >
-              <XCircle className="w-5 h-5" />
-            </button>
-
-            <div className="flex items-center gap-2 text-crimson-400 font-bold text-base">
-              <Plus className="w-5 h-5" /> Import to Your Telegram Store
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+          <div className="glass-card rounded-3xl p-5 sm:p-6 max-w-md w-full max-h-[92vh] overflow-y-auto space-y-4 border border-white/10 relative my-auto shadow-2xl">
+            <div className="flex items-center justify-between border-b border-white/5 pb-3">
+              <div className="flex items-center gap-2 text-crimson-400 font-bold text-base">
+                <Plus className="w-5 h-5" /> Import to Store
+              </div>
+              <button
+                type="button"
+                onClick={() => setImportModalItem(null)}
+                className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-white/5 transition-colors"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
             <div className="bg-carbon-800/80 p-4 rounded-2xl border border-white/5 space-y-2">
@@ -4646,17 +4667,20 @@ export const Dashboard: React.FC = () => {
           MODAL 7: SET GLOBAL PROFIT MARGIN & AUTO-SYNC
          ========================================== */}
       {showMarginModal && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="glass-card rounded-3xl p-6 sm:p-8 max-w-md w-full space-y-4 border border-laser-500/30 relative">
-            <button
-              onClick={() => setShowMarginModal(false)}
-              className="absolute top-5 right-5 text-zinc-400 hover:text-white"
-            >
-              <XCircle className="w-5 h-5" />
-            </button>
-
-            <div className="flex items-center gap-2 text-laser-400 font-bold text-base">
-              <Sliders className="w-5 h-5" /> Dynamic Profit Margin Engine
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+          <div className="glass-card rounded-3xl p-5 sm:p-7 max-w-md w-full max-h-[92vh] overflow-y-auto space-y-4 border border-laser-500/30 relative my-auto shadow-2xl">
+            <div className="flex items-center justify-between border-b border-white/5 pb-3">
+              <div className="flex items-center gap-2 text-laser-400 font-bold text-base">
+                <Sliders className="w-5 h-5" /> Dynamic Profit Margin Engine
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowMarginModal(false)}
+                className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-white/5 transition-colors"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
             <p className="text-xs text-zinc-400">
@@ -4754,17 +4778,20 @@ export const Dashboard: React.FC = () => {
           MODAL 8: QUICK EDIT INDIVIDUAL PRODUCT PRICE
          ========================================== */}
       {editingProduct && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="glass-card rounded-3xl p-6 sm:p-8 max-w-md w-full space-y-4 border border-white/10 relative">
-            <button
-              onClick={() => setEditingProduct(null)}
-              className="absolute top-5 right-5 text-zinc-400 hover:text-white"
-            >
-              <XCircle className="w-5 h-5" />
-            </button>
-
-            <div className="flex items-center gap-2 text-emerald-400 font-bold text-base">
-              <Edit3 className="w-5 h-5" /> Adjust Retail Selling Price
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+          <div className="glass-card rounded-3xl p-5 sm:p-7 max-w-md w-full max-h-[92vh] overflow-y-auto space-y-4 border border-white/10 relative my-auto shadow-2xl">
+            <div className="flex items-center justify-between border-b border-white/5 pb-3">
+              <div className="flex items-center gap-2 text-emerald-400 font-bold text-base">
+                <Edit3 className="w-5 h-5" /> Adjust Retail Selling Price
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingProduct(null)}
+                className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-white/5 transition-colors"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
             <div className="bg-carbon-800/80 p-4 rounded-2xl border border-white/5 space-y-2">
