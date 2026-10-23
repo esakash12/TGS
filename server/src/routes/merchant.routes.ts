@@ -536,7 +536,7 @@ merchantRouter.post('/wholesale/import', async (req: AuthenticatedRequest, res: 
   // Fetch catalog to get live stock & description from upstream if not explicitly provided
   const catalog = await fetchLiveWholesaleCatalog();
   const catalogItem = catalog.find(c => c.id === wholesaleProductId);
-  const realStock = stock !== undefined ? Number(stock) : (catalogItem?.stock ?? 999);
+  const realStock = stock !== undefined && stock !== null ? Number(stock) : (catalogItem?.stock !== undefined ? Number(catalogItem.stock) : 0);
   const realDesc = description || catalogItem?.description || '';
 
   // Check if already imported
@@ -616,7 +616,7 @@ merchantRouter.post('/wholesale/bulk-enable', async (req: AuthenticatedRequest, 
             SET retail_price_usd = ?, wholesale_price_usd = ?, is_active = 1,
                 stock = ?, description = COALESCE(NULLIF(?, ''), description)
             WHERE id = ?
-          `).run(retail, cost, item.stock ?? 999, item.description || '', existing.id);
+          `).run(retail, cost, item.stock ?? 0, item.description || '', existing.id);
         } else {
           const productId = 'prd_' + Math.random().toString(36).substring(2, 10);
           db.prepare(`
@@ -633,7 +633,7 @@ merchantRouter.post('/wholesale/bulk-enable', async (req: AuthenticatedRequest, 
             item.id,
             cost,
             retail,
-            item.stock ?? 999,
+            item.stock ?? 0,
             item.description || ''
           );
         }

@@ -181,6 +181,110 @@ export const PLAN_TIERS_RANK: Record<string, number> = {
   enterprise: 3,
 };
 
+export function parseCanbosoStock(item: any): number {
+  if (!item) return 0;
+
+  // Explicit out of stock indicators
+  if (
+    item.inStock === false ||
+    item.in_stock === false ||
+    item.isAvailable === false ||
+    item.is_available === false ||
+    item.available === false ||
+    item.availability?.isAvailable === false ||
+    item.availability?.is_available === false ||
+    item.availability?.available === false ||
+    item.availability?.inStock === false ||
+    item.availability?.in_stock === false
+  ) {
+    return 0;
+  }
+
+  // Check numeric availability fields across item and availability
+  const candidates = [
+    item.availability?.stock,
+    item.availability?.quantity,
+    item.availability?.count,
+    item.availability?.available,
+    item.availability?.inventory,
+    item.stock,
+    item.quantity,
+    item.count,
+    item.inventory,
+  ];
+
+  for (const val of candidates) {
+    if (val !== undefined && val !== null && typeof val !== 'boolean') {
+      const num = Number(val);
+      if (!isNaN(num) && num >= 0) {
+        return num;
+      }
+    }
+  }
+
+  // If boolean true is present without numeric count, mark as 1 (available) instead of 999
+  if (
+    item.availability?.available === true ||
+    item.availability?.inStock === true ||
+    item.availability?.isAvailable === true ||
+    item.inStock === true ||
+    item.isAvailable === true
+  ) {
+    return 1;
+  }
+
+  // Safe default: 0 (out of stock/unavailable), never 999
+  return 0;
+}
+
+export function parseSsonDigitalStock(item: any): number {
+  if (!item) return 0;
+
+  // Explicit out of stock indicators
+  if (
+    item.in_stock === false ||
+    item.inStock === false ||
+    item.is_available === false ||
+    item.available === false ||
+    item.status === 'out_of_stock' ||
+    item.status === 'inactive'
+  ) {
+    return 0;
+  }
+
+  const candidates = [
+    item.stock,
+    item.quantity,
+    item.inventory,
+    item.available_quantity,
+    item.available_stock,
+    item.available,
+    item.count,
+  ];
+
+  for (const val of candidates) {
+    if (val !== undefined && val !== null && typeof val !== 'boolean') {
+      const num = Number(val);
+      if (!isNaN(num) && num >= 0) {
+        return num;
+      }
+    }
+  }
+
+  // If boolean true is present without numeric count, mark as 1 (available) instead of 999
+  if (
+    item.in_stock === true ||
+    item.inStock === true ||
+    item.available === true ||
+    item.status === 'in_stock' ||
+    item.status === 'active'
+  ) {
+    return 1;
+  }
+
+  return 0;
+}
+
 export async function fetchLiveWholesaleCatalog(forceRefresh = false): Promise<WholesaleProductDTO[]> {
   const now = Date.now();
   if (!forceRefresh && catalogCache && now - catalogCache.timestamp < CACHE_TTL_MS) {
@@ -225,7 +329,7 @@ export async function fetchLiveWholesaleCatalog(forceRefresh = false): Promise<W
     }
   }
 
-  // 2. Fetch from Canboso
+  // 2. Fetch from Canboso (Mogent V3)
   if (canbosoKey) {
     try {
       const res = await axios.get(`${UPSTREAM_CANBOSO_BASE_URL}/api/v2/telegram-buyer/products`, {
@@ -236,13 +340,14 @@ export async function fetchLiveWholesaleCatalog(forceRefresh = false): Promise<W
         for (const item of res.data.products) {
           const basePrice = Number(item.price?.amount || 0);
           const catInfo = extractCategoryFromProduct(item.name, String(item.productId), item.emoji);
+          const stock = parseCanbosoStock(item);
           allProducts.push({
             id: `cb_${item.productId}`,
             name: item.name,
             provider: 'canboso',
             base_price_usd: basePrice,
             cost_with_platform_fee_usd: applyPlatformFee(basePrice),
-            stock: Number(item.availability?.available ?? 999),
+            stock,
             category: catInfo.category,
             icon: catInfo.icon,
             description: item.description || '',
@@ -296,16 +401,42 @@ export async function fetchLiveWholesaleCatalog(forceRefresh = false): Promise<W
         timeout: 10000,
       });
       const prods = Array.isArray(res.data?.products) ? res.data.products : [];
+
+      // Concurrently fetch exact live numeric stock for in-stock items
+      const stockMap = new Map<string, number>();
+      const inStockItems = prods.filter((p: any) => p.inStock !== false);
+
+      const BATCH_SIZE = 15;
+      for (let i = 0; i < inStockItems.length; i += BATCH_SIZE) {
+        const batch = inStockItems.slice(i, i + BATCH_SIZE);
+        await Promise.allSettled(
+          batch.map(async (p: any) => {
+            try {
+              const detailRes = await axios.get(`${UPSTREAM_PRODSELLER_BASE_URL}/v1/products/${p.id}`, {
+                headers: { 'X-API-Key': prodsellerKey },
+                timeout: 6000,
+              });
+              const rawStock = detailRes.data?.stock;
+              const numericStock = typeof rawStock === 'number' ? rawStock : (Number(rawStock) || 0);
+              stockMap.set(p.id, Math.max(0, numericStock));
+            } catch {
+              stockMap.set(p.id, 0);
+            }
+          })
+        );
+      }
+
       for (const item of prods) {
         const basePrice = Number(item.price ?? item.finalPrice ?? item.publicPrice ?? 0);
         const catInfo = extractCategoryFromProduct(item.name || '', item.id);
+        const stock = item.inStock === false ? 0 : (stockMap.get(item.id) ?? 0);
         allProducts.push({
           id: `ps_${item.id}`,
           name: item.name || 'Unnamed Wholesale Item',
           provider: 'prodseller',
           base_price_usd: basePrice,
           cost_with_platform_fee_usd: applyPlatformFee(basePrice),
-          stock: item.inStock !== false ? 999 : 0,
+          stock,
           category: catInfo.category,
           icon: catInfo.icon,
           description: item.description || '',
@@ -334,14 +465,14 @@ export async function fetchLiveWholesaleCatalog(forceRefresh = false): Promise<W
         const prodId = String(item.id || item.product_id || item._id);
         const basePrice = Number(item.price ?? item.cost ?? item.wholesale_price ?? 0);
         const catInfo = extractCategoryFromProduct(item.name || item.title || '', prodId);
-        const stockCount = item.stock !== undefined ? Number(item.stock) : (item.in_stock === false ? 0 : 999);
+        const stock = parseSsonDigitalStock(item);
         allProducts.push({
           id: `sd_${prodId}`,
           name: item.name || item.title || 'Unnamed Wholesale Item',
           provider: 'ssondigital',
           base_price_usd: basePrice,
           cost_with_platform_fee_usd: applyPlatformFee(basePrice),
-          stock: isNaN(stockCount) ? 999 : stockCount,
+          stock,
           category: item.category || catInfo.category,
           icon: catInfo.icon,
           description: item.description || item.details || '',

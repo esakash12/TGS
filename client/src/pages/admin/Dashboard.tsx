@@ -781,7 +781,7 @@ export const Dashboard: React.FC = () => {
           provider: importModalItem.provider,
           groupId: finalGroupId,
           description: importModalItem.description || '',
-          stock: importModalItem.stock ?? 999,
+          stock: importModalItem.stock ?? 0,
         },
         authHeaders
       );
