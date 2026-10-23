@@ -1493,6 +1493,17 @@ export const GodMode: React.FC = () => {
                   />
                 </div>
 
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1">SsonDigital (Mogent V5) Reseller API Key</label>
+                  <input
+                    type="text"
+                    placeholder="Paste ssondigitalworks.online Bearer Token / API Key"
+                    value={config.ssondigitalKey || ''}
+                    onChange={(e) => setConfig({ ...config, ssondigitalKey: e.target.value })}
+                    className="w-full px-4 py-2 rounded-xl bg-carbon-900 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-zinc-300 mb-1">Platform Fixed Fee ($)</label>
