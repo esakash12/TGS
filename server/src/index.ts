@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
 import { initDatabase, db } from './db/database';
+import { testPostgresConnection } from './db/postgres';
 import { authRouter } from './routes/auth.routes';
 import { merchantRouter } from './routes/merchant.routes';
 import { godmodeRouter } from './routes/godmode.routes';
@@ -11,6 +12,11 @@ import { botRegistry } from '../../bot/src/registry';
 import { wholesaleSyncDaemon } from './modules/wholesale/sync-daemon';
 
 dotenv.config();
+
+// Test PostgreSQL Connectivity if DATABASE_URL is configured
+if (process.env.DATABASE_URL) {
+  testPostgresConnection();
+}
 
 const app = express();
 const PORT = process.env.PORT || 5000;

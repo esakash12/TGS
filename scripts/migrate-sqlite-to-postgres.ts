@@ -22,7 +22,10 @@ async function runMigration() {
   }
 
   const sqlite = new Database(SQLITE_PATH, { readonly: true });
-  const pg = new Pool({ connectionString: PG_URL });
+  const pg = new Pool({
+    connectionString: PG_URL,
+    ssl: PG_URL.includes('neon.tech') || PG_URL.includes('sslmode=require') ? { rejectUnauthorized: false } : undefined,
+  });
 
   try {
     // 1. Verify PostgreSQL connection

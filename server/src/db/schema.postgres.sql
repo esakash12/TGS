@@ -51,6 +51,10 @@ CREATE TABLE IF NOT EXISTS tenants (
     subscription_started_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     subscription_expires_at TIMESTAMPTZ,
     trial_ends_at TIMESTAMPTZ,
+    log_channel_id TEXT DEFAULT '',
+    log_purchases_enabled INT DEFAULT 1,
+    log_deposits_enabled INT DEFAULT 1,
+    auto_broadcast_price_drop INT DEFAULT 0,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 

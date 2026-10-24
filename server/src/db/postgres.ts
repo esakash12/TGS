@@ -11,6 +11,7 @@ export function getPostgresPool(): Pool {
   if (!pool) {
     pool = new Pool({
       connectionString: PG_DATABASE_URL,
+      ssl: PG_DATABASE_URL.includes('neon.tech') || PG_DATABASE_URL.includes('sslmode=require') ? { rejectUnauthorized: false } : undefined,
       max: 20, // Max 20 concurrent connections
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 5000,
