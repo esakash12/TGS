@@ -211,6 +211,7 @@ export const Dashboard: React.FC = () => {
     logChannelId: '',
     logPurchasesEnabled: true,
     logDepositsEnabled: true,
+    autoBroadcastPriceDrop: false,
   });
   const [settingsSaved, setSettingsSaved] = useState(false);
 
@@ -901,6 +902,7 @@ export const Dashboard: React.FC = () => {
           logChannelId: settingsData.logChannelId,
           logPurchasesEnabled: settingsData.logPurchasesEnabled,
           logDepositsEnabled: settingsData.logDepositsEnabled,
+          autoBroadcastPriceDrop: settingsData.autoBroadcastPriceDrop,
         },
         authHeaders
       );

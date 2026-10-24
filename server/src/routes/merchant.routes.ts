@@ -867,6 +867,10 @@ merchantRouter.put('/settings', async (req: AuthenticatedRequest, res: Response)
     adminTelegramId,
     zinipayEnabled,
     zinipayApiKey,
+    logChannelId,
+    logPurchasesEnabled,
+    logDepositsEnabled,
+    autoBroadcastPriceDrop,
   } = req.body;
 
   const current = db.prepare('SELECT * FROM tenants WHERE id = ?').get(tenantId) as any;
@@ -922,14 +926,14 @@ merchantRouter.put('/settings', async (req: AuthenticatedRequest, res: Response)
         auto_broadcast_price_drop = COALESCE(?, auto_broadcast_price_drop)
     WHERE id = ?
   `).run(
-    storeName,
+    storeName !== undefined ? (storeName ? String(storeName).trim() : null) : null,
     botToken !== undefined ? botToken.trim() : null,
-    usdToBdtRate ? Number(usdToBdtRate) : null,
-    paymentNumbers ? JSON.stringify(paymentNumbers) : null,
-    newBinanceEnc,
+    usdToBdtRate !== undefined ? (usdToBdtRate ? Number(usdToBdtRate) : null) : null,
+    paymentNumbers !== undefined ? (paymentNumbers ? JSON.stringify(paymentNumbers) : null) : null,
+    newBinanceEnc !== undefined ? newBinanceEnc : null,
     autoMarkup?.enabled !== undefined ? (autoMarkup.enabled ? 1 : 0) : null,
-    autoMarkup?.pct ? Number(autoMarkup.pct) : null,
-    autoMarkup?.fixedUsd ? Number(autoMarkup.fixedUsd) : null,
+    autoMarkup?.pct !== undefined ? (autoMarkup.pct ? Number(autoMarkup.pct) : null) : null,
+    autoMarkup?.fixedUsd !== undefined ? (autoMarkup.fixedUsd ? Number(autoMarkup.fixedUsd) : null) : null,
     aboutText !== undefined ? String(aboutText) : null,
     supportText !== undefined ? String(supportText) : null,
     welcomeText !== undefined ? String(welcomeText) : null,
@@ -937,6 +941,10 @@ merchantRouter.put('/settings', async (req: AuthenticatedRequest, res: Response)
     adminTelegramId !== undefined ? (adminTelegramId ? Number(adminTelegramId) : null) : null,
     zinipayEnabled !== undefined ? (zinipayEnabled ? 1 : 0) : null,
     newZinipayEnc !== undefined ? newZinipayEnc : null,
+    logChannelId !== undefined ? (logChannelId ? String(logChannelId).trim() : '') : null,
+    logPurchasesEnabled !== undefined ? (logPurchasesEnabled ? 1 : 0) : null,
+    logDepositsEnabled !== undefined ? (logDepositsEnabled ? 1 : 0) : null,
+    autoBroadcastPriceDrop !== undefined ? (autoBroadcastPriceDrop ? 1 : 0) : null,
     tenantId
   );
 
