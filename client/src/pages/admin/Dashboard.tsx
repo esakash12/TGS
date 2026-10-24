@@ -3130,6 +3130,17 @@ export const Dashboard: React.FC = () => {
               </div>
             </div>
 
+            <LogChannelSettingsCard
+              logChannelId={settingsData.logChannelId || ''}
+              setLogChannelId={(val) => setSettingsData({ ...settingsData, logChannelId: val })}
+              logPurchasesEnabled={settingsData.logPurchasesEnabled !== false}
+              setLogPurchasesEnabled={(val) => setSettingsData({ ...settingsData, logPurchasesEnabled: val })}
+              logDepositsEnabled={settingsData.logDepositsEnabled !== false}
+              setLogDepositsEnabled={(val) => setSettingsData({ ...settingsData, logDepositsEnabled: val })}
+              authHeaders={authHeaders}
+              showNotice={showNotice}
+            />
+
             <button
               type="submit"
               className="px-6 py-3 rounded-xl bg-gradient-to-r from-crimson-600 to-crimson-500 hover:from-crimson-500 text-white font-bold text-xs shadow-lg shadow-crimson-500/30 transition-all"
@@ -3137,6 +3148,18 @@ export const Dashboard: React.FC = () => {
               Save Store Configuration
             </button>
           </form>
+        )}
+
+        {/* ==========================================
+            TAB: TELEGRAM BROADCAST MARKETING HUB
+           ========================================== */}
+        {activeTab === 'broadcast' && (
+          <BroadcastView
+            products={products}
+            authHeaders={authHeaders}
+            showNotice={showNotice}
+            botUsername={botUsername}
+          />
         )}
 
         {/* ==========================================
