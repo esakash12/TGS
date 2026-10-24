@@ -42,6 +42,7 @@ import {
   Tag,
   Menu,
   X,
+  Globe,
 } from 'lucide-react';
 import { CyberDialog, CyberDialogOptions } from '../../components/CyberDialog';
 import { TopupWholesaleModal } from '../../components/admin/modals/TopupWholesaleModal';
@@ -123,6 +124,10 @@ export const Dashboard: React.FC = () => {
   const [subTrxId, setSubTrxId] = useState('');
   const [subVerifying, setSubVerifying] = useState(false);
   const [subFeedback, setSubFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [subSelectedCountry, setSubSelectedCountry] = useState<'BD' | 'OTHERS'>(() => {
+    return (localStorage.getItem('billing_country') as any) || 'BD';
+  });
+  const [subPaymentMethod, setSubPaymentMethod] = useState<'BINANCE' | 'ZINIPAY'>('BINANCE');
 
   // Filter & Search states
   const [storeFilter, setStoreFilter] = useState<'all' | 'custom' | 'wholesale'>('all');
@@ -3578,6 +3583,11 @@ export const Dashboard: React.FC = () => {
                   <span className="text-base font-extrabold text-white font-mono">
                     ${subSelectedCycle === 'YEARLY' ? subSelectedPlan?.price_yearly_usd?.toFixed(2) : subSelectedPlan?.price_monthly_usd?.toFixed(2)} USD
                   </span>
+                  {subSelectedCountry === 'BD' && (
+                    <span className="text-[10px] text-zinc-400 block font-mono">
+                      ~ ৳ {Math.round((subSelectedCycle === 'YEARLY' ? (subSelectedPlan?.price_yearly_usd || 0) : (subSelectedPlan?.price_monthly_usd || 0)) * 125).toLocaleString()} BDT
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -3593,6 +3603,108 @@ export const Dashboard: React.FC = () => {
                 </div>
               )}
             </div>
+
+            {/* Country Geo-Selector */}
+            <div className="space-y-1.5">
+              <label className="block text-[11px] font-semibold text-zinc-300 uppercase tracking-wider font-mono">
+                Select Billing Country:
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSubSelectedCountry('BD');
+                    localStorage.setItem('billing_country', 'BD');
+                  }}
+                  className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all ${
+                    subSelectedCountry === 'BD'
+                      ? 'bg-crimson-600/20 border-crimson-500 text-white shadow-md ring-1 ring-crimson-500'
+                      : 'bg-carbon-800 border-white/10 text-zinc-400 hover:text-white'
+                  }`}
+                >
+                  <span className="text-base">🇧🇩</span>
+                  <span>Bangladesh (BD)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSubSelectedCountry('OTHERS');
+                    setSubPaymentMethod('BINANCE');
+                    localStorage.setItem('billing_country', 'OTHERS');
+                  }}
+                  className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all ${
+                    subSelectedCountry === 'OTHERS'
+                      ? 'bg-laser-600/20 border-laser-500 text-white shadow-md ring-1 ring-laser-500'
+                      : 'bg-carbon-800 border-white/10 text-zinc-400 hover:text-white'
+                  }`}
+                >
+                  <Globe className="w-4 h-4 text-laser-400" />
+                  <span>International / Others</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Payment Method Switcher (Only shown for BD) */}
+            {subSelectedCountry === 'BD' && (
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-semibold text-zinc-300 uppercase tracking-wider font-mono">
+                  Select Payment Method:
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSubPaymentMethod('BINANCE')}
+                    className={`p-2 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+                      subPaymentMethod === 'BINANCE'
+                        ? 'bg-amber-500/20 border-amber-500 text-white shadow-md ring-1 ring-amber-500'
+                        : 'bg-carbon-800 border-white/10 text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    <span>🟡 Binance Pay (USDT)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSubPaymentMethod('ZINIPAY')}
+                    className={`p-2 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+                      subPaymentMethod === 'ZINIPAY'
+                        ? 'bg-emerald-500/20 border-emerald-500 text-white shadow-md ring-1 ring-emerald-500'
+                        : 'bg-carbon-800 border-white/10 text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    <span>⚡ bKash / Nagad</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* BD Local Payment Assistance Card */}
+            {subSelectedCountry === 'BD' && subPaymentMethod === 'ZINIPAY' && (
+              <div className="p-4 rounded-2xl bg-carbon-950 border border-emerald-500/30 space-y-3 animate-in fade-in">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                    <Zap className="w-4 h-4" /> Local Mobile Banking Payment
+                  </span>
+                  <span className="font-mono text-sm font-black text-white">
+                    ৳ {Math.round((appliedCoupon ? appliedCoupon.finalPriceUsd : (subSelectedCycle === 'YEARLY' ? subSelectedPlan?.price_yearly_usd : subSelectedPlan?.price_monthly_usd)) * 125).toLocaleString()} BDT
+                  </span>
+                </div>
+                <p className="text-xs text-zinc-300 leading-relaxed">
+                  বিকাশ, নগদ বা রকেট দিয়ে প্ল্যান আপগ্রেড করার জন্য এডমিন সাপোর্টে যোগাযোগ করুন। পেমেন্ট কনফার্মেশনের সাথে সাথে আপনার স্টোর প্ল্যান লিমিট বৃদ্ধি করা হবে।
+                </p>
+                <div className="p-2.5 rounded-xl bg-carbon-900 border border-white/5 text-[11px] text-zinc-400 flex justify-between items-center font-mono">
+                  <span>Exchange Rate: <b>$1.00 USD = 125 BDT</b></span>
+                  <span className="text-emerald-400 font-bold">Manual / Instant</span>
+                </div>
+                <a
+                  href="https://t.me/mogentsupport"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 text-white font-bold text-xs text-center transition-all shadow-lg shadow-emerald-600/20"
+                >
+                  💬 Pay via bKash/Nagad on Telegram Support
+                </a>
+              </div>
+            )}
 
             {/* Step 1: Coupon Code Application */}
             <form onSubmit={handleApplyCoupon} className="space-y-2">
@@ -3620,92 +3732,96 @@ export const Dashboard: React.FC = () => {
               )}
             </form>
 
-            {/* Step 2: Binance Transfer Instructions */}
-            <div className="p-4 rounded-2xl bg-carbon-900 border border-laser-500/20 space-y-3">
-              <span className="text-xs font-mono font-bold text-laser-400 uppercase tracking-wider block">
-                Transfer Instructions (Binance Pay)
-              </span>
-
-              <div className="space-y-1 text-xs text-zinc-300">
-                <p>1. Open your <b>Binance App</b> → Tap <b>Pay</b> → Tap <b>Send</b>.</p>
-                <p>2. Select <b>Binance ID (UID)</b> and enter the Platform Owner UID below:</p>
-              </div>
-
-              <div className="p-3 rounded-xl bg-carbon-950 border border-white/10 flex justify-between items-center">
-                <div>
-                  <span className="text-[10px] text-zinc-500 block uppercase font-mono">Platform Owner UID</span>
-                  <span className="font-mono font-bold text-base text-white tracking-widest">
-                    {subData?.ownerBinanceUid || '1147094108'}
+            {/* Step 2 & 3: Binance Transfer & Verification (Hidden when BD local payment is active) */}
+            {!(subSelectedCountry === 'BD' && subPaymentMethod === 'ZINIPAY') && (
+              <>
+                <div className="p-4 rounded-2xl bg-carbon-900 border border-laser-500/20 space-y-3">
+                  <span className="text-xs font-mono font-bold text-laser-400 uppercase tracking-wider block">
+                    {subSelectedCountry === 'OTHERS' ? 'Global Crypto Transfer (Binance Pay)' : 'Transfer Instructions (Binance Pay)'}
                   </span>
+
+                  <div className="space-y-1 text-xs text-zinc-300">
+                    <p>1. Open your <b>Binance App</b> → Tap <b>Pay</b> → Tap <b>Send</b>.</p>
+                    <p>2. Select <b>Binance ID (UID)</b> and enter the Platform Owner UID below:</p>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-carbon-950 border border-white/10 flex justify-between items-center">
+                    <div>
+                      <span className="text-[10px] text-zinc-500 block uppercase font-mono">Platform Owner UID</span>
+                      <span className="font-mono font-bold text-base text-white tracking-widest">
+                        {subData?.ownerBinanceUid || '1147094108'}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(subData?.ownerBinanceUid || '1147094108');
+                        showNotice('UID Copied', 'Platform Owner Binance UID copied to clipboard!', 'success');
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-carbon-800 hover:bg-carbon-700 text-xs font-mono text-zinc-300"
+                    >
+                      Copy UID
+                    </button>
+                  </div>
+
+                  <div className="text-xs text-zinc-300">
+                    <span>Amount to send: </span>
+                    <span className="font-mono font-bold text-emerald-400 text-sm">
+                      ${appliedCoupon
+                        ? appliedCoupon.finalPriceUsd.toFixed(2)
+                        : (subSelectedCycle === 'YEARLY' ? subSelectedPlan?.price_yearly_usd?.toFixed(2) : subSelectedPlan?.price_monthly_usd?.toFixed(2))} USDT
+                    </span>
+                  </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    navigator.clipboard.writeText(subData?.ownerBinanceUid || '1147094108');
-                    showNotice('UID Copied', 'Platform Owner Binance UID copied to clipboard!', 'success');
-                  }}
-                  className="px-3 py-1.5 rounded-lg bg-carbon-800 hover:bg-carbon-700 text-xs font-mono text-zinc-300"
-                >
-                  Copy UID
-                </button>
-              </div>
 
-              <div className="text-xs text-zinc-300">
-                <span>Amount to send: </span>
-                <span className="font-mono font-bold text-emerald-400 text-sm">
-                  ${appliedCoupon
-                    ? appliedCoupon.finalPriceUsd.toFixed(2)
-                    : (subSelectedCycle === 'YEARLY' ? subSelectedPlan?.price_yearly_usd?.toFixed(2) : subSelectedPlan?.price_monthly_usd?.toFixed(2))} USDT
-                </span>
-              </div>
-            </div>
+                {/* Step 3: Transaction ID Verification Form */}
+                <form onSubmit={handleVerifySubPayment} className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                      Binance Pay Transaction ID / Order ID (17+ digits)
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. 459917465708191744"
+                      value={subTrxId}
+                      onChange={(e) => setSubTrxId(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-crimson-500"
+                    />
+                  </div>
 
-            {/* Step 3: Transaction ID Verification Form */}
-            <form onSubmit={handleVerifySubPayment} className="space-y-3">
-              <div>
-                <label className="block text-xs font-semibold text-zinc-300 mb-1">
-                  Binance Pay Transaction ID / Order ID (17+ digits)
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. 459917465708191744"
-                  value={subTrxId}
-                  onChange={(e) => setSubTrxId(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl bg-carbon-800 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-crimson-500"
-                />
-              </div>
+                  {subFeedback && (
+                    <div
+                      className={`p-3 rounded-xl text-xs ${
+                        subFeedback.type === 'success'
+                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                          : 'bg-crimson-500/10 text-crimson-400 border border-crimson-500/30'
+                      }`}
+                    >
+                      {subFeedback.message}
+                    </div>
+                  )}
 
-              {subFeedback && (
-                <div
-                  className={`p-3 rounded-xl text-xs ${
-                    subFeedback.type === 'success'
-                      ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                      : 'bg-crimson-500/10 text-crimson-400 border border-crimson-500/30'
-                  }`}
-                >
-                  {subFeedback.message}
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={subVerifying || !subTrxId.trim()}
-                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 disabled:opacity-50 text-white font-bold text-xs uppercase tracking-wider shadow-lg shadow-emerald-500/30 flex items-center justify-center gap-2"
-              >
-                {subVerifying ? (
-                  <>
-                    <div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin"></div>
-                    <span>Verifying with Binance SAPI...</span>
-                  </>
-                ) : (
-                  <>
-                    <Zap className="w-4 h-4" />
-                    <span>Verify & Activate Subscription Instant ⚡</span>
-                  </>
-                )}
-              </button>
-            </form>
+                  <button
+                    type="submit"
+                    disabled={subVerifying || !subTrxId.trim()}
+                    className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 disabled:opacity-50 text-white font-bold text-xs uppercase tracking-wider shadow-lg shadow-emerald-500/30 flex items-center justify-center gap-2"
+                  >
+                    {subVerifying ? (
+                      <>
+                        <div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin"></div>
+                        <span>Verifying with Binance SAPI...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Zap className="w-4 h-4" />
+                        <span>Verify & Activate Subscription Instant ⚡</span>
+                      </>
+                    )}
+                  </button>
+                </form>
+              </>
+            )}
           </div>
         </div>
       )}

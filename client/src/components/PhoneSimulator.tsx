@@ -74,7 +74,7 @@ export const PhoneSimulator: React.FC = () => {
         {
           id: Math.random().toString(),
           sender: 'bot',
-          text: '➕ <b>Deposit Channels</b>\nRate: $1 = 125 ৳\n\nSelect payment method:',
+          text: '➕ <b>Deposit Channels</b>\nRate: $1 USD = 125 BDT (or 1:1 USDT)\n\nSelect payment method:',
           time,
           buttons: [
             { label: '📱 bKash / Nagad', action: 'dep_bkash' },

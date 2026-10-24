@@ -16,6 +16,7 @@ import {
   Sparkles,
   Server,
   Key,
+  Globe,
 } from 'lucide-react';
 import { PRICING_TIERS } from '../../../shared/constants';
 
@@ -31,8 +32,9 @@ export const Landing: React.FC = () => {
           setPlans(res.data);
         }
       })
-      .catch((err) => console.warn('Using default pricing tiers:', err.message));
+      .catch((err) => console.warn('Using fallback pricing tiers:', err.message));
   }, []);
+
   return (
     <div className="min-h-screen bg-carbon-900 text-zinc-100 relative overflow-hidden">
       <Navbar />
@@ -54,14 +56,14 @@ export const Landing: React.FC = () => {
             </div>
 
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white leading-[1.15]">
-              আপনার টেলিগ্রাম শপ চালান <br />
+              Run Your Telegram Digital Store <br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-crimson-400 via-rose-300 to-laser-400">
-                ১০০% সম্পূর্ণ অটোমেশনে
+                On 100% Full Autopilot
               </span>
             </h1>
 
             <p className="text-base sm:text-lg text-zinc-400 max-w-2xl mx-auto lg:mx-0 font-normal leading-relaxed">
-              বিকাশ, নগদ এবং বাইনান্স পে ইনস্ট্যান্ট অটো-ডিপোজিট। প্রিমিয়াম সাবস্ক্রিপশন, ভিপিএন এবং সিরিয়াল কি সেকেন্ডে গ্রাহকের ইনবক্সে অটো-ডেলিভারি। কোনো সার্ভার বা কোডিং জানার প্রয়োজন নেই।
+              Instant automated crypto & fiat wallet deposits, zero-code digital storefronts, and sub-second key delivery. Integrate 6+ wholesale suppliers or upload custom inventory without touching a single line of server code.
             </p>
 
             <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4 pt-2">
@@ -69,30 +71,30 @@ export const Landing: React.FC = () => {
                 to="/register"
                 className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-gradient-to-r from-crimson-600 to-crimson-500 hover:from-crimson-500 hover:to-crimson-400 text-white font-extrabold text-sm shadow-xl shadow-crimson-500/30 hover:shadow-crimson-500/50 transition-all flex items-center justify-center gap-2.5 active:scale-95"
               >
-                <span>ফ্রি ট্রায়াল শুরু করুন</span>
+                <span>Start Free Trial</span>
                 <ArrowRight className="w-4 h-4" />
               </Link>
               <a
                 href="#simulator"
                 className="w-full sm:w-auto px-6 py-4 rounded-2xl bg-carbon-800 hover:bg-carbon-700 border border-white/10 text-zinc-300 hover:text-white font-semibold text-sm transition-all flex items-center justify-center gap-2"
               >
-                <span>বট সিমুলেটর টেস্ট করুন</span>
+                <span>Test Live Simulator</span>
               </a>
             </div>
 
             {/* Quick Metrics Bar */}
             <div className="pt-6 grid grid-cols-3 gap-4 border-t border-white/10 max-w-lg mx-auto lg:mx-0">
               <div>
-                <span className="block text-2xl font-black text-white font-mono">0.4s</span>
-                <span className="text-xs text-zinc-400">ডেলিভারি স্পিড</span>
+                <span className="block text-2xl font-black text-white font-mono">&lt; 0.4s</span>
+                <span className="text-xs text-zinc-400 font-medium">Delivery Speed</span>
               </div>
               <div>
                 <span className="block text-2xl font-black text-crimson-400 font-mono">100%</span>
-                <span className="text-xs text-zinc-400">অটো-ডিপোজিট</span>
+                <span className="text-xs text-zinc-400 font-medium">Automated SAPI</span>
               </div>
               <div>
                 <span className="block text-2xl font-black text-laser-400 font-mono">$0</span>
-                <span className="text-xs text-zinc-400">সার্ভার খরচ</span>
+                <span className="text-xs text-zinc-400 font-medium">Server Maintenance</span>
               </div>
             </div>
           </div>
@@ -111,13 +113,13 @@ export const Landing: React.FC = () => {
       <section id="features" className="py-24 px-4 sm:px-8 max-w-7xl mx-auto border-t border-white/5">
         <div className="text-center max-w-3xl mx-auto mb-16 space-y-4">
           <span className="text-xs font-mono font-bold uppercase tracking-widest text-crimson-400">
-            Engineered For Scale
+            Engineered For Global Scale
           </span>
           <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
-            সবকিছু সাজানো আপনার বিজনেসের শতভাগ প্রফিটের জন্য
+            Built To Maximize Your Digital Store Profit
           </h2>
           <p className="text-sm text-zinc-400">
-            ম্যানুয়াল চ্যাট এবং পেমেন্ট ভেরিফিকেশনের ক্লান্তি শেষ। আপনার নিজের টেলিগ্রাম বট নিজেই কাস্টমারের অর্ডার নেবে এবং প্রফিট আপনার ওয়ালেটে এনে দেবে।
+            Say goodbye to tedious manual payment checks and delayed customer chats. Your dedicated Telegram bot handles customer ordering, automated billing, and instant fulfillment 24/7.
           </p>
         </div>
 
@@ -127,65 +129,75 @@ export const Landing: React.FC = () => {
             <div className="w-10 h-10 rounded-xl bg-crimson-500/10 border border-crimson-500/20 flex items-center justify-center text-crimson-400">
               <Bot className="w-5 h-5" />
             </div>
-            <h3 className="text-lg font-bold text-white">হোয়াইট-লেবেল টেলিগ্রাম বট</h3>
+            <h3 className="text-lg font-bold text-white">White-Label Telegram Bot</h3>
             <p className="text-xs text-zinc-400 leading-relaxed">
-              আপনার নিজস্ব @BotFather টোকেন দিয়ে চালু করুন। কাস্টমার দেখবে আপনার ব্র্যান্ডের নাম, লোগো এবং পার্সোনাল পেমেন্ট নাম্বার।
+              Launch directly with your personal @BotFather bot token. Customers only see your brand identity, custom welcome message, and store catalog.
             </p>
           </div>
 
           {/* Card 2 */}
-          <div className="glass-card rounded-2xl p-6 border border-white/10 space-y-3">
-            <div className="w-10 h-10 rounded-xl bg-laser-500/10 border border-laser-500/20 flex items-center justify-center text-laser-400">
+          <div className="glass-card rounded-2xl p-6 border border-laser-500/20 flex items-start gap-4">
+            <div className="w-10 h-10 rounded-xl bg-laser-500/10 border border-laser-500/20 flex items-center justify-center text-laser-400 flex-shrink-0">
               <CreditCard className="w-5 h-5" />
             </div>
-            <h3 className="text-lg font-bold text-white">বিকাশ ও নগদ BDT অটো-কনভার্ট</h3>
-            <p className="text-xs text-zinc-400 leading-relaxed">
-              কাস্টমার বাংলায় বিকাশ/নগদে টাকা পাঠাবে, আর আপনার সেট করা ডলার রেট অনুযায়ী কাস্টমারের ওয়ালেটে অটোমেটিক USD জমা হবে।
-            </p>
+            <div className="space-y-1">
+              <h3 className="text-lg font-bold text-white">Multi-Currency & Local Gateways</h3>
+              <p className="text-xs text-zinc-400 leading-relaxed">
+                Accept international cards, ZiniPay automated mobile banking (bKash/Nagad/Rocket), and customize dynamic exchange rates with zero friction.
+              </p>
+            </div>
           </div>
 
           {/* Card 3 */}
-          <div className="glass-card rounded-2xl p-6 border border-white/10 space-y-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+          <div className="glass-card rounded-2xl p-6 border border-emerald-500/20 flex items-start gap-4">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 flex-shrink-0">
               <Zap className="w-5 h-5" />
             </div>
-            <h3 className="text-lg font-bold text-white">ইনস্ট্যান্ট Binance Pay SAPI</h3>
-            <p className="text-xs text-zinc-400 leading-relaxed">
-              গ্রাহক আপনার নিজস্ব Binance UID-তে USDT পে করে TxID দিলেই সিস্টেম বাইনান্স এপিআই দিয়ে সেকেন্ডে ভেরিফাই করে ব্যালেন্স যোগ করে দেবে।
-            </p>
+            <div className="space-y-1">
+              <h3 className="text-lg font-bold text-white">Instant Binance Pay (USDT)</h3>
+              <p className="text-xs text-zinc-400 leading-relaxed">
+                Accept global USDT deposits straight into your Binance account. SAPI automatically validates transaction IDs in sub-seconds with zero gateway deductions.
+              </p>
+            </div>
           </div>
 
           {/* Card 4 */}
-          <div className="glass-card rounded-2xl p-6 border border-white/10 space-y-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+          <div className="glass-card rounded-2xl p-6 border border-amber-500/20 flex items-start gap-4">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 flex-shrink-0">
               <Layers className="w-5 h-5" />
             </div>
-            <h3 className="text-lg font-bold text-white">সেন্ট্রাল হোলসেল প্রক্সি</h3>
-            <p className="text-xs text-zinc-400 leading-relaxed">
-              DigitalCore ও Canboso-এর মতো আন্তর্জাতিক পাইকারি সাপ্লায়ারদের হাজারো প্রোডাক্ট ১-ক্লিকে নিজের স্টোরে যুক্ত করুন এবং নিজের প্রফিট মার্জিন সেট করুন।
-            </p>
+            <div className="space-y-1">
+              <h3 className="text-lg font-bold text-white">6-in-1 Wholesale Reseller Hub</h3>
+              <p className="text-xs text-zinc-400 leading-relaxed">
+                Import thousands of software keys, AI accounts, and VPNs from DigitalCore, Vexorix, Canboso, ProdSeller, SsonDigital, and Blinkey.co with your custom markup.
+              </p>
+            </div>
           </div>
 
           {/* Card 5 */}
-          <div className="glass-card rounded-2xl p-6 border border-white/10 space-y-3">
-            <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
+          <div className="glass-card rounded-2xl p-6 border border-purple-500/20 flex items-start gap-4">
+            <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 flex-shrink-0">
               <Key className="w-5 h-5" />
             </div>
-            <h3 className="text-lg font-bold text-white">অটোমিক কাস্টম ইনভেন্টরি</h3>
-            <p className="text-xs text-zinc-400 leading-relaxed">
-              আপনার নিজের অ্যাকাউন্ট বা লাইসেন্স কি লাইন বাই লাইন ইনপুট দিন। কাস্টমার অর্ডার করা মাত্র মোনোস্পেস বক্সে তাৎক্ষণিক কোড ডেলিভারি হবে।
-            </p>
+            <div className="space-y-1">
+              <h3 className="text-lg font-bold text-white">Atomic Custom Inventory</h3>
+              <p className="text-xs text-zinc-400 leading-relaxed">
+                Upload your own private serials, accounts, or activation links line-by-line. Orders trigger instant, unforgeable single-use key delivery to the buyer.
+              </p>
+            </div>
           </div>
 
           {/* Card 6 */}
-          <div className="glass-card rounded-2xl p-6 border border-white/10 space-y-3">
-            <div className="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400">
+          <div className="glass-card rounded-2xl p-6 border border-rose-500/20 flex items-start gap-4">
+            <div className="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400 flex-shrink-0">
               <Server className="w-5 h-5" />
             </div>
-            <h3 className="text-lg font-bold text-white">আল্ট্রা-লাইট মেমোরি ইঞ্জিন</h3>
-            <p className="text-xs text-zinc-400 leading-relaxed">
-              একটিমাত্র হালকা $7 VPS-এ ৫০+ মার্চেন্টের বট ও শপ একইসাথে নিশ্চিন্তে চলবে (&lt;300MB RAM)। ১০০% আপটাইম নিশ্চয়তা।
-            </p>
+            <div className="space-y-1">
+              <h3 className="text-lg font-bold text-white">Ultra-Light Autonomous Engine</h3>
+              <p className="text-xs text-zinc-400 leading-relaxed">
+                Engineered with extreme efficiency to host hundreds of active merchant stores simultaneously with 100% uptime, minimal resource footprints, and rock-solid stability.
+              </p>
+            </div>
           </div>
         </div>
       </section>
@@ -198,18 +210,18 @@ export const Landing: React.FC = () => {
       </section>
 
       {/* ==========================================
-          PRICING TIERS
+          PRICING TIERS (LIVE FROM DATABASE)
          ========================================== */}
       <section id="pricing" className="py-24 px-4 sm:px-8 max-w-7xl mx-auto border-t border-white/5">
         <div className="text-center max-w-3xl mx-auto mb-12 space-y-4">
           <span className="text-xs font-mono font-bold uppercase tracking-widest text-laser-400">
-            Transparent Pricing
+            Transparent Global Pricing
           </span>
           <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
-            সহজ ও সাশ্রয়ী সাবস্ক্রিপশন প্ল্যান
+            Simple, High-Value Subscription Plans
           </h2>
           <p className="text-sm text-zinc-400">
-            কোনো লুকায়িত ফি নেই। আপনার বিজনেসের আকার অনুযায়ী সেরা প্ল্যানটি বেছে নিন।
+            Zero hidden transaction cuts. Choose the tier that matches your business scale.
           </p>
 
           {/* Billing Cycle Toggle */}
@@ -222,7 +234,7 @@ export const Landing: React.FC = () => {
                   : 'text-zinc-400 hover:text-white'
               }`}
             >
-              মাসিক (Monthly)
+              Monthly Billing
             </button>
             <button
               onClick={() => setBillingCycle('yearly')}
@@ -232,8 +244,8 @@ export const Landing: React.FC = () => {
                   : 'text-zinc-400 hover:text-white'
               }`}
             >
-              <span>বাৎসরিক (Yearly)</span>
-              <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-extrabold uppercase">
+              <span>Annual Billing</span>
+              <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-extrabold uppercase font-mono">
                 Save 20% 🎉
               </span>
             </button>
@@ -246,9 +258,12 @@ export const Landing: React.FC = () => {
             const priceUsd = billingCycle === 'yearly'
               ? Number(tier.price_yearly_usd || (Number(tier.price_monthly_usd || tier.price_usd || 10) * 10))
               : Number(tier.price_monthly_usd || tier.price_usd || 10);
-            const priceBdt = tier.price_bdt && billingCycle === 'monthly'
-              ? tier.price_bdt
-              : Math.round(priceUsd * 125);
+            
+            const perMonthEquivalent = billingCycle === 'yearly'
+              ? (priceUsd / 12).toFixed(1)
+              : priceUsd.toFixed(2);
+
+            const priceBdt = Math.round(priceUsd * 125);
             const features = Array.isArray(tier.features_json)
               ? tier.features_json
               : Array.isArray(tier.features)
@@ -274,13 +289,19 @@ export const Landing: React.FC = () => {
                   <div>
                     <h3 className="text-xl font-bold text-white">{tier.name}</h3>
                     <p className="text-xs text-zinc-400 mt-1">{tier.description || 'Complete cloud telegram store'}</p>
-                    <div className="mt-4 flex items-baseline gap-1">
-                      <span className="text-4xl font-extrabold text-white font-mono">৳{priceBdt.toLocaleString()}</span>
-                      <span className="text-xs text-zinc-400">/ {billingCycle === 'yearly' ? 'বছর' : 'মাস'}</span>
+                    
+                    {/* Primary USD Live Price */}
+                    <div className="mt-4 flex items-baseline gap-1.5">
+                      <span className="text-4xl font-extrabold text-white font-mono">${priceUsd}</span>
+                      <span className="text-xs text-zinc-400 font-mono">USD / {billingCycle === 'yearly' ? 'year' : 'month'}</span>
                     </div>
-                    <span className="text-xs text-zinc-500 font-mono">
-                      ~ ${priceUsd} USD / {billingCycle === 'yearly' ? 'year' : 'month'}
-                    </span>
+
+                    <div className="mt-1 flex items-center justify-between text-[11px] font-mono text-zinc-400">
+                      {billingCycle === 'yearly' && (
+                        <span className="text-emerald-400 font-semibold">~${perMonthEquivalent}/mo effective</span>
+                      )}
+                      <span className="text-zinc-500">~ ৳{priceBdt.toLocaleString()} BDT</span>
+                    </div>
                   </div>
 
                   <div className="border-t border-white/10 pt-6 space-y-3">
@@ -323,7 +344,7 @@ export const Landing: React.FC = () => {
         <div className="flex gap-6">
           <a href="#" className="hover:text-zinc-300">Privacy Policy</a>
           <a href="#" className="hover:text-zinc-300">Terms of Service</a>
-          <a href="#" className="hover:text-zinc-300">Documentation</a>
+          <a href="#" className="hover:text-zinc-300">API Documentation</a>
           <Link to="/login" className="hover:text-zinc-300">Merchant Portal</Link>
         </div>
       </footer>

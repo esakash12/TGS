@@ -56,7 +56,7 @@ export const RoiCalculator: React.FC = () => {
           <div className="space-y-2 bg-carbon-800/80 p-4 rounded-2xl border border-white/5">
             <div className="flex justify-between items-center text-sm font-semibold">
               <span className="text-zinc-300">Average Net Profit per Item:</span>
-              <span className="text-laser-400 font-mono text-base">${avgProfitUsd.toFixed(2)} USD (~{(avgProfitUsd * bdtRate).toFixed(0)} ৳)</span>
+              <span className="text-laser-400 font-mono text-base">${avgProfitUsd.toFixed(2)} USD</span>
             </div>
             <input
               type="range"
@@ -67,10 +67,10 @@ export const RoiCalculator: React.FC = () => {
               onChange={(e) => setAvgProfitUsd(Number(e.target.value))}
               className="w-full accent-laser-500 bg-carbon-900 rounded-lg h-2 cursor-pointer"
             />
-            <div className="flex justify-between text-[11px] text-zinc-500">
-              <span>$0.50 (~62 ৳)</span>
-              <span>$2.00 (~250 ৳)</span>
-              <span>$4.00 (~500 ৳)</span>
+            <div className="flex justify-between text-[11px] text-zinc-500 font-mono">
+              <span>$0.50 USD</span>
+              <span>$2.00 USD</span>
+              <span>$4.00 USD</span>
             </div>
           </div>
         </div>
@@ -84,10 +84,10 @@ export const RoiCalculator: React.FC = () => {
           <div>
             <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Projected Net Monthly Profit</span>
             <div className="mt-2 text-3xl sm:text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-white to-laser-400 font-mono">
-              ৳ {monthlyProfitBdt.toLocaleString()} BDT
+              ${monthlyProfitUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
             </div>
             <div className="text-sm font-semibold text-zinc-400 mt-1 font-mono">
-              ~ ${monthlyProfitUsd.toLocaleString(undefined, { minimumFractionDigits: 2 })} USD
+              ~ ৳ {monthlyProfitBdt.toLocaleString()} BDT
             </div>
           </div>
 
@@ -98,7 +98,7 @@ export const RoiCalculator: React.FC = () => {
             </div>
             <div className="bg-carbon-900/90 p-3 rounded-xl border border-white/5">
               <span className="text-[11px] text-zinc-400 block">SaaS Subscription:</span>
-              <span className="text-sm font-bold text-crimson-400 font-mono">৳ 2,499 / mo</span>
+              <span className="text-sm font-bold text-crimson-400 font-mono">$20 / mo</span>
             </div>
           </div>
 

@@ -388,7 +388,7 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
   };
 
   bot.callbackQuery('nav_products', showCategoryBrowser);
-  bot.hears([/🛍️ Products/i, /🛍️ প্রোডাক্ট কিনুন/i], showCategoryBrowser);
+  bot.hears([/🛍️ Products/i, /🛍️ Products & Shop/i, /🛍️ প্রোডাক্ট কিনুন/i], showCategoryBrowser);
   bot.command('products', showCategoryBrowser);
 
   // ==========================================
@@ -713,13 +713,13 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
 
     // Manual mobile banking buttons (shown only if enabled by merchant)
     if (isBkashActive && isNagadActive) {
-      keyboard.text('📱 bKash (বিকাশ)', 'dep_bkash').text('📱 Nagad (নগদ)', 'dep_nagad').row();
+      keyboard.text('📱 bKash', 'dep_bkash').text('📱 Nagad', 'dep_nagad').row();
     } else {
-      if (isBkashActive) keyboard.text('📱 bKash (বিকাশ)', 'dep_bkash').row();
-      if (isNagadActive) keyboard.text('📱 Nagad (নগদ)', 'dep_nagad').row();
+      if (isBkashActive) keyboard.text('📱 bKash', 'dep_bkash').row();
+      if (isNagadActive) keyboard.text('📱 Nagad', 'dep_nagad').row();
     }
     if (isRocketActive) {
-      keyboard.text('📱 Rocket (রকেট)', 'dep_rocket').row();
+      keyboard.text('📱 Rocket', 'dep_rocket').row();
     }
     keyboard.text('⬅️ Back', 'nav_start');
 
@@ -765,7 +765,7 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
   };
 
   bot.callbackQuery('nav_deposit', showDepositMenu);
-  bot.hears([/💰 Deposit/i, /➕ ব্যালেন্স রিচার্জ/i, /➕ Add Funds/i], showDepositMenu);
+  bot.hears([/💰 Deposit/i, /➕ Add Funds/i, /💳 Recharge/i, /➕ ব্যালেন্স রিচার্জ/i], showDepositMenu);
   bot.command('deposit', showDepositMenu);
 
   // Handle Deposit Selection
@@ -852,7 +852,7 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
 
     if (!targetNumber || !isMethodEnabled) {
       return ctx.answerCallbackQuery({
-        text: `⚠️ ${methodName} পেমেন্ট সাময়িকভাবে বন্ধ আছে। অনুগ্রহ করে অন্য মেথড ব্যবহার করুন।`,
+        text: `⚠️ ${methodName} payment is temporarily unavailable. Please choose another method.`,
         show_alert: true,
       });
     }
@@ -932,7 +932,7 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
       const targetNumber = typeof methodConfig === 'object' ? methodConfig?.number : (methodConfig || 'Not Configured');
       const isMerchantType = typeof methodConfig === 'object' && methodConfig?.type === 'merchant';
       const typeLabel = isMerchantType ? 'Merchant (Payment)' : 'Personal (Send Money)';
-      const actionInstruction = isMerchantType ? 'Make Payment (পেমেন্ট)' : 'Send Money (সেন্ড মানি)';
+      const actionInstruction = isMerchantType ? 'Make Payment' : 'Send Money';
 
       // Calculate required BDT (rounded cleanly)
       const calculatedBdt = Math.round(usd * rate);
@@ -1095,7 +1095,7 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
         `🧾 Invoice ID: <code>${invoiceId}</code>\n` +
         `━━━━━━━━━━━━━━━━━━\n` +
         `👉 Click the button below to complete payment via bKash, Nagad, Rocket, or Cards.\n\n` +
-        `<i>Payment complete হলে টেলিগ্রামের পপ-আপটি কেটে দিন, আপনার একাউন্টে স্বয়ংক্রিয়ভাবে ডলার জমা হয়ে যাবে।</i>`;
+        `<i>After completing payment, close the popup window and your wallet balance will be credited automatically.</i>`;
 
       return ctx.reply(checkoutMsg, {
         parse_mode: 'HTML',
@@ -1191,7 +1191,7 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
   };
 
   bot.callbackQuery('nav_orders', showOrdersHistory);
-  bot.hears([/📦 My Orders/i, /📦 অর্ডার হিস্টোরি/i], showOrdersHistory);
+  bot.hears([/📦 My Orders/i, /📦 Orders/i, /📦 Order History/i, /📦 অর্ডার হিস্টোরি/i], showOrdersHistory);
   bot.command('orders', showOrdersHistory);
 
   // ==========================================
@@ -1222,7 +1222,7 @@ export function createBotEngine(tenantId: string, botToken: string): Bot {
   };
 
   bot.callbackQuery('nav_support', showSupport);
-  bot.hears([/🗣️ Support/i, /📞 হেল্পলাইন/i, /📞 Live Support/i], showSupport);
+  bot.hears([/🗣️ Support/i, /📞 Help & Support/i, /📞 Live Support/i, /📞 হেল্পলাইন/i], showSupport);
   bot.command('support', showSupport);
 
   // Explicit /cancel command
