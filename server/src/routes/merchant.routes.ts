@@ -12,6 +12,8 @@ import {
 } from '../services/wholesale';
 import { verifyMerchantWholesaleTopup, verifyMerchantSubscriptionPayment } from '../services/binance';
 import { botRegistry } from '../../../bot/src/registry';
+import { dispatchDepositLog, testLogChannelConnection } from '../services/logger-channel';
+import { sendCustomBroadcast, sendPriceChangeBroadcast, getBroadcastHistory } from '../services/broadcast';
 
 export const merchantRouter = Router();
 
@@ -841,6 +843,10 @@ merchantRouter.get('/settings', (req: AuthenticatedRequest, res: Response) => {
     zinipayEnabled: Boolean(tenant.zinipay_enabled),
     zinipayApiKey: tenant.zinipay_api_key_enc ? (decrypt(tenant.zinipay_api_key_enc) ? '••••••••' + decrypt(tenant.zinipay_api_key_enc).slice(-4) : '') : '',
     hasZinipayKey: Boolean(tenant.zinipay_api_key_enc && decrypt(tenant.zinipay_api_key_enc)),
+    logChannelId: tenant.log_channel_id || '',
+    logPurchasesEnabled: tenant.log_purchases_enabled !== undefined ? Boolean(tenant.log_purchases_enabled) : true,
+    logDepositsEnabled: tenant.log_deposits_enabled !== undefined ? Boolean(tenant.log_deposits_enabled) : true,
+    autoBroadcastPriceDrop: Boolean(tenant.auto_broadcast_price_drop),
   });
 });
 
@@ -908,7 +914,11 @@ merchantRouter.put('/settings', async (req: AuthenticatedRequest, res: Response)
         categories_enabled = COALESCE(?, categories_enabled),
         admin_telegram_id = COALESCE(?, admin_telegram_id),
         zinipay_enabled = COALESCE(?, zinipay_enabled),
-        zinipay_api_key_enc = COALESCE(?, zinipay_api_key_enc)
+        zinipay_api_key_enc = COALESCE(?, zinipay_api_key_enc),
+        log_channel_id = COALESCE(?, log_channel_id),
+        log_purchases_enabled = COALESCE(?, log_purchases_enabled),
+        log_deposits_enabled = COALESCE(?, log_deposits_enabled),
+        auto_broadcast_price_drop = COALESCE(?, auto_broadcast_price_drop)
     WHERE id = ?
   `).run(
     storeName,
@@ -1355,3 +1365,72 @@ merchantRouter.get('/subscription/history', (req: AuthenticatedRequest, res: Res
   res.json(history);
 });
 
+
+// ==========================================
+// 8. Broadcast & Log Channel Marketing System
+// ==========================================
+
+merchantRouter.post('/broadcast/send', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const tenantId = req.tenant.id;
+    const { title, message, buttonText, buttonUrl } = req.body;
+    if (!message || !String(message).trim()) {
+      return res.status(400).json({ error: 'Broadcast message content is required' });
+    }
+    const result = await sendCustomBroadcast({
+      tenantId,
+      title,
+      message: String(message).trim(),
+      buttonText,
+      buttonUrl,
+    });
+    res.json({ success: true, result });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to dispatch broadcast' });
+  }
+});
+
+merchantRouter.post('/broadcast/price-change', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const tenantId = req.tenant.id;
+    const { productId, type, wasPriceUsd, nowPriceUsd, customNote } = req.body;
+    if (!productId) {
+      return res.status(400).json({ error: 'Product is required' });
+    }
+    if (isNaN(wasPriceUsd) || isNaN(nowPriceUsd)) {
+      return res.status(400).json({ error: 'Valid Was Price and Now Price are required' });
+    }
+    const result = await sendPriceChangeBroadcast({
+      tenantId,
+      productId,
+      type: type === 'PRICE_UPDATE' ? 'PRICE_UPDATE' : 'PRICE_DROP',
+      wasPriceUsd: Number(wasPriceUsd),
+      nowPriceUsd: Number(nowPriceUsd),
+      customNote,
+    });
+    res.json({ success: true, result });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to broadcast price change' });
+  }
+});
+
+merchantRouter.get('/broadcast/history', (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const tenantId = req.tenant.id;
+    const history = getBroadcastHistory(tenantId);
+    res.json({ history });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+merchantRouter.post('/broadcast/test-log-channel', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const tenantId = req.tenant.id;
+    const { channelId } = req.body;
+    const result = await testLogChannelConnection(tenantId, channelId);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});

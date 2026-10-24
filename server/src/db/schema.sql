@@ -47,6 +47,10 @@ CREATE TABLE IF NOT EXISTS tenants (
     admin_telegram_id INTEGER, -- Merchant's personal Telegram ID for instant deposit approval & notifications
     zinipay_api_key_enc TEXT DEFAULT '', -- Encrypted ZiniPay API key
     zinipay_enabled INTEGER DEFAULT 0, -- 1 = Enabled, 0 = Disabled
+    log_channel_id TEXT DEFAULT '',
+    log_purchases_enabled INTEGER DEFAULT 1,
+    log_deposits_enabled INTEGER DEFAULT 1,
+    auto_broadcast_price_drop INTEGER DEFAULT 0,
     subscription_cycle TEXT DEFAULT 'MONTHLY', -- MONTHLY, YEARLY, TRIAL
     subscription_status TEXT DEFAULT 'TRIAL', -- TRIAL, ACTIVE, GRACE, EXPIRED, SUSPENDED
     subscription_started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -259,3 +263,18 @@ VALUES (1, 0.01, 0.0);
 
 
 
+
+-- 15. Broadcast History
+CREATE TABLE IF NOT EXISTS broadcast_history (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    broadcast_type TEXT NOT NULL,
+    product_id TEXT,
+    title TEXT,
+    message TEXT NOT NULL,
+    target_recipients_count INTEGER DEFAULT 0,
+    success_count INTEGER DEFAULT 0,
+    failed_count INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_broadcast_tenant ON broadcast_history(tenant_id, created_at DESC);

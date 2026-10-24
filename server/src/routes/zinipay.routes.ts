@@ -3,6 +3,7 @@ import { db } from '../db/database';
 import { decrypt } from '../services/crypto';
 import { verifyZinipayInvoice } from '../services/zinipay';
 import { botRegistry } from '../../../bot/src/registry';
+import { dispatchDepositLog } from '../services/logger-channel';
 
 export const zinipayRouter = Router();
 
@@ -119,6 +120,15 @@ export async function approveZinipayInvoice(invoiceId: string): Promise<{
     deposit.customer_telegram_id,
     notifyMsg
   );
+
+  // Dispatch real-time deposit log to merchant's channel/group
+  dispatchDepositLog({
+    tenantId: deposit.tenant_id,
+    customerTelegramId: deposit.customer_telegram_id,
+    amountUsd: finalAmountUsd,
+    method: verifyResult.paymentMethod || 'ZiniPay',
+    trxId: actualTrxId || cleanInvoiceId,
+  }).catch(() => {});
 
   // 6. Notify store admin if configured
   if (tenant.admin_telegram_id) {

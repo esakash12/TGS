@@ -2,6 +2,7 @@ import axios from 'axios';
 import crypto from 'crypto';
 import { db } from '../db/database';
 import { decrypt } from './crypto';
+import { dispatchDepositLog } from './logger-channel';
 
 const BINANCE_API_BASE = 'https://api.binance.com';
 
@@ -349,6 +350,16 @@ export async function verifyCustomerRetailBinanceDeposit(params: {
   });
 
   depositTx();
+
+  // Dispatch real-time deposit log to merchant's channel/group
+  dispatchDepositLog({
+    tenantId,
+    customerTelegramId,
+    amountUsd: result.amountUsd || 0,
+    method: 'Binance Pay',
+    trxId,
+  }).catch(() => {});
+
   return result;
 }
 

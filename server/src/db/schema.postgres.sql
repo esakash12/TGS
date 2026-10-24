@@ -271,3 +271,18 @@ CREATE TABLE IF NOT EXISTS subscription_history (
 INSERT INTO global_system_config (id, platform_fee_fixed_usd, platform_fee_pct)
 VALUES (1, 0.01, 0.0)
 ON CONFLICT (id) DO NOTHING;
+
+-- 15. Broadcast History
+CREATE TABLE IF NOT EXISTS broadcast_history (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    broadcast_type VARCHAR(50) NOT NULL,
+    product_id TEXT,
+    title VARCHAR(255),
+    message TEXT NOT NULL,
+    target_recipients_count INT DEFAULT 0,
+    success_count INT DEFAULT 0,
+    failed_count INT DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_broadcast_tenant ON broadcast_history(tenant_id, created_at DESC);

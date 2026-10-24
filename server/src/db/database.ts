@@ -56,6 +56,10 @@ export function initDatabase() {
       }
       if (!tenantCols.includes('subscription_expires_at')) db.exec("ALTER TABLE tenants ADD COLUMN subscription_expires_at TIMESTAMP;");
       if (!tenantCols.includes('trial_ends_at')) db.exec("ALTER TABLE tenants ADD COLUMN trial_ends_at TIMESTAMP;");
+      if (!tenantCols.includes('log_channel_id')) db.exec("ALTER TABLE tenants ADD COLUMN log_channel_id TEXT DEFAULT '';");
+      if (!tenantCols.includes('log_purchases_enabled')) db.exec("ALTER TABLE tenants ADD COLUMN log_purchases_enabled INTEGER DEFAULT 1;");
+      if (!tenantCols.includes('log_deposits_enabled')) db.exec("ALTER TABLE tenants ADD COLUMN log_deposits_enabled INTEGER DEFAULT 1;");
+      if (!tenantCols.includes('auto_broadcast_price_drop')) db.exec("ALTER TABLE tenants ADD COLUMN auto_broadcast_price_drop INTEGER DEFAULT 0;");
     }
 
     if (tableNames.has('products')) {
@@ -93,6 +97,25 @@ export function initDatabase() {
       `);
       console.log('✅ Created tenant_api_wallets table');
     }
+    if (!tableNames.has('broadcast_history')) {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS broadcast_history (
+          id TEXT PRIMARY KEY,
+          tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+          broadcast_type TEXT NOT NULL,
+          product_id TEXT,
+          title TEXT,
+          message TEXT NOT NULL,
+          target_recipients_count INTEGER DEFAULT 0,
+          success_count INTEGER DEFAULT 0,
+          failed_count INTEGER DEFAULT 0,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_broadcast_tenant ON broadcast_history(tenant_id, created_at DESC);
+      `);
+      console.log('✅ Created broadcast_history table');
+    }
+
     if (tableNames.has('crypto_verified_transactions')) {
       const cryptoCols = (db.prepare("PRAGMA table_info(crypto_verified_transactions)").all() as any[]).map((c: any) => c.name);
       if (!cryptoCols.includes('order_id')) {

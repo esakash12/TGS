@@ -16,7 +16,7 @@ import {
   Plus,
   RefreshCw,
   CheckCircle,
-  XCircle,
+  XCircle, Megaphone,
   AlertCircle,
   ExternalLink,
   Zap,
@@ -47,6 +47,8 @@ import { CyberDialog, CyberDialogOptions } from '../../components/CyberDialog';
 import { TopupWholesaleModal } from '../../components/admin/modals/TopupWholesaleModal';
 import { ImportProductModal } from '../../components/admin/modals/ImportProductModal';
 import { WholesaleCatalogView } from '../../components/admin/wholesale/WholesaleCatalogView';
+import { BroadcastView } from '../../components/admin/broadcast/BroadcastView';
+import { LogChannelSettingsCard } from '../../components/admin/settings/LogChannelSettingsCard';
 
 export const Dashboard: React.FC = () => {
   const { user, tenant, token, logout, refreshSession } = useAuth();
@@ -67,7 +69,7 @@ export const Dashboard: React.FC = () => {
     setDialog({ type: 'prompt', tone: 'info', title, message, inputLabel, defaultValue, onConfirm });
   };
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'groups' | 'custom_products' | 'wholesale' | 'store_products' | 'deposits' | 'customers' | 'bot_editor' | 'payments' | 'subscription' | 'settings'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'groups' | 'custom_products' | 'wholesale' | 'store_products' | 'deposits' | 'customers' | 'bot_editor' | 'payments' | 'subscription' | 'settings' | 'broadcast'>('overview');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [overview, setOverview] = useState<any>(null);
   const [products, setProducts] = useState<any[]>([]);
@@ -201,6 +203,9 @@ export const Dashboard: React.FC = () => {
     aboutText: '',
     supportText: '',
     adminTelegramId: '',
+    logChannelId: '',
+    logPurchasesEnabled: true,
+    logDepositsEnabled: true,
   });
   const [settingsSaved, setSettingsSaved] = useState(false);
 
@@ -888,6 +893,9 @@ export const Dashboard: React.FC = () => {
           adminTelegramId: settingsData.adminTelegramId,
           zinipayEnabled: settingsData.zinipayEnabled,
           zinipayApiKey: settingsData.zinipayApiKey,
+          logChannelId: settingsData.logChannelId,
+          logPurchasesEnabled: settingsData.logPurchasesEnabled,
+          logDepositsEnabled: settingsData.logDepositsEnabled,
         },
         authHeaders
       );
@@ -1140,6 +1148,21 @@ export const Dashboard: React.FC = () => {
             <div className="pt-3 pb-1 px-3 text-[11px] font-bold uppercase tracking-wider text-zinc-500">
               Bot & System
             </div>
+
+            <button
+              onClick={() => { setActiveTab('broadcast'); setMobileSidebarOpen(false); }}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all text-left ${
+                activeTab === 'broadcast'
+                  ? 'bg-gradient-to-r from-laser-600/30 to-purple-600/30 text-laser-300 border border-laser-500/40 shadow-sm'
+                  : 'text-zinc-400 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <Megaphone className="w-4 h-4 text-laser-400" />
+                <span>Broadcast</span>
+              </div>
+              <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-laser-500/10 text-laser-400 border border-laser-500/20 font-bold">New</span>
+            </button>
 
             <button
               onClick={() => { setActiveTab('bot_editor'); setMobileSidebarOpen(false); }}

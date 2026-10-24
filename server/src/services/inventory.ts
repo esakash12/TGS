@@ -1,5 +1,6 @@
 import { db } from '../db/database';
 import { purchaseUpstreamProduct, getGlobalWholesaleConfig, getCachedProductLiveStock } from './wholesale';
+import { dispatchPurchaseLog } from './logger-channel';
 
 export interface PurchaseResult {
   success: boolean;
@@ -101,6 +102,16 @@ export async function processCustomerPurchase(params: {
 
     try {
       popTx();
+      dispatchPurchaseLog({
+        tenantId,
+        customerTelegramId,
+        productName: product.name,
+        planName: product.name,
+        orderNumber,
+        quantity,
+        totalPriceUsd,
+      }).catch(() => {});
+
       return {
         success: true,
         orderNumber,
@@ -219,6 +230,16 @@ export async function processCustomerPurchase(params: {
 
     try {
       wholesaleCommitTx();
+      dispatchPurchaseLog({
+        tenantId,
+        customerTelegramId,
+        productName: product.name,
+        planName: product.name,
+        orderNumber,
+        quantity,
+        totalPriceUsd,
+      }).catch(() => {});
+
       return {
         success: true,
         orderNumber,
