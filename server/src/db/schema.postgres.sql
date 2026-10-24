@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS global_system_config (
     wholesale_vexorix_key TEXT DEFAULT '',
     wholesale_prodseller_key TEXT DEFAULT '',
     wholesale_ssondigital_key TEXT DEFAULT '',
+    wholesale_blinkey_key TEXT DEFAULT '',
     platform_fee_fixed_usd NUMERIC(14, 4) DEFAULT 0.01,
     platform_fee_pct NUMERIC(14, 4) DEFAULT 0.0,
     owner_binance_uid TEXT DEFAULT '',

@@ -1,3 +1,4 @@
+import { BlinkeyProvider } from './blinkey.provider';
 import { CanbosoProvider } from './canboso.provider';
 import { DigitalCoreProvider } from './digitalcore.provider';
 import { ProdSellerProvider } from './prodseller.provider';
@@ -14,6 +15,7 @@ export class WholesaleProviderRegistry {
     this.register(new CanbosoProvider());
     this.register(new ProdSellerProvider());
     this.register(new SsonDigitalProvider());
+    this.register(new BlinkeyProvider());
   }
 
   register(provider: IWholesaleProvider) {
@@ -34,6 +36,7 @@ export class WholesaleProviderRegistry {
     if (productId.startsWith('cb_')) return this.get('canboso');
     if (productId.startsWith('ps_')) return this.get('prodseller');
     if (productId.startsWith('sd_')) return this.get('ssondigital');
+    if (productId.startsWith('bk_')) return this.get('blinkey');
     return undefined;
   }
 }

@@ -1,6 +1,6 @@
 import { WholesaleProductDTO } from '../../../../../shared/types';
 
-export type WholesaleProviderName = 'digitalcore' | 'canboso' | 'vexorix' | 'prodseller' | 'ssondigital';
+export type WholesaleProviderName = 'digitalcore' | 'canboso' | 'vexorix' | 'prodseller' | 'ssondigital' | 'blinkey';
 
 export interface ProviderBalance {
   balance: number;

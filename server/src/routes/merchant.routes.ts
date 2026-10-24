@@ -749,6 +749,7 @@ merchantRouter.get('/wholesale-wallet/info', (req: AuthenticatedRequest, res: Re
     canboso: 0,
     prodseller: 0,
     ssondigital: 0,
+    blinkey: 0,
   };
   for (const w of apiWallets) {
     walletMap[w.provider] = Number(w.wallet_usd || 0);

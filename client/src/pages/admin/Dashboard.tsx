@@ -127,7 +127,7 @@ export const Dashboard: React.FC = () => {
   // Filter & Search states
   const [storeFilter, setStoreFilter] = useState<'all' | 'custom' | 'wholesale'>('all');
   const [wholesaleSearch, setWholesaleSearch] = useState('');
-  const [wholesaleProviderFilter, setWholesaleProviderFilter] = useState<'all' | 'digitalcore' | 'vexorix' | 'canboso' | 'prodseller' | 'ssondigital'>('all');
+  const [wholesaleProviderFilter, setWholesaleProviderFilter] = useState<'all' | 'digitalcore' | 'vexorix' | 'canboso' | 'prodseller' | 'ssondigital' | 'blinkey'>('all');
   const [wholesaleCategoryFilter, setWholesaleCategoryFilter] = useState('all');
 
   // Clear Store / Products Modal

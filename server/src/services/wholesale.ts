@@ -35,6 +35,7 @@ export function getGlobalWholesaleConfig() {
     vexorixKey: config?.wholesale_vexorix_key || '',
     prodsellerKey: config?.wholesale_prodseller_key || '',
     ssondigitalKey: config?.wholesale_ssondigital_key || '',
+    blinkeyKey: config?.wholesale_blinkey_key || '',
     platformFeeFixed: Number(config?.platform_fee_fixed_usd ?? 0.01),
     platformFeePct: Number(config?.platform_fee_pct ?? 0.0),
   };
@@ -82,6 +83,13 @@ export async function getSsonDigitalBalance(): Promise<{ balance: number; curren
   return provider.getBalance(ssondigitalKey);
 }
 
+export async function getBlinkeyBalance(): Promise<{ balance: number; currency: string; username?: string } | null> {
+  const { blinkeyKey } = getGlobalWholesaleConfig();
+  const provider = wholesaleRegistry.get('blinkey');
+  if (!provider || !blinkeyKey) return null;
+  return provider.getBalance(blinkeyKey);
+}
+
 export async function getCanbosoBalance(): Promise<{ balanceUsd: number; balanceVnd: number } | null> {
   const { canbosoKey } = getGlobalWholesaleConfig();
   const provider = wholesaleRegistry.get('canboso');
@@ -110,6 +118,7 @@ export async function fetchLiveWholesaleCatalog(forceRefresh = false): Promise<W
     vexorixKey,
     prodsellerKey,
     ssondigitalKey,
+    blinkeyKey,
     platformFeeFixed,
     platformFeePct,
   } = getGlobalWholesaleConfig();
@@ -125,6 +134,7 @@ export async function fetchLiveWholesaleCatalog(forceRefresh = false): Promise<W
     vexorix: vexorixKey,
     prodseller: prodsellerKey,
     ssondigital: ssondigitalKey,
+    blinkey: blinkeyKey,
   };
 
   // Fetch catalogs from all registered providers concurrently
@@ -221,7 +231,7 @@ export function isWholesaleProductGloballyActive(providerProductId: string): boo
 // ========================================================
 
 export async function purchaseUpstreamProduct(params: {
-  provider: 'digitalcore' | 'canboso' | 'vexorix' | 'prodseller' | 'ssondigital';
+  provider: 'digitalcore' | 'canboso' | 'vexorix' | 'prodseller' | 'ssondigital' | 'blinkey';
   providerProductId: string;
   quantity: number;
 }): Promise<{ success: boolean; deliveredItems: string[]; orderId: string; error?: string }> {
@@ -234,6 +244,7 @@ export async function purchaseUpstreamProduct(params: {
     vexorix: config.vexorixKey,
     prodseller: config.prodsellerKey,
     ssondigital: config.ssondigitalKey,
+    blinkey: config.blinkeyKey,
   };
 
   const provider = wholesaleRegistry.get(providerName);

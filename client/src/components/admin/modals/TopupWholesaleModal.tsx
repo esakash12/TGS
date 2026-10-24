@@ -98,7 +98,7 @@ export const TopupWholesaleModal: React.FC<TopupWholesaleModalProps> = ({
         {/* Per-Provider Balance Badges */}
         <div className="p-2.5 rounded-2xl bg-carbon-950 border border-white/5 space-y-1.5">
           <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider block">Your API Provider Balances:</span>
-          <div className="grid grid-cols-5 gap-1.5 text-center">
+          <div className="grid grid-cols-6 gap-1.5 text-center">
             <div className="p-1.5 rounded-xl bg-carbon-900 border border-crimson-500/20">
               <span className="text-[9px] text-crimson-400 block font-bold leading-none">Mogent V1</span>
               <span className="font-mono text-[11px] font-extrabold text-white mt-1 block">
@@ -127,6 +127,12 @@ export const TopupWholesaleModal: React.FC<TopupWholesaleModalProps> = ({
               <span className="text-[9px] text-amber-400 block font-bold leading-none">Mogent V5</span>
               <span className="font-mono text-[11px] font-extrabold text-white mt-1 block">
                 ${Number(topupInfo?.walletsByProvider?.ssondigital || 0).toFixed(2)}
+              </span>
+            </div>
+            <div className="p-1.5 rounded-xl bg-carbon-900 border border-teal-500/20">
+              <span className="text-[9px] text-teal-400 block font-bold leading-none">Mogent V6</span>
+              <span className="font-mono text-[11px] font-extrabold text-white mt-1 block">
+                ${Number(topupInfo?.walletsByProvider?.blinkey || 0).toFixed(2)}
               </span>
             </div>
           </div>
@@ -158,6 +164,7 @@ export const TopupWholesaleModal: React.FC<TopupWholesaleModalProps> = ({
               <option value="canboso">🌐 Mogent V3 Wholesale</option>
               <option value="prodseller">🔥 Mogent V4 Wholesale</option>
               <option value="ssondigital">⚡ Mogent V5 Wholesale</option>
+              <option value="blinkey">🔑 Mogent V6 Wholesale (Blinkey)</option>
             </select>
           </div>
 

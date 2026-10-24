@@ -9,6 +9,7 @@ import {
   getVexorixBalance,
   getProdSellerBalance,
   getSsonDigitalBalance,
+  getBlinkeyBalance,
   getCanbosoBalance,
   fetchLiveWholesaleCatalog,
   invalidateWholesaleCache,
@@ -50,12 +51,13 @@ godmodeRouter.get('/overview', async (_req: Request, res: Response) => {
   const freeSystemMem = os.freemem();
 
   // Fetch Live Wholesale Balances concurrently
-  const [digitalCoreBal, canbosoBal, vexorixBal, prodsellerBal, ssonDigitalBal] = await Promise.all([
+  const [digitalCoreBal, canbosoBal, vexorixBal, prodsellerBal, ssonDigitalBal, blinkeyBal] = await Promise.all([
     getDigitalCoreBalance(),
     getCanbosoBalance(),
     getVexorixBalance(),
     getProdSellerBalance(),
     getSsonDigitalBalance(),
+    getBlinkeyBalance(),
   ]);
 
   // Aggregate stats across all stores
@@ -91,6 +93,7 @@ godmodeRouter.get('/overview', async (_req: Request, res: Response) => {
       canboso: canbosoBal,
       prodseller: prodsellerBal,
       ssondigital: ssonDigitalBal,
+      blinkey: blinkeyBal,
     },
     fleet: {
       totalMerchants: Number(storeStats.total_merchants || 0),
@@ -129,6 +132,7 @@ godmodeRouter.get('/merchants', (_req: Request, res: Response) => {
       canboso: 0,
       prodseller: 0,
       ssondigital: 0,
+      blinkey: 0,
     };
     for (const w of apiWallets) {
       if (w.provider) {
@@ -298,6 +302,7 @@ godmodeRouter.get('/config', (_req: Request, res: Response) => {
     canbosoKey: config?.wholesale_canboso_key || '',
     prodsellerKey: config?.wholesale_prodseller_key || '',
     ssondigitalKey: config?.wholesale_ssondigital_key || '',
+    blinkeyKey: config?.wholesale_blinkey_key || '',
     platformFeeFixedUsd: Number(config?.platform_fee_fixed_usd ?? 0.01),
     platformFeePct: Number(config?.platform_fee_pct ?? 0.0),
     ownerBinanceUid: config?.owner_binance_uid || '',
@@ -315,6 +320,7 @@ godmodeRouter.put('/config', (req: Request, res: Response) => {
     canbosoKey,
     prodsellerKey,
     ssondigitalKey,
+    blinkeyKey,
     platformFeeFixedUsd,
     platformFeePct,
     ownerBinanceUid,
@@ -343,6 +349,7 @@ godmodeRouter.put('/config', (req: Request, res: Response) => {
         wholesale_canboso_key = COALESCE(?, wholesale_canboso_key),
         wholesale_prodseller_key = COALESCE(?, wholesale_prodseller_key),
         wholesale_ssondigital_key = COALESCE(?, wholesale_ssondigital_key),
+        wholesale_blinkey_key = COALESCE(?, wholesale_blinkey_key),
         platform_fee_fixed_usd = COALESCE(?, platform_fee_fixed_usd),
         platform_fee_pct = COALESCE(?, platform_fee_pct),
         owner_binance_uid = COALESCE(?, owner_binance_uid),
@@ -358,6 +365,7 @@ godmodeRouter.put('/config', (req: Request, res: Response) => {
     canbosoKey !== undefined ? canbosoKey.trim() : null,
     prodsellerKey !== undefined ? prodsellerKey.trim() : null,
     ssondigitalKey !== undefined ? ssondigitalKey.trim() : null,
+    blinkeyKey !== undefined ? blinkeyKey.trim() : null,
     platformFeeFixedUsd !== undefined ? Number(platformFeeFixedUsd) : null,
     platformFeePct !== undefined ? Number(platformFeePct) : null,
     ownerBinanceUid !== undefined ? ownerBinanceUid.trim() : null,

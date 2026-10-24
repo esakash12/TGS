@@ -17,6 +17,7 @@ export const UPSTREAM_CANBOSO_BASE_URL = 'https://canboso.com';
 export const UPSTREAM_VEXORIX_BASE_URL = 'https://207-148-64-141.sslip.io';
 export const UPSTREAM_PRODSELLER_BASE_URL = 'https://prodseller.com';
 export const UPSTREAM_SSON_BASE_URL = 'https://ssondigitalworks.online/api/reseller';
+export const UPSTREAM_BLINKEY_BASE_URL = 'https://blinkey.co/v1';
 
 export const PRICING_TIERS = [
   {

@@ -15,7 +15,7 @@ interface WholesaleCatalogViewProps {
   wholesaleCategories: string[];
   wholesaleSearch: string;
   setWholesaleSearch: (val: string) => void;
-  wholesaleProviderFilter: 'digitalcore' | 'vexorix' | 'canboso' | 'prodseller' | 'ssondigital' | 'all';
+  wholesaleProviderFilter: 'digitalcore' | 'vexorix' | 'canboso' | 'prodseller' | 'ssondigital' | 'blinkey' | 'all';
   setWholesaleProviderFilter: (val: any) => void;
   wholesaleCategoryFilter: string;
   setWholesaleCategoryFilter: (val: string) => void;
@@ -187,6 +187,16 @@ export const WholesaleCatalogView: React.FC<WholesaleCatalogViewProps> = ({
             >
               <span>⚡ Mogent V5</span>
             </button>
+            <button
+              onClick={() => setWholesaleProviderFilter('blinkey')}
+              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                wholesaleProviderFilter === 'blinkey'
+                  ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow'
+                  : 'bg-carbon-800 text-zinc-400 hover:text-white border border-white/5'
+              }`}
+            >
+              <span>🔑 Mogent V6</span>
+            </button>
           </div>
         </div>
 
@@ -252,7 +262,7 @@ export const WholesaleCatalogView: React.FC<WholesaleCatalogViewProps> = ({
               <div className="space-y-2">
                 <div className="flex justify-between items-start gap-2">
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-carbon-800 text-laser-400 border border-laser-500/20 uppercase flex items-center gap-1">
-                    <span>{item.icon || '⚡'}</span> {item.provider === 'digitalcore' ? 'Mogent V1' : item.provider === 'vexorix' ? 'Mogent V2' : item.provider === 'canboso' ? 'Mogent V3' : item.provider === 'prodseller' ? 'Mogent V4' : item.provider === 'ssondigital' ? 'Mogent V5' : item.provider}
+                    <span>{item.icon || '⚡'}</span> {item.provider === 'digitalcore' ? 'Mogent V1' : item.provider === 'vexorix' ? 'Mogent V2' : item.provider === 'canboso' ? 'Mogent V3' : item.provider === 'prodseller' ? 'Mogent V4' : item.provider === 'ssondigital' ? 'Mogent V5' : item.provider === 'blinkey' ? 'Mogent V6' : item.provider}
                   </span>
                   <span className="text-xs font-mono text-emerald-400 font-bold">
                     In Stock ({item.stock})

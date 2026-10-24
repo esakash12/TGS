@@ -66,7 +66,7 @@ export const GodMode: React.FC = () => {
   const [merchants, setMerchants] = useState<any[]>([]);
   const [wholesaleCatalog, setWholesaleCatalog] = useState<any[]>([]);
   const [wholesaleSearch, setWholesaleSearch] = useState('');
-  const [wholesaleProviderFilter, setWholesaleProviderFilter] = useState<'all' | 'digitalcore' | 'vexorix' | 'canboso' | 'prodseller' | 'ssondigital'>('all');
+  const [wholesaleProviderFilter, setWholesaleProviderFilter] = useState<'all' | 'digitalcore' | 'vexorix' | 'canboso' | 'prodseller' | 'ssondigital' | 'blinkey'>('all');
   const [wholesaleCategoryFilter, setWholesaleCategoryFilter] = useState('all');
   const [wholesaleLoading, setWholesaleLoading] = useState(false);
   const [editingPriceProductId, setEditingPriceProductId] = useState<string | null>(null);
@@ -126,6 +126,7 @@ export const GodMode: React.FC = () => {
     canbosoKey: '',
     prodsellerKey: '',
     ssondigitalKey: '',
+    blinkeyKey: '',
     platformFeeFixedUsd: 0.01,
     platformFeePct: 0.0,
     ownerBinanceUid: '',
@@ -907,6 +908,20 @@ export const GodMode: React.FC = () => {
             </span>
           </div>
 
+          {/* Card 6: Blinkey.co (Mogent V6) Live */}
+          <div className="glass-card-cyber rounded-2xl p-5 border border-white/10 space-y-2">
+            <div className="flex justify-between items-center text-xs text-zinc-400">
+              <span className="font-mono">BLINKEY (V6) LIVE</span>
+              <Key className="w-4 h-4 text-emerald-400" />
+            </div>
+            <div className="text-2xl font-mono font-extrabold text-emerald-400">
+              ${overview?.wholesaleBalances?.blinkey?.balance?.toFixed(2) || '0.00'} <span className="text-xs text-zinc-500">USD</span>
+            </div>
+            <span className="text-[10px] text-zinc-500 font-mono">
+              Account: {overview?.wholesaleBalances?.blinkey?.username || 'Active'}
+            </span>
+          </div>
+
           {/* Card 4: Fleet Overview */}
           <div className="glass-card-cyber rounded-2xl p-5 border border-white/10 space-y-2">
             <div className="flex justify-between items-center text-xs text-zinc-400">
@@ -1083,10 +1098,10 @@ export const GodMode: React.FC = () => {
                             <div className="font-bold text-laser-400">${Number(m.wallet_usd || 0).toFixed(2)}</div>
                             {m.walletsByProvider && (
                               <div className="text-[10px] text-zinc-500 font-mono flex flex-wrap gap-1 mt-0.5">
-                                {['vexorix', 'canboso', 'prodseller', 'ssondigital'].map(k => {
+                                {['vexorix', 'canboso', 'prodseller', 'ssondigital', 'blinkey'].map(k => {
                                   const val = Number(m.walletsByProvider[k] || 0);
                                   if (val <= 0) return null;
-                                  const tag = k === 'vexorix' ? 'V2' : k === 'canboso' ? 'V3' : k === 'prodseller' ? 'V4' : 'V5';
+                                  const tag = k === 'vexorix' ? 'V2' : k === 'canboso' ? 'V3' : k === 'prodseller' ? 'V4' : k === 'ssondigital' ? 'V5' : 'V6';
                                   return (
                                     <span key={k} className="px-1 py-0.2 rounded bg-carbon-800 text-zinc-300 border border-white/5">
                                       {tag}: ${val.toFixed(1)}
@@ -1292,6 +1307,23 @@ export const GodMode: React.FC = () => {
                 <span>SSONDIGITAL (V5) API</span>
                 <span className="px-2 py-0.5 rounded-full text-[10px] bg-black/40">
                   {wholesaleCatalog.filter((i) => i.provider?.toLowerCase() === 'ssondigital').length}
+                </span>
+              </button>
+              <button
+                onClick={() => {
+                  setWholesaleProviderFilter('blinkey');
+                  setWholesaleCategoryFilter('all');
+                }}
+                className={`px-4 py-2 rounded-xl text-xs font-mono font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
+                  wholesaleProviderFilter === 'blinkey'
+                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30'
+                    : 'bg-carbon-900 text-zinc-400 hover:text-white border border-white/5'
+                }`}
+              >
+                <Key className="w-3.5 h-3.5 text-emerald-400" />
+                <span>BLINKEY (V6) API</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] bg-black/40">
+                  {wholesaleCatalog.filter((i) => i.provider?.toLowerCase() === 'blinkey').length}
                 </span>
               </button>
             </div>
@@ -1577,6 +1609,17 @@ export const GodMode: React.FC = () => {
                     value={config.ssondigitalKey || ''}
                     onChange={(e) => setConfig({ ...config, ssondigitalKey: e.target.value })}
                     className="w-full px-4 py-2 rounded-xl bg-carbon-900 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1">Blinkey.co (Mogent V6) Reseller API Key</label>
+                  <input
+                    type="text"
+                    placeholder="Paste blinkey.co API Key (blk_...)"
+                    value={config.blinkeyKey || ''}
+                    onChange={(e) => setConfig({ ...config, blinkeyKey: e.target.value })}
+                    className="w-full px-4 py-2 rounded-xl bg-carbon-900 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-emerald-500"
                   />
                 </div>
 
@@ -2340,13 +2383,14 @@ export const GodMode: React.FC = () => {
                 <label className="block text-xs font-mono font-medium text-zinc-300 mb-1.5">
                   Select Provider Wallet
                 </label>
-                <div className="grid grid-cols-5 gap-1 p-1 bg-carbon-800 rounded-xl border border-white/5">
+                <div className="grid grid-cols-6 gap-1 p-1 bg-carbon-800 rounded-xl border border-white/5">
                   {[
                     { id: 'digitalcore', label: 'V1', name: 'DigitalCore' },
                     { id: 'vexorix', label: 'V2', name: 'Vexorix' },
                     { id: 'canboso', label: 'V3', name: 'Canboso' },
                     { id: 'prodseller', label: 'V4', name: 'ProdSeller' },
                     { id: 'ssondigital', label: 'V5', name: 'SsonDigital' },
+                    { id: 'blinkey', label: 'V6', name: 'Blinkey' },
                   ].map((p) => {
                     const isSelected = walletAdjustProvider === p.id;
                     const bal = Number(

@@ -39,6 +39,7 @@ export class WholesaleSyncDaemon {
       canboso: { ok: true, productCount: 0 },
       prodseller: { ok: true, productCount: 0 },
       ssondigital: { ok: true, productCount: 0 },
+      blinkey: { ok: true, productCount: 0 },
     },
   };
 
@@ -121,6 +122,7 @@ export class WholesaleSyncDaemon {
         canboso: 0,
         prodseller: 0,
         ssondigital: 0,
+        blinkey: 0,
       };
 
       for (const item of catalog) {
